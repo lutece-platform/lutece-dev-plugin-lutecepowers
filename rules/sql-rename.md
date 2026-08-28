@@ -38,7 +38,8 @@ The changeset-line form is the only one valid on both lines of version.
 
 - **Only the files that existed before the rename** carry the directive. A script added afterwards has no row to match: it runs once under its new path and records itself there. Giving it a `logicalFilePath` would register it under a path that does not exist.
 - **One directive per changeset, not per file.** A file declaring two changesets needs two directives, both pointing at the same logical path.
-- **Never touch `author`, `id` or the content** of an already-shipped changeset. Changing the author replays it *despite* the directive (the author is part of the triple); changing the content raises `ValidationFailedException` and aborts the whole startup migration. Any content fix goes into a **new** file.
+- **Never touch `author` or `id`** of an already-shipped changeset: changing the author replays it *despite* the directive, since the author is part of the triple.
+- **The content is just as sensitive, for another reason.** Editing it raises `ValidationFailedException` as soon as the file is still included in the changelog — and a rename is precisely the situation where creation scripts *are* included, the version key being absent until the end of the first successful startup. So a content fix must not travel in the same release as the rename: ship it as an appended changeset, see `sql-liquibase.md`. The failure is not scoped to the plugin — the webapp does not start, and does not recover on its own.
 - After a **plugin** rename, the changesets keep an author bearing the **former** plugin name, forever. That contradicts the "author = plugin name" convention of `sql-liquibase.md`, and it is the correct trade-off.
 
 ## Why the directory must follow a plugin rename
@@ -87,7 +88,7 @@ Also align the `PLUGIN_NAME` constant and every `PluginService.getPlugin("…")`
 | `Duplicate entry … for key 'PRIMARY'` at startup, migration aborted | creation script replayed after a directory rename | `logicalFilePath` on the changeset line |
 | Tables emptied / dropped after an upgrade | same, on a `create_db_*` starting with `DROP TABLE` | same |
 | Directive present but changeset still replayed | directive in the file header, on liquibase 5 | move it to the `changeset` line |
-| `ValidationFailedException`, `1 changesets check sum` | content of an already-shipped changeset was edited | revert it, put the change in a new file |
+| `ValidationFailedException`, `1 changesets check sum`, webapp down | content of an already-shipped changeset was edited while the file was still included | append a new changeset rather than editing — see `sql-liquibase.md` |
 | Module shows up as **not installed** after a plugin rename | `core.plugins.status.<old>.installed` not migrated | `init_` migration script above |
 | `No plugin metadata for <x>` | SQL directory name ≠ plugin `<name>` | rename the directory, apply this rule |
 
