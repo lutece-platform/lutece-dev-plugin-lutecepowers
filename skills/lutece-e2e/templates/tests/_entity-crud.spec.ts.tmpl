@@ -1,0 +1,107 @@
+import { test, expect, Page } from '@playwright/test';
+import { assertNoError, assertAuthenticated, shot } from './lib/helpers';
+import { exists, tableEngine, deleteCascade, deleteExact, cleanupByPrefix, assertNoResidue, closeDb } from './lib/db';
+
+// Gabarit CRUD réversible par entité (mode plugin). Les jetons entre doubles accolades sont
+// remplis par le workflow du skill après inspection live (cf. scripts/discover-features.md).
+//   {{ENTITY}}          : libellé de l'entité (ex. "rôle de page")
+//   {{MANAGE_URL}}      : page de liste  (ex. jsp/admin/role/ManagePageRole.jsp)
+//   {{CREATE_URL}}      : page de création (ex. jsp/admin/role/CreatePageRole.jsp)
+//   {{KEY_FIELD}}       : name= du champ clé du formulaire (ex. role)
+//   {{KEY_VALUE}}       : valeur de test préfixée E2E, alphanumérique SANS tiret (ex. E2Erole1)
+//   {{DB_TABLE}}        : table de l'entité (ex. core_page_role) — vide si inconnue → repli sur la liste UI
+//   {{DB_COLUMN}}       : colonne clé (ex. role_key)
+//   {{DB_CHILD_TABLES}} : tables filles portant la même clé, JSON [{"table":"…","column":"…"}] — [] par défaut.
+//                         Supprimées AVANT la ligne mère ; contrôlées par assertNoResidue avec elle.
+//   {{CLEANUP_MODE}}    : 'exact' = suppression de la seule valeur de test (table portant des données
+//                         réelles ; valeur par défaut) · 'prefix' = balayage complémentaire des lignes
+//                         'E2E%' (réservé aux tables de travail, ne contenant que des données de test).
+
+const KEY = '{{KEY_VALUE}}';
+const KEY_ABSENTE = `${KEY}ZZ`;
+const TABLE = '{{DB_TABLE}}';
+const COLUMN = '{{DB_COLUMN}}';
+const CHILD_TABLES: { table: string; column: string }[] = {{DB_CHILD_TABLES}};
+const CLEANUP_MODE = '{{CLEANUP_MODE}}' as 'exact' | 'prefix';
+
+const CIBLES = [
+  ...CHILD_TABLES.map((t) => ({ table: t.table, column: t.column, value: KEY })),
+  { table: TABLE, column: COLUMN, value: KEY },
+];
+
+const delLink = (p: Page) =>
+  p.locator(`a[href*="Remove"][href*="{{KEY_FIELD}}=${encodeURIComponent(KEY)}"], a[href*="Remove"][href*="{{KEY_FIELD}}=${KEY}"]`).first();
+const confirmOk = (p: Page) =>
+  p.locator('form[action*="DoRemove" i] button[type="submit"], form[action*="DoRemove" i] input[type="submit"], button[title="OK"]').first();
+
+async function dbExists(valeur: string): Promise<boolean | null> {
+  if (!TABLE || !COLUMN) return null;
+  return exists(`SELECT 1 FROM \`${TABLE}\` WHERE \`${COLUMN}\` = ?`, [valeur]);
+}
+
+test.beforeAll(async () => {
+  if (!TABLE) return;
+  for (const nom of [TABLE, ...CHILD_TABLES.map((t) => t.table)]) {
+    console.log(`[db] moteur de ${nom} : ${await tableEngine(nom)}`);
+  }
+});
+
+test.afterAll(async () => {
+  try {
+    if (TABLE && COLUMN) {
+      if (CHILD_TABLES.length > 0) {
+        await deleteCascade(CHILD_TABLES.map((t) => ({ table: t.table, column: t.column, value: KEY })));
+      }
+      if (CLEANUP_MODE === 'prefix') {
+        await cleanupByPrefix(TABLE, COLUMN, 'E2E');
+      } else {
+        await deleteExact(TABLE, COLUMN, KEY);
+      }
+      await assertNoResidue(CIBLES);
+    }
+  } finally {
+    await closeDb();
+  }
+});
+
+test.describe('Back Office — CRUD réversible : {{ENTITY}}', () => {
+  test('créer → lire → supprimer → vérifier — {{ENTITY}}', async ({ page }) => {
+    // CREATE
+    const resp = await page.goto('{{CREATE_URL}}', { waitUntil: 'domcontentloaded' });
+    await assertNoError(page, resp);
+    await assertAuthenticated(page);
+    await page.locator('input[name="{{KEY_FIELD}}"]').fill(KEY);
+    const others = page.locator('form input[type="text"]:not([name="{{KEY_FIELD}}"])');
+    const n = await others.count();
+    for (let i = 0; i < n; i += 1) await others.nth(i).fill('E2E demo').catch(() => {});
+    await shot(page, '{{ENTITY}} formulaire');
+    await page.locator('form[action*="DoCreate" i] button[type="submit"], form[action*="DoCreate" i] input[type="submit"]').first().click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // READ — présence en liste + (si possible) EN BASE, avec contrôle négatif
+    const respListe = await page.goto('{{MANAGE_URL}}', { waitUntil: 'domcontentloaded' });
+    await assertNoError(page, respListe);
+    await expect(page.locator('body')).toContainText(KEY);
+    const inDbAfterCreate = await dbExists(KEY);
+    if (inDbAfterCreate !== null) {
+      expect(inDbAfterCreate, 'entité présente en base après création').toBe(true);
+      expect(await dbExists(KEY_ABSENTE), `contrôle négatif : ${KEY_ABSENTE} introuvable en base`).toBe(false);
+    }
+    await shot(page, '{{ENTITY}} cree');
+
+    // DELETE
+    const del = delLink(page);
+    await expect(del, 'lien de suppression présent').toHaveCount(1);
+    await del.click();
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    const ok = confirmOk(page);
+    if (await ok.count()) { await ok.click(); await page.waitForLoadState('domcontentloaded').catch(() => {}); }
+    await shot(page, '{{ENTITY}} supprime');
+
+    // VERIFY — absence en liste + (si possible) EN BASE
+    await page.goto('{{MANAGE_URL}}', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).not.toContainText(KEY);
+    const inDbAfterDelete = await dbExists(KEY);
+    if (inDbAfterDelete !== null) expect(inDbAfterDelete, 'entité absente en base après suppression').toBe(false);
+  });
+});

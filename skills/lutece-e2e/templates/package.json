@@ -1,0 +1,20 @@
+{
+  "name": "lutece-e2e",
+  "version": "1.0.0",
+  "description": "Tests e2e Playwright générés pour un site ou un plugin Lutèce 8",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:fo": "playwright test fo-",
+    "test:bo": "playwright test bo-",
+    "report": "\"${CHROME_BIN:-google-chrome}\" --headless=new --no-sandbox --disable-gpu --no-pdf-header-footer --print-to-pdf=report/rapport.pdf report/rapport.html"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.0",
+    "mysql2": "^3.11.0",
+    "dotenv": "^16.4.5"
+  }
+}
