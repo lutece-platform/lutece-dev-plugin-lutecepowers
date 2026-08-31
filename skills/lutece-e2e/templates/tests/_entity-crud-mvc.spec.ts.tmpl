@@ -1,0 +1,115 @@
+import { test, expect } from '@playwright/test';
+import { assertNoError, assertAuthenticated, shot } from './lib/helpers';
+import { query, exists, tableEngine, deleteCascade, deleteExact, cleanupByPrefix, assertNoResidue, closeDb } from './lib/db';
+
+// Gabarit CRUD pour le pattern MVC Lutèce (@Controller : une seule ManageX.jsp avec ?view=/?action=,
+// entité à id auto-incrément). Suppression par id récupéré EN BASE.
+//   {{ENTITY}}          : libellé (ex. "tag de blog")
+//   {{MANAGE_URL}}      : la page unique (ex. jsp/admin/plugins/blog/ManageTags.jsp?plugin_name=blog)
+//   {{CREATE_FORM}}     : name= du formulaire de création (ex. create_tag)
+//   {{CREATE_FIELD}}    : name= du champ nom/clé (ex. name)
+//   {{REMOVE_ACTION}}   : token d'action de suppression (ex. confirmRemoveTag)
+//   {{KEY_VALUE}}       : valeur de test préfixée E2E, alphanumérique SANS tiret (ex. E2Etag1)
+//   {{DB_TABLE}}        : table (ex. blog_tag)
+//   {{DB_KEY_COL}}      : colonne nom (ex. name)
+//   {{DB_ID_COL}}       : colonne id (ex. id_tag)
+//   {{DB_CHILD_TABLES}} : tables filles référençant l'id de l'entité, JSON [{"table":"…","column":"…"}]
+//                         — [] par défaut. Supprimées AVANT la ligne mère ; contrôlées par
+//                         assertNoResidue avec elle.
+//   {{CLEANUP_MODE}}    : 'exact' = suppression de la seule valeur de test (table portant des données
+//                         réelles ; valeur par défaut) · 'prefix' = balayage complémentaire des lignes
+//                         'E2E%' (réservé aux tables de travail, ne contenant que des données de test).
+
+const KEY = '{{KEY_VALUE}}';
+const KEY_ABSENTE = `${KEY}ZZ`;
+const TABLE = '{{DB_TABLE}}';
+const KEY_COL = '{{DB_KEY_COL}}';
+const ID_COL = '{{DB_ID_COL}}';
+const CHILD_TABLES: { table: string; column: string }[] = {{DB_CHILD_TABLES}};
+const CLEANUP_MODE = '{{CLEANUP_MODE}}' as 'exact' | 'prefix';
+
+const MANAGE = '{{MANAGE_URL}}';
+const sep = MANAGE.includes('?') ? '&' : '?';
+
+let idCree: number | null = null;
+
+async function idOf(): Promise<number | null> {
+  const rows = await query(`SELECT \`${ID_COL}\` AS id FROM \`${TABLE}\` WHERE \`${KEY_COL}\` = ?`, [KEY]);
+  return rows.length ? Number(rows[0].id) : null;
+}
+
+test.beforeAll(async () => {
+  if (!TABLE) return;
+  for (const nom of [TABLE, ...CHILD_TABLES.map((t) => t.table)]) {
+    console.log(`[db] moteur de ${nom} : ${await tableEngine(nom)}`);
+  }
+});
+
+test.afterAll(async () => {
+  try {
+    const id = idCree ?? (await idOf());
+    const cibles: { table: string; column: string; value: unknown }[] = [];
+    if (id !== null) {
+      for (const t of CHILD_TABLES) cibles.push({ table: t.table, column: t.column, value: id });
+    } else if (CHILD_TABLES.length > 0) {
+      console.warn(`[db] id de ${KEY} introuvable dans ${TABLE} : tables filles non nettoyées ni contrôlées`);
+    }
+    if (cibles.length > 0) await deleteCascade(cibles);
+    if (CLEANUP_MODE === 'prefix') {
+      await cleanupByPrefix(TABLE, KEY_COL, 'E2E');
+    } else {
+      await deleteExact(TABLE, KEY_COL, KEY);
+    }
+    cibles.push({ table: TABLE, column: KEY_COL, value: KEY });
+    await assertNoResidue(cibles);
+  } finally {
+    await closeDb();
+  }
+});
+
+test.describe('Back Office — CRUD réversible (MVC) : {{ENTITY}}', () => {
+  test('créer → lire → supprimer → vérifier — {{ENTITY}}', async ({ page }) => {
+    // CREATE (formulaire sur la page Manage)
+    const resp = await page.goto(MANAGE, { waitUntil: 'domcontentloaded' });
+    await assertNoError(page, resp);
+    await assertAuthenticated(page);
+    // Ouvrir l'offcanvas (ou la modale) de création si le champ est masqué.
+    const field = page.locator('form[name="{{CREATE_FORM}}"] input[name="{{CREATE_FIELD}}"]');
+    if (!(await field.isVisible().catch(() => false))) {
+      await page.locator(
+        '[data-bs-toggle="offcanvas"][title*="réer" i], [data-bs-toggle="offcanvas"][title*="jouter" i], ' +
+        '[data-bs-toggle="offcanvas"][title*="reate" i], [data-bs-toggle="offcanvas"][title*="ouveau" i], ' +
+        '[data-bs-toggle="modal"][title*="réer" i]',
+      ).first().click().catch(() => {});
+      await field.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
+    }
+    await field.fill(KEY);
+    await shot(page, '{{ENTITY}} formulaire');
+    await page.locator('form[name="{{CREATE_FORM}}"] button[type="submit"], form[name="{{CREATE_FORM}}"] input[type="submit"]').first().click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // READ — présent en liste ET en base, avec contrôle négatif ; on récupère l'id auto.
+    const respListe = await page.goto(MANAGE, { waitUntil: 'domcontentloaded' });
+    await assertNoError(page, respListe);
+    await expect(page.locator('body')).toContainText(KEY);
+    expect(await exists(`SELECT 1 FROM \`${TABLE}\` WHERE \`${KEY_COL}\` = ?`, [KEY]), 'présent en base après création').toBe(true);
+    expect(
+      await exists(`SELECT 1 FROM \`${TABLE}\` WHERE \`${KEY_COL}\` = ?`, [KEY_ABSENTE]),
+      `contrôle négatif : ${KEY_ABSENTE} introuvable en base`,
+    ).toBe(false);
+    idCree = await idOf();
+    expect(idCree, 'id récupéré en base').not.toBeNull();
+    await shot(page, '{{ENTITY}} cree');
+
+    // DELETE — via l'action MVC + l'id, puis confirmation AdminMessage (OK).
+    await page.goto(`${MANAGE}${sep}action={{REMOVE_ACTION}}&id=${idCree}`, { waitUntil: 'domcontentloaded' });
+    const ok = page.locator('button[title="OK"], a[title="OK"], button:has-text("Confirmer"), a:has-text("Oui")').first();
+    if (await ok.count()) { await ok.click(); await page.waitForLoadState('domcontentloaded').catch(() => {}); }
+    await shot(page, '{{ENTITY}} supprime');
+
+    // VERIFY — absent en liste ET en base.
+    await page.goto(MANAGE, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).not.toContainText(KEY);
+    expect(await exists(`SELECT 1 FROM \`${TABLE}\` WHERE \`${KEY_COL}\` = ?`, [KEY]), 'absent en base après suppression').toBe(false);
+  });
+});

@@ -1,0 +1,34 @@
+# Environnement de test à conteneurs mock (extensible). Activation à la carte via les profils Docker :
+#   docker compose --profile mail --profile captcha up -d   (ou --profile all)
+services:
+
+  # Mail — capture des envois (Phase 5)
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: lutece-e2e-mailhog
+    profiles: ["mail", "all"]
+    ports: ["1025:1025", "8025:8025"]
+    logging: { driver: "none" }
+
+  # CAPTCHA — mock de CaptchEtat/PISTE (OAuth + API captcha) → répond « valide »
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: lutece-e2e-wiremock
+    profiles: ["captcha", "all"]
+    ports: ["8090:8080"]
+    command: ["--global-response-templating", "--verbose"]
+    volumes:
+      - ./wiremock:/home/wiremock
+
+  # --- Slot extensible : ajouter ici les mocks des autres dépendances (SSO/OIDC, CRM, IdentityStore, …) ---
+  # Patron d'ajout : REGISTRY.md. Exemple d'un fournisseur OIDC factice, à compléter par le realm
+  # de la cible (aucun realm n'est livré : il est propre à chaque organisation) :
+  #
+  # oidc-mock:
+  #   image: quay.io/keycloak/keycloak:24.0
+  #   container_name: lutece-e2e-oidc
+  #   profiles: ["oidc", "all"]
+  #   command: ["start-dev", "--import-realm"]
+  #   environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin, KC_HTTP_PORT: "8080" }
+  #   ports: ["8081:8080"]
+  #   volumes: ["./oidc/realm-<cible>.json:/opt/keycloak/data/import/realm.json:ro"]

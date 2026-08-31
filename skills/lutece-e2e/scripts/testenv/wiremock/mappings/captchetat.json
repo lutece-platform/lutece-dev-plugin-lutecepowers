@@ -1,0 +1,31 @@
+{
+  "mappings": [
+    {
+      "name": "captchetat-oauth-token",
+      "request": { "method": "POST", "urlPathPattern": ".*/oauth/token.*" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "access_token": "e2e-mock-token", "token_type": "Bearer", "expires_in": 3600 }
+      }
+    },
+    {
+      "name": "captchetat-generate",
+      "request": { "method": "GET", "urlPathPattern": ".*/captchetat/.*" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "uuid": "e2e-captcha-uuid", "captcha": "data:image/png;base64,", "audio": "" }
+      }
+    },
+    {
+      "name": "captchetat-validate",
+      "request": { "method": "POST", "urlPathPattern": ".*/captchetat/.*" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "success": true, "valid": true }
+      }
+    }
+  ]
+}

@@ -6,8 +6,12 @@
     "project": "referencelist-v7",
     "prompt": "Read webapp/jsp/admin/plugins/referencelist/ManageReferences.jsp and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/jsp-admin.md"],
-    "assert_tool_read": ["jsp-admin"]
+    "assert_file_exists": [
+      ".claude/rules/jsp-admin.md"
+    ],
+    "assert_tool_read": [
+      "jsp-admin"
+    ]
   },
   {
     "name": "dao_patterns_rule_activates",
@@ -16,8 +20,12 @@
     "project": "referencelist-v7",
     "prompt": "Read src/java/fr/paris/lutece/plugins/referencelist/business/ReferenceDAO.java and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/dao-patterns.md"],
-    "assert_tool_read": ["dao-patterns"]
+    "assert_file_exists": [
+      ".claude/rules/dao-patterns.md"
+    ],
+    "assert_tool_read": [
+      "dao-patterns"
+    ]
   },
   {
     "name": "template_back_office_rule_activates",
@@ -26,8 +34,12 @@
     "project": "referencelist-v7",
     "prompt": "Read webapp/WEB-INF/templates/admin/plugins/referencelist/manage_references.html and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/template-back-office.md"],
-    "assert_tool_read": ["template-back-office"]
+    "assert_file_exists": [
+      ".claude/rules/template-back-office.md"
+    ],
+    "assert_tool_read": [
+      "template-back-office"
+    ]
   },
   {
     "name": "template_front_office_rule_activates",
@@ -36,8 +48,12 @@
     "project": "referencelist-v8",
     "prompt": "Read webapp/WEB-INF/templates/skin/plugins/referencelist/page_referencelist.html and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/template-front-office.md"],
-    "assert_tool_read": ["template-front-office"]
+    "assert_file_exists": [
+      ".claude/rules/template-front-office.md"
+    ],
+    "assert_tool_read": [
+      "template-front-office"
+    ]
   },
   {
     "name": "plugin_descriptor_rule_activates",
@@ -46,8 +62,12 @@
     "project": "referencelist-v7",
     "prompt": "Read webapp/WEB-INF/plugins/referencelist.xml and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/plugin-descriptor.md"],
-    "assert_tool_read": ["plugin-descriptor"]
+    "assert_file_exists": [
+      ".claude/rules/plugin-descriptor.md"
+    ],
+    "assert_tool_read": [
+      "plugin-descriptor"
+    ]
   },
   {
     "name": "messages_properties_rule_activates",
@@ -56,8 +76,12 @@
     "project": "referencelist-v7",
     "prompt": "Read src/java/fr/paris/lutece/plugins/referencelist/resources/referencelist_messages.properties and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/messages-properties.md"],
-    "assert_tool_read": ["messages-properties"]
+    "assert_file_exists": [
+      ".claude/rules/messages-properties.md"
+    ],
+    "assert_tool_read": [
+      "messages-properties"
+    ]
   },
   {
     "name": "web_bean_rule_activates",
@@ -66,8 +90,12 @@
     "project": "referencelist-v8",
     "prompt": "Read src/java/fr/paris/lutece/plugins/referencelist/web/ReferenceJspBean.java and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/web-bean.md"],
-    "assert_tool_read": ["web-bean"]
+    "assert_file_exists": [
+      ".claude/rules/web-bean.md"
+    ],
+    "assert_tool_read": [
+      "web-bean"
+    ]
   },
   {
     "name": "service_layer_rule_activates",
@@ -76,8 +104,12 @@
     "project": "referencelist-v8",
     "prompt": "Read src/java/fr/paris/lutece/plugins/referencelist/service/ReferenceService.java and tell me what is wrong with it according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/service-layer.md"],
-    "assert_tool_read": ["service-layer"]
+    "assert_file_exists": [
+      ".claude/rules/service-layer.md"
+    ],
+    "assert_tool_read": [
+      "service-layer"
+    ]
   },
   {
     "name": "dependency_references_rule_activates",
@@ -86,10 +118,13 @@
     "project": "referencelist-v8",
     "prompt": "Read pom.xml and check if the Lutece dependencies are correctly configured according to the project rules.",
     "model": "opus",
-    "assert_file_exists": [".claude/rules/dependency-references.md"],
-    "assert_tool_read": ["dependency-references"]
+    "assert_file_exists": [
+      ".claude/rules/dependency-references.md"
+    ],
+    "assert_tool_read": [
+      "dependency-references"
+    ]
   },
-
   {
     "name": "skill_dao_activates",
     "type": "Skills",
@@ -97,7 +132,9 @@
     "project": "referencelist-v8",
     "prompt": "How should a Lutece 8 DAO class be structured? Review ReferenceDAO.java in this project for compliance.",
     "model": "opus",
-    "assert_skill_used": ["lutece-dao"]
+    "assert_skill_used": [
+      "lutece-dao"
+    ]
   },
   {
     "name": "skill_workflow_activates",
@@ -106,7 +143,9 @@
     "project": "referencelist-v8",
     "prompt": "How do I add workflow tasks to this Lutece plugin?",
     "model": "opus",
-    "assert_skill_used": ["lutece-workflow"]
+    "assert_skill_used": [
+      "lutece-workflow"
+    ]
   },
   {
     "name": "skill_rbac_activates",
@@ -115,7 +154,9 @@
     "project": "referencelist-v8",
     "prompt": "How do I add RBAC permissions to the Reference entity in this Lutece plugin?",
     "model": "opus",
-    "assert_skill_used": ["lutece-rbac"]
+    "assert_skill_used": [
+      "lutece-rbac"
+    ]
   },
   {
     "name": "skill_cache_activates",
@@ -124,7 +165,9 @@
     "project": "referencelist-v8",
     "prompt": "How do I add caching to ReferenceHome following Lutece 8 patterns?",
     "model": "opus",
-    "assert_skill_used": ["lutece-cache"]
+    "assert_skill_used": [
+      "lutece-cache"
+    ]
   },
   {
     "name": "skill_lucene_indexer_activates",
@@ -133,7 +176,9 @@
     "project": "referencelist-v8",
     "prompt": "How do I add Lucene search indexing for ReferenceItem following Lutece 8 patterns?",
     "model": "opus",
-    "assert_skill_used": ["lutece-lucene-indexer"]
+    "assert_skill_used": [
+      "lutece-lucene-indexer"
+    ]
   },
   {
     "name": "skill_patterns_activates",
@@ -142,7 +187,9 @@
     "project": "referencelist-v8",
     "prompt": "Explain the Lutece 8 layered architecture pattern: what are the different layers and how do they interact?",
     "model": "opus",
-    "assert_skill_used": ["lutece-patterns"]
+    "assert_skill_used": [
+      "lutece-patterns"
+    ]
   },
   {
     "name": "v8_reviewer_agent_triggers",
@@ -152,7 +199,37 @@
     "prompt": "Review this Lutece plugin for v8 compliance.",
     "model": "opus",
     "max_turns": 30,
-    "allowed_tools": ["Read", "Glob", "Grep", "Bash", "Task"],
-    "assert_tool_used": ["Task"]
+    "allowed_tools": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash",
+      "Task"
+    ],
+    "assert_tool_used": [
+      "Task"
+    ]
+  },
+  {
+    "name": "skill_e2e_activates",
+    "type": "Skills",
+    "description": "Skill lutece-e2e is invoked when asking for end-to-end tests of a Lutece plugin",
+    "project": "referencelist-v8",
+    "prompt": "I want end-to-end tests for this Lutece plugin: exercise the admin screens and verify the CRUD really writes to the database. How do I proceed?",
+    "model": "opus",
+    "assert_skill_used": [
+      "lutece-e2e"
+    ]
+  },
+  {
+    "name": "skill_e2e_delta_activates",
+    "type": "Skills",
+    "description": "Skill lutece-e2e is invoked when asking to cover only what changed (delta mode)",
+    "project": "referencelist-v8",
+    "prompt": "An e2e test suite already exists for this plugin. I only want to cover what changed since develop, and know which existing tests are now stale.",
+    "model": "opus",
+    "assert_skill_used": [
+      "lutece-e2e"
+    ]
   }
 ]
