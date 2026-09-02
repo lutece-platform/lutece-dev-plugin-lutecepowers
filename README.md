@@ -161,6 +161,8 @@ Rules are short constraints (5-15 lines) automatically loaded when the agent tou
 | `web-bean` | `**/web/**/*.java` — JspBean/XPage: CDI, CRUD lifecycle, security tokens |
 | `service-layer` | `**/service/**/*.java` — CDI scopes, injection, events, cache |
 | `dao-patterns` | `**/business/**/*.java` — DAOUtil lifecycle, SQL constants, Home facade |
+| `sql-liquibase` | `**/sql/**/*.sql` — Liquibase formatted-sql header, changeset identity, real preconditions |
+| `sql-rename` | `**/sql/**/*.sql` + `**/plugins/*.xml` — Renaming SQL dirs/plugins: logicalFilePath on the changeset line |
 | `testing` | `**/test/**/*.java` + `pom.xml` — Build/test commands, JUnit 5, test base classes |
 | `template-back-office` | `**/templates/admin/**/*.html` — v8 Freemarker macros, BS5/Tabler |
 | `template-front-office` | `**/templates/skin/**/*.html` — BS5 classes, vanilla JS, no jQuery |
