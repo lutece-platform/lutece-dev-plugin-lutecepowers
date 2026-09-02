@@ -8,7 +8,7 @@
     {
       "name": "lutecepowers-v8",
       "description": "Claude Code plugin for Lutece 8 framework development. Rules, skills, Agents, and references.",
-      "version": "1.3.1",
+      "version": "1.4.0",
       "source": "./"
     }
   ]
