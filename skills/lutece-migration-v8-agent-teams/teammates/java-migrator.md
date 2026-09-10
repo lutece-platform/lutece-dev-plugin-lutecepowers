@@ -12,7 +12,7 @@ Only the Java files listed in YOUR task assignment file (`.migration/tasks-java-
 
 **Before writing ANY new class or pattern**, search `~/.lutece-references/` for an existing v8 implementation. Reference implementations take priority over documentation.
 
-**Migration samples** with real before/after diffs: `${LUTECEPOWERS_ROOT}/migrations-samples/` — consult when stuck (especially `lutece-migration-generic-knowledge.md`).
+**v7 versions**: To see how a pattern was migrated, compare with the v7 version of the same reference in `~/.lutece-references/`: the v7 code is on a `*_core7` branch (`develop_core7`, `master_core7`; lutece-core uses `develop7.x`), listed by `git branch -r`. Repositories born in v8 have none.
 
 ## Your Task Input
 
@@ -104,7 +104,7 @@ Per `${PATTERNS}/cdi-patterns.md` **§20**: replace manual pagination with `@Inj
 
 **Tip:** Lutece core provides `fr.paris.lutece.util.json.JsonUtil` with static `serialize()` / `deserialize()` methods.
 
-For detailed before/after examples: `${LUTECEPOWERS_ROOT}/migrations-samples/lutece-tech-plugin-asynchronousupload.md` (section 5).
+Full before/after examples: `${PATTERNS}/json-patterns.md`.
 
 ## Step 12: Per-File Verification
 

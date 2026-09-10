@@ -91,7 +91,7 @@ Read your task assignment at [path to .migration/tasks-*.json].
 Execute all steps in your instructions. Use scripts from ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/.
 Pattern files are at ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/ — load only when needed.
 Reference implementations: always search ~/.lutece-references/ before writing any new pattern.
-Migration samples with real before/after diffs: ${LUTECEPOWERS_ROOT}/migrations-samples/ — consult when stuck on a specific migration pattern.
+To see how a pattern was migrated, compare with the v7 version of the same reference in `~/.lutece-references/`: the v7 code is on a `*_core7` branch (`develop_core7`, `master_core7`; lutece-core uses `develop7.x`), listed by `git branch -r`. Repositories born in v8 have none. Consult when stuck on a specific migration pattern.
 Run verify-file.sh after each file you complete.
 ```
 
@@ -146,7 +146,7 @@ LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (literal path, export it in your shell)
 Read your instruction file at ${LUTECEPOWERS_ROOT}/agents/lutece-v8-reviewer.md.
 Review this project for v8 compliance. Do NOT modify any files.
 Reference implementations: ~/.lutece-references/
-Migration samples: ${LUTECEPOWERS_ROOT}/migrations-samples/
+v7 versions of the references: `*_core7` branches in each repository under ~/.lutece-references/ (see `git branch -r`).
 ```
 
 **Why a teammate?** In Delegate Mode the Lead can only spawn teammates. The reviewer runs as a read-only teammate (or a read-only subagent, or inline when no dispatch exists) and reports findings without modifying files.
@@ -237,3 +237,4 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `mvc-patterns.md` | @RequestParam, CSRF auto-filter, @ModelAttribute | Java Migrators (if JspBean/XPage) |
 | `template-macros.md` | v8 Freemarker macros, jQuery→vanilla JS | Template Migrator |
 | `fileupload-patterns.md` | FileItem→MultipartItem | Java Migrators (if fileupload) |
+| `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |

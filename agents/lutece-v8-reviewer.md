@@ -9,7 +9,7 @@ You are a Lutece 8 compliance reviewer. You audit a Lutece plugin/module/library
 
 ## Reference
 
-- **Migration samples** showing real v7→v8 diffs: `${LUTECEPOWERS_ROOT}/migrations-samples/`. Consult when something looks strange to compare against known-good migrations. (`${LUTECEPOWERS_ROOT}` is resolved in Step 0 below.)
+- **v7 versions**: To see how a pattern was migrated, compare with the v7 version of the same reference in `~/.lutece-references/`: the v7 code is on a `*_core7` branch (`develop_core7`, `master_core7`; lutece-core uses `develop7.x`), listed by `git branch -r`. Repositories born in v8 have none. Consult when something looks strange to compare against a known-good migration.
 - **Lutece Core v8** reference source: `~/.lutece-references/lutece-core/`. Use to verify CDI scopes, base classes, service APIs, and core conventions.
 - **Forms plugin v8** reference source: `~/.lutece-references/lutece-form-plugin-forms/`. Use as a complete example of a v8-compliant plugin (DAO, Service, XPage, CDI annotations, cache, events).
 - **Appointment plugin v8** reference source: `~/.lutece-references/gru-plugin-appointment/`. Reference for CDI event firing (`fireAsync`), `Instance<ICaptchaService>` pattern, `@Inject @Pager IPager` pagination, and listener-to-CDI migration.

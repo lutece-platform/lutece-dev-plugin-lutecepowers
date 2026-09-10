@@ -16,7 +16,7 @@ Lutecepowers is a set of skills, path-scoped rules, reference sources and script
 
 1. **Before writing any Lutece code** (bean, service, DAO, XPage, daemon, template): load the `lutece-patterns` skill.
 2. **Before editing a file matching a rule glob** (table below): read that rule file. On Claude Code the rules are also loaded automatically from `.claude/rules/`.
-3. **Before writing any non-trivial pattern**: search `~/.lutece-references/` for an existing implementation (Read, Grep, Glob). The references are the living truth. They are cloned and updated in the background at session start.
+3. **Before writing any non-trivial pattern**: search `~/.lutece-references/` for an existing implementation (Read, Grep, Glob). The references are the living truth. They are cloned and updated in the background at session start, and each one also carries its v7 branches (`develop_core7`, `master_core7`; `develop7.x` for lutece-core) to compare a pattern before and after migration.
 
 ## Plugin root
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Clones or updates the Lutece v8 reference repositories into ~/.lutece-references.
+# Each clone also fetches the v7 branches that exist upstream (develop_core7, master_core7, and
+# develop7.x / master7.x for lutece-core) under their real names, so a migrated pattern can be
+# compared with its v7 version. Entries are "name" (lutece-platform) or "org/name".
 # Runs in the background, silently, six repositories at a time. A stamp file written after a successful
 # pass throttles the sync to once per hour; a failed pass leaves no stamp so the next session retries.
 
@@ -38,21 +41,30 @@ REPOS=(
   lutece-tech-library-configsource-vault
   lutece-tech-library-core-utils
   tech-module-rest-healthcheck
+  lutece-secteur-public/gru-plugin-appointment
 )
 
 command -v git >/dev/null 2>&1 || exit 0
 mkdir -p "$TARGET" || exit 0
 [ -n "$(find "$STAMP" -mmin -60 2>/dev/null)" ] && exit 0
 
-# Pulls one repository if present, otherwise clones it shallowly. Args: target dir, repo name, branch, org.
+# Pulls one repository if present, otherwise clones it shallowly, then refreshes every v7 branch it has upstream.
+# Args: target dir, "name" or "org/name", v8 branch, default org.
 sync_one() {
-  local dir="$1/$2"
+  local entry="$2" org="$4" name dir
+  case "$entry" in */*) org="${entry%%/*}"; name="${entry##*/}" ;; *) name="$entry" ;; esac
+  dir="$1/$name"
   if [ -d "$dir/.git" ]; then
     git -C "$dir" pull -q --ff-only 2>/dev/null
   else
     rm -rf "$dir" 2>/dev/null
-    git clone -q --depth 1 --branch "$3" --single-branch "https://github.com/$4/$2.git" "$dir" 2>/dev/null
+    git clone -q --depth 1 --branch "$3" --single-branch "https://github.com/$org/$name.git" "$dir" 2>/dev/null || return 1
   fi
+  local v7
+  for v7 in develop_core7 master_core7 develop7.x master7.x; do
+    git -C "$dir" fetch -q --depth 1 origin "+refs/heads/$v7:refs/remotes/origin/$v7" 2>/dev/null
+  done
+  return 0
 }
 export -f sync_one
 
