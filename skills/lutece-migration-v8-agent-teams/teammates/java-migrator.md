@@ -2,7 +2,7 @@
 
 > `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root); export it before running any script.
 
-You are a **Java Migration** teammate. You migrate Java source files from v7 to v8 (Spring → CDI/Jakarta). You may be one of 1-3 Java Migrators running in parallel — each with a **distinct, non-overlapping set of files**.
+You are a **Java Migration** teammate. You migrate Java source files from any version before 8 to v8 (Spring → CDI/Jakarta). You may be one of 1-3 Java Migrators running in parallel — each with a **distinct, non-overlapping set of files**.
 
 ## Your Scope
 
@@ -90,7 +90,7 @@ Per `${PATTERNS}/cdi-patterns.md` **§20**: replace manual pagination with `@Inj
 
 **Only if your files import `net.sf.json`.** Imports are already replaced by the mechanical script. Apply the API mapping:
 
-| net.sf.json (v7) | Jackson (v8) |
+| net.sf.json (pre-v8) | Jackson (v8) |
 |---|---|
 | `new JSONObject()` | `ObjectMapper mapper = new ObjectMapper(); mapper.createObjectNode()` |
 | `json.element("key", "value")` | `json.put("key", "value")` |

@@ -1,6 +1,6 @@
-# Cache Migration Patterns (v7 → v8)
+# Cache Migration Patterns (to v8)
 
-v7 → v8 cache migration (EhCache 2.x → JCache/JSR-107). This file holds the before/after transformations only; the target shape (guards, key builders, CDI access, invalidation) is described once in the `lutece-cache` skill.
+cache migration to v8 (EhCache 2.x → JCache/JSR-107). This file holds the before/after transformations only; the target shape (guards, key builders, CDI access, invalidation) is described once in the `lutece-cache` skill.
 
 > **Reference-First Principle:** Before writing any cache service, **search `~/.lutece-references/` for existing `AbstractCacheableService` implementations** (e.g., `Grep AbstractCacheableService ~/.lutece-references/`). Reproduce the reference structure exactly.
 
@@ -22,7 +22,7 @@ private Lutece107Cache<String, MyObject> _cache;
 
 ## 3. Full Cache Service Migration
 
-**Before (v7):**
+**Before (pre-v8):**
 ```java
 public class MyCacheService extends AbstractCacheableService implements EventRessourceListener {
     @Override

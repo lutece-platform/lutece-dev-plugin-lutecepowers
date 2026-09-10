@@ -1,4 +1,4 @@
-# Event Migration Patterns (v7 → v8)
+# Event Migration Patterns (to v8)
 
 Single source of truth for all event/listener migration patterns.
 
@@ -142,7 +142,7 @@ Also remove the import for the listener class if it was only used in `init()`.
 
 ### 1.4 Action Mapping Table
 
-| v7 method | EventAction | @Observes qualifier |
+| pre-v8 method | EventAction | @Observes qualifier |
 |-----------|------------|-------------------|
 | `ResourceEventManager.fireAddedResource()` | `EventAction.CREATE` | `@Type(EventAction.CREATE)` |
 | `ResourceEventManager.fireUpdatedResource()` | `EventAction.UPDATE` | `@Type(EventAction.UPDATE)` |

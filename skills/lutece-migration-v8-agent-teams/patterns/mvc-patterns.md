@@ -1,13 +1,13 @@
 # MVC Patterns — Lutece v8
 
-> Canonical rules: `rules/web-bean.md` (@Controller attributes, Models, CSRF policy, CRUD lifecycle). This file only shows the v7 → v8 rewrites.
+> Canonical rules: `rules/web-bean.md` (@Controller attributes, Models, CSRF policy, CRUD lifecycle). This file only shows the rewrites to v8.
 > Core sources: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/util/mvc/` (`commons/annotations/*`, `binding/BindingResult.java`, `binding/ParamError.java`, `admin/MVCAdminJspBean.java`, `xpage/MVCApplication.java`).
 
 ## 1. @RequestParam
 
 Binds query parameters directly to method parameters.
 
-### Before (v7)
+### Before (pre-v8)
 ```java
 String strName = request.getParameter("name");
 int nPage = Integer.parseInt(request.getParameter("page"));

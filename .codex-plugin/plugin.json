@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Lutecepowers",
     "shortDescription": "Lutece 8 skills, rules and migration workflows",
-    "longDescription": "Architecture patterns, DAO/service/web rules, workflow, RBAC, cache and search skills, v7 to v8 migration, scalability proofs for the Lutece platform.",
+    "longDescription": "Architecture patterns, DAO/service/web rules, workflow, RBAC, cache and search skills, migration to v8, scalability proofs for the Lutece platform.",
     "developerName": "Lutece",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],

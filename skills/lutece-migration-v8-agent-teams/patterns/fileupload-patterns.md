@@ -6,7 +6,7 @@ Apache Commons FileUpload is replaced by the Servlet API. `FileItem` becomes `Mu
 
 ## Import Changes
 
-| v7 | v8 |
+| pre-v8 | v8 |
 |----|-----|
 | `org.apache.commons.fileupload.FileItem` | `fr.paris.lutece.portal.service.upload.MultipartItem` |
 | `org.apache.commons.fileupload.FileUploadException` | (no longer needed) |
@@ -14,7 +14,7 @@ Apache Commons FileUpload is replaced by the Servlet API. `FileItem` becomes `Mu
 
 ## Basic File Upload
 
-### Before (v7)
+### Before (pre-v8)
 ```java
 MultipartHttpServletRequest multipartRequest = (MultipartHttpServletRequest) request;
 FileItem fileItem = multipartRequest.getFile("file_upload");

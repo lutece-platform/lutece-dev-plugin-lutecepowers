@@ -85,7 +85,7 @@ For each file in `webapp/WEB-INF/plugins/*.xml`:
 4. Set `<min-core-version>8.0.0</min-core-version>`
 5. Ensure `<max-core-version/>` is present (empty but mandatory)
 6. Ensure `<icon-url>` is present (NullPointerException without it)
-7. **`<class>` tag — NEVER change it.** If the v7 plugin.xml uses a custom class (e.g. `MyPlugin` extending `PluginDefaultImplementation`), keep it as-is. It may contain `init()` logic required at runtime (registering ImageResourceProvider, FileResourceProvider, etc.). Only use `PluginDefaultImplementation` if the v7 plugin already used it.
+7. **`<class>` tag — NEVER change it.** If the current plugin.xml uses a custom class (e.g. `MyPlugin` extending `PluginDefaultImplementation`), keep it as-is. It may contain `init()` logic required at runtime (registering ImageResourceProvider, FileResourceProvider, etc.). Only use `PluginDefaultImplementation` if the v7 plugin already used it.
 
 ## Step 5: web.xml Namespace
 

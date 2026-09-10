@@ -1,13 +1,13 @@
 ---
 name: lutece-migration-v8-agent-teams
-description: "Use when migrating a Lutece v7 plugin, module or library to v8: Spring to CDI, javax to jakarta, XML context to JSON, templates, tests. Script-heavy, JSON-driven task decomposition run by teammates or subagents, with a sequential fallback. Triggers on 'migrate to v8', 'migration v7 v8', 'CDI migration'."
+description: "Use when migrating a Lutece plugin, module or library of any version before 8 to v8: Spring to CDI, javax to jakarta, XML context to JSON, templates, tests. Script-heavy, JSON-driven task decomposition run by teammates or subagents, with a sequential fallback. Triggers on 'migrate to v8', 'migration v7 v8', 'CDI migration'."
 ---
 
-# Lutece Migration v7→v8 — Agent Teams Orchestrator
+# Lutece Migration to v8 — Agent Teams Orchestrator
 
 ## Purpose
 
-Migrates any Lutece plugin/module/library from v7 to v8 with a team of teammates. The Lead (you) orchestrates, specialized teammates execute in parallel, and bash scripts handle all mechanical work.
+Migrates any Lutece plugin/module/library from any version before 8 to v8 with a team of teammates. The Lead (you) orchestrates, specialized teammates execute in parallel, and bash scripts handle all mechanical work.
 
 **Prerequisites:** subagent or teammate dispatch, or the sequential fallback (`using-lutecepowers`, section Subagents and teams).
 

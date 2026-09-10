@@ -1,4 +1,4 @@
-# REST API Migration Patterns (v7 → v8)
+# REST API Migration Patterns (to v8)
 
 Single source of truth for Jersey → Jakarta JAX-RS migration.
 
@@ -17,7 +17,7 @@ If the plugin uses Jersey directly:
 - Remove Jersey filter registrations from `plugin.xml`
 
 ```java
-// BEFORE (v7) - Jersey ResourceConfig
+// BEFORE (pre-v8) - Jersey ResourceConfig
 public class MyRestConfig extends ResourceConfig {
     public MyRestConfig() {
         register(MyExceptionMapper.class);

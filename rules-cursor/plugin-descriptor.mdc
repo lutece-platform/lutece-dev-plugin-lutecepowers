@@ -43,7 +43,7 @@ Most plugins use `PluginDefaultImplementation`. However, **preserve the existing
 | `PluginDefaultImplementation` | No custom `init()` logic needed. Plugin only declares rights, XPages, daemons, services. | workflow-forms, mylutece, rest, elasticdata, asynchronousupload |
 | Custom `XxxPlugin` | Plugin registers providers (ImageResourceProvider, FileResourceProvider) or runs setup logic in `init()`. | forms, genericattributes, workflow, announce |
 
-**MIGRATION RULE: During v7→v8 migration, NEVER replace an existing custom `XxxPlugin` class with `PluginDefaultImplementation`. If the v7 plugin.xml has a custom class, keep it — it likely has `init()` logic that is required at runtime (e.g. registering image/file providers via CDI).**
+**MIGRATION RULE: During migration to v8, NEVER replace an existing custom `XxxPlugin` class with `PluginDefaultImplementation`. If the current plugin.xml has a custom class, keep it — it likely has `init()` logic that is required at runtime (e.g. registering image/file providers via CDI).**
 
 ## Recommended Tags
 

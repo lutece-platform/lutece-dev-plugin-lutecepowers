@@ -1,4 +1,4 @@
-# CDI Migration Patterns (v7 -> v8)
+# CDI Migration Patterns (to v8)
 
 Single source of truth for all Spring-to-CDI, scope, injection, and related migration patterns.
 Phases reference this file on demand. This is a pattern catalog, not a step-by-step guide.
@@ -96,7 +96,7 @@ public class MyJspBean extends MVCAdminJspBean {
 
 **XPage with session state -> `@SessionScoped`:**
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 @Controller( xpageName = "myXPage", pageTitleI18nKey = "...", pagePathI18nKey = "..." )
 public class MyXPage extends MVCApplication {
     private static MyService _service = SpringContextService.getBean( MyService.BEAN_NAME );
@@ -177,7 +177,7 @@ public class MyBean { ... }
 
 ## 3. SpringContextService Replacement
 
-| v7 Pattern | v8 Pattern |
+| pre-v8 pattern | v8 pattern |
 |-----------|-----------|
 | `SpringContextService.getBean("beanId")` | `CDI.current().select(InterfaceType.class).get()` |
 | `SpringContextService.getBean("namedBean")` | `CDI.current().select(Type.class, NamedLiteral.of("namedBean")).get()` |
@@ -520,7 +520,7 @@ public class MyBusinessObject implements Cloneable, Serializable {
 ## 9. Transaction Annotation
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 @Transactional(MyPlugin.BEAN_TRANSACTION_MANAGER)
 
 // AFTER (v8) - no transaction manager reference
@@ -534,7 +534,7 @@ Import change: `org.springframework.transaction.annotation.Transactional` -> `ja
 Replace manual `daoUtil.free()` with try-with-resources:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 DAOUtil daoUtil = new DAOUtil(SQL_QUERY, plugin);
 daoUtil.setInt(1, id);
 daoUtil.executeUpdate();
@@ -551,7 +551,7 @@ try (DAOUtil daoUtil = new DAOUtil(SQL_QUERY, plugin)) {
 
 v8 requires explicit `(User)` cast for RBAC calls:
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 RBACService.isAuthorized(resource, permission, adminUser)
 
 // AFTER (v8)
@@ -563,7 +563,7 @@ RBACService.isAuthorized(resource, permission, (User) adminUser)
 Replace `CompletableFuture.runAsync()` with Jakarta `@Asynchronous`:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 import java.util.concurrent.CompletableFuture;
 public void generateFile(IFileGenerator generator) {
     CompletableFuture.runAsync(new MyRunnable(generator));
@@ -590,7 +590,7 @@ CdiHelper.getReference(IMyService.class, "namedBeanName");
 Replace Spring's `InitializingBean.afterPropertiesSet()` with Jakarta `@PostConstruct`:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 import org.springframework.beans.factory.InitializingBean;
 public class MyComponent implements InitializingBean {
     @Override
@@ -616,7 +616,7 @@ Also remove `extends InitializingBean` from interfaces.
 If implementing `ITask.processTaskWithResult()`, update to the new signature:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 boolean processTaskWithResult(int nIdResourceHistory, HttpServletRequest request, Locale locale, User user);
 
 // AFTER (v8) - includes resource info
@@ -734,7 +734,7 @@ ConfigProvider.getConfig().getValue("key", String.class);
 For libraries that don't have CDI injection context, use `ConfigProvider.getConfig()` directly:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 String value = AppPropertiesService.getProperty(PROPERTY_KEY);
 String valueWithDefault = AppPropertiesService.getProperty(PROPERTY_KEY, "default");
@@ -752,7 +752,7 @@ String valueWithDefault = _config.getOptionalValue(PROPERTY_KEY, String.class).o
 Update string concatenation to parameterized logging:
 
 ```java
-// BEFORE (v7)
+// BEFORE (pre-v8)
 AppLogService.info(MyClass.class.getName() + " : message " + variable);
 
 // AFTER (v8)
