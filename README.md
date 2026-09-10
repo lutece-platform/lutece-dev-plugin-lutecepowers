@@ -164,6 +164,7 @@ Rules are short constraints (5-15 lines) automatically loaded when the agent tou
 | `sql-liquibase` | `**/sql/**/*.sql` — Liquibase formatted-sql header, changeset identity, real preconditions |
 | `sql-rename` | `**/sql/**/*.sql` + `**/plugins/*.xml` — Renaming SQL dirs/plugins: logicalFilePath on the changeset line |
 | `testing` | `**/test/**/*.java` + `pom.xml` — Build/test commands, JUnit 5, test base classes |
+| `dependency-convergence` | `pom.xml` — global-pom 8.0.2 baseline, Jakarta EE 10 pins, `expressly` EL artifact, enforcer rules on the test scope |
 | `template-back-office` | `**/templates/admin/**/*.html` — v8 Freemarker macros, BS5/Tabler |
 | `template-front-office` | `**/templates/skin/**/*.html` — BS5 classes, vanilla JS, no jQuery |
 | `jsp-admin` | `**/*.jsp` — JSP boilerplate, bean naming |

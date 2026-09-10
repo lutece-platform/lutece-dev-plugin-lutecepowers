@@ -135,6 +135,59 @@ if [ -f "pom.xml" ]; then
 else
     emit "PM06" "PASS" "Parent version check (no pom.xml)" 0
 fi
+
+# PM10: stale EL implementation artifact. org.glassfish:jakarta.el stopped at the
+# 5.0.0-M1 milestone and is no longer managed by global-pom 8.0.2 — the successor
+# is org.glassfish.expressly:expressly. Matches jakarta.el but not jakarta.el-api.
+check_pom "PM10" '<artifactId>jakarta\.el</artifactId>' "FAIL" "Stale EL artifact org.glassfish:jakarta.el (use org.glassfish.expressly:expressly)"
+
+# PM11 / PM12: inspect each <dependency> block outside <dependencyManagement>.
+#   PM11 — explicit <version> on a dependency the parent already manages
+#   PM12 — Jakarta EE 11 artifact on an EE 10 baseline
+PM11_MATCHES=""; PM11_COUNT=0
+PM12_MATCHES=""; PM12_COUNT=0
+if [ -f "pom.xml" ]; then
+    DEP_BLOCKS=$(awk '
+        /<dependencyManagement>/ {dm=1}
+        /<\/dependencyManagement>/ {dm=0; next}
+        dm {next}
+        /<dependency>/ {f=1; b=""}
+        f {b = b " " $0}
+        /<\/dependency>/ {if (f) print b; f=0}
+    ' pom.xml 2>/dev/null) || true
+
+    while IFS= read -r blk; do
+        [ -z "$blk" ] && continue
+        AID=$(printf '%s' "$blk" | sed -n 's/.*<artifactId>\([^<]*\)<\/artifactId>.*/\1/p' | head -1)
+        VER=$(printf '%s' "$blk" | sed -n 's/.*<version>\([^<]*\)<\/version>.*/\1/p' | head -1)
+
+        case "$AID" in
+            library-lutece-unit-testing|hibernate-validator|expressly|jaxb-runtime|jboss-logging|jakarta.el-api|jakarta.annotation-api)
+                if [ -n "$VER" ]; then
+                    PM11_COUNT=$((PM11_COUNT + 1))
+                    PM11_MATCHES="$PM11_MATCHES$AID -> $VER"$'\n'
+                fi ;;
+        esac
+
+        case "$AID:$VER" in
+            jakarta.annotation-api:3.*|weld-junit5:5.*|jakarta.el-api:6.*)
+                PM12_COUNT=$((PM12_COUNT + 1))
+                PM12_MATCHES="$PM12_MATCHES$AID -> $VER"$'\n' ;;
+        esac
+    done <<< "$DEP_BLOCKS"
+fi
+
+if [ "$PM11_COUNT" -eq 0 ]; then
+    emit "PM11" "PASS" "No explicit version on a parent-managed dependency" 0
+else
+    emit "PM11" "WARN" "Explicit version on a parent-managed dependency (remove it)" "$PM11_COUNT" "$PM11_MATCHES"
+fi
+
+if [ "$PM12_COUNT" -eq 0 ]; then
+    emit "PM12" "PASS" "No Jakarta EE 11 artifact (EE 10 baseline)" 0
+else
+    emit "PM12" "FAIL" "Jakarta EE 11 artifact on an EE 10 baseline" "$PM12_COUNT" "$PM12_MATCHES"
+fi
 echo ""
 
 # ─── javax Residues ──────────────────────────────────────

@@ -37,7 +37,7 @@ The AI MUST execute the following phases **in order**. Each phase has mandatory 
 ### PHASE 1: POM.XML Migration
 
 **Steps:**
-1. Update parent POM: `lutece-global-pom` version `6.x.x` → `8.0.0`
+1. Update parent POM: `lutece-global-pom` version `6.x.x` → `8.0.2`
 2. Update artifact version to `8.0.0` (or appropriate v8 version)
 3. Remove Spring dependencies:
    - `spring-aop`, `spring-beans`, `spring-context`, `spring-core`, `spring-orm`, `spring-tx`, `spring-web`
@@ -54,6 +54,9 @@ The AI MUST execute the following phases **in order**. Each phase has mandatory 
     - `library-freemarker` → `2.0.0-SNAPSHOT`
     - `library-httpaccess` → check v8 version
 11. Add new dependencies if needed (JCache API, classgraph, etc.)
+11b. Rename the test EL implementation: `org.glassfish:jakarta.el` → `org.glassfish.expressly:expressly` (the old artifact is no longer managed by the parent)
+11c. Drop any `<version>` on a parent-managed dependency (`library-lutece-unit-testing`, `hibernate-validator`, `expressly`, `jaxb-runtime`)
+11d. Stay on Jakarta EE 10 — no `jakarta.annotation-api` 3.x, no `weld-junit5` 5.x
 12. Remove `<springVersion>` property if present
 13. Remove Jira properties: `<jiraProjectName>` and `<jiraComponentId>` from `<properties>` block
 14. Convert bounded version ranges to open ranges: `[X,Y)` → `[X,)`. Upper bounds are unnecessary in v8
@@ -62,7 +65,9 @@ The AI MUST execute the following phases **in order**. Each phase has mandatory 
 - [ ] No `org.springframework` dependency remains
 - [ ] No `net.sf.ehcache` dependency remains
 - [ ] No `javax.mail` dependency remains
-- [ ] Parent POM is `8.0.0`
+- [ ] Parent POM is `8.0.2`
+- [ ] No `org.glassfish:jakarta.el` remains (renamed to `org.glassfish.expressly:expressly`)
+- [ ] `mvn enforcer:enforce` passes — the `test` scope is inspected too
 - [ ] Core dependency is v8
 - [ ] No `<jiraProjectName>` or `<jiraComponentId>` properties remain
 - [ ] No bounded version ranges `[X,Y)` remain

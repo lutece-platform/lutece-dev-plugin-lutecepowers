@@ -37,15 +37,16 @@ paths:
     <scope>test</scope>
 </dependency>
 
-<!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB -->
+<!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB.
+     The EL implementation is org.glassfish.expressly:expressly. -->
 <dependency>
     <groupId>org.hibernate.validator</groupId>
     <artifactId>hibernate-validator</artifactId>
     <scope>test</scope>
 </dependency>
 <dependency>
-    <groupId>org.glassfish</groupId>
-    <artifactId>jakarta.el</artifactId>
+    <groupId>org.glassfish.expressly</groupId>
+    <artifactId>expressly</artifactId>
     <scope>test</scope>
 </dependency>
 <dependency>
@@ -56,6 +57,7 @@ paths:
 ```
 
 Versions are managed by the Lutece global POM — do NOT specify `<version>` for these.
+See `dependency-convergence.md` for the Jakarta EE 10 baseline and the enforcer rules.
 
 ## Test Base Classes
 
