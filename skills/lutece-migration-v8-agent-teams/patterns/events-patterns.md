@@ -124,7 +124,6 @@ Remove any `ResourceEventManager.register()` calls from the plugin's `init()` me
 @Override
 public void init( )
 {
-    CDI.current( ).select( MyCacheService.class ).get( );
     CDI.current( ).select( MyEventListener.class ).get( ).register( );  // REMOVE this line
     FileImagePublicService.init( );
 }
@@ -133,10 +132,11 @@ public void init( )
 @Override
 public void init( )
 {
-    CDI.current( ).select( MyCacheService.class ).get( );
     FileImagePublicService.init( );
 }
 ```
+
+Do not keep a `CDI.current().select( MyCacheService.class ).get()` warm-up call either: no reference plugin does it, and the cache is created on first injection.
 
 Also remove the import for the listener class if it was only used in `init()`.
 
@@ -181,26 +181,7 @@ CDI.current().getBeanManager().getEvent().fire(event);
 
 ## 3. CDI Events with TypeQualifier
 
-For fine-grained event filtering on custom event types, use `@Type(EventAction.*)` qualifier:
-
-```java
-// Firing with qualifier
-CDI.current().getBeanManager().getEvent()
-    .select(MyEvent.class, new TypeQualifier(EventAction.CREATE))
-    .fire(event);
-
-// Observing with qualifier (synchronous)
-public void onCreated(@Observes @Type(EventAction.CREATE) MyEvent event) { ... }
-
-// Observing with qualifier (asynchronous)
-public void onCreated(@ObservesAsync @Type(EventAction.CREATE) MyEvent event) { ... }
-```
-
-| Action | EventAction |
-|--------|------------|
-| Create | `EventAction.CREATE` |
-| Update | `EventAction.UPDATE` |
-| Delete | `EventAction.REMOVE` |
+Fire/observe table (sync, async, qualifier): `lutece-patterns` skill §8. Actions: `EventAction.CREATE` / `UPDATE` / `REMOVE`, observed with `@Type(EventAction.X)`.
 
 Use `@ObservesAsync` for events that don't need to block the caller (e.g., indexation, notifications). Use `@Observes` for events that must complete before the caller continues.
 
@@ -300,25 +281,9 @@ public class MyService
 
 ## 7. Typed Qualifiers for Events
 
-For custom event types that need action-based filtering, use `@Type` qualifiers:
+The action travels in the `@Type` qualifier, not in the event payload. Forms' `FormResponseEvent` carries only the id (constructors `(int)` and `(int, boolean bUpdateDateFormResponse)`, accessor `getFormResponseId()`):
 
 ```java
-// Define custom event class
-public class FormResponseEvent
-{
-    private int _nIdFormResponse;
-    private String _strAction;
-
-    public FormResponseEvent( int nIdFormResponse, String strAction )
-    {
-        _nIdFormResponse = nIdFormResponse;
-        _strAction = strAction;
-    }
-
-    // getters/setters...
-}
-
-// Fire with typed qualifier
 @ApplicationScoped
 public class FormService
 {
@@ -327,51 +292,23 @@ public class FormService
 
     public void createFormResponse( FormResponse response )
     {
-        // Create logic...
         _formResponseEvent.select( new TypeQualifier( EventAction.CREATE ) )
-                          .fire( new FormResponseEvent( response.getId( ), "create" ) );
-    }
-
-    public void updateFormResponse( FormResponse response )
-    {
-        // Update logic...
-        _formResponseEvent.select( new TypeQualifier( EventAction.UPDATE ) )
-                          .fire( new FormResponseEvent( response.getId( ), "update" ) );
+                          .fireAsync( new FormResponseEvent( response.getId( ) ) );
     }
 
     public void deleteFormResponse( int nIdFormResponse )
     {
-        // Delete logic...
         _formResponseEvent.select( new TypeQualifier( EventAction.REMOVE ) )
-                          .fire( new FormResponseEvent( nIdFormResponse, "delete" ) );
-    }
-}
-
-// Observe with typed qualifier — separate handlers for different actions
-@ApplicationScoped
-public class FormResponseIndexer
-{
-    public void onFormResponseCreated( @Observes @Type( EventAction.CREATE ) FormResponseEvent event )
-    {
-        // Index new form response
-    }
-
-    public void onFormResponseUpdated( @Observes @Type( EventAction.UPDATE ) FormResponseEvent event )
-    {
-        // Re-index updated form response
-    }
-
-    public void onFormResponseDeleted( @Observes @Type( EventAction.REMOVE ) FormResponseEvent event )
-    {
-        // Remove from index
+                          .fireAsync( new FormResponseEvent( nIdFormResponse ) );
     }
 }
 ```
 
+Observer side (one method per action, `@ObservesAsync @Type(EventAction.X)`): listener skeleton in the `lutece-lucene-indexer` skill Step 5 and reference `FormResponseEventListener.java` below.
+
 **Custom qualifiers for domain-specific filtering:**
 
 ```java
-// Define custom qualifier annotation
 @Qualifier
 @Retention( RetentionPolicy.RUNTIME )
 @Target( { ElementType.FIELD, ElementType.PARAMETER, ElementType.TYPE } )
@@ -380,14 +317,10 @@ public @interface FormType
     String value( );
 }
 
-// Fire with custom qualifier
-_formResponseEvent.select( new FormType.Literal( "contact" ) )
-                  .fire( new FormResponseEvent( responseId, "create" ) );
+_formResponseEvent.select( new FormType.Literal( "contact" ) ).fire( new FormResponseEvent( responseId ) );
 
-// Observe with custom qualifier
 public void onContactFormResponse( @Observes @FormType( "contact" ) FormResponseEvent event )
 {
-    // Handle contact form responses only
 }
 ```
 
@@ -403,8 +336,8 @@ The following listeners are **already migrated to CDI @Observes in lutece-core v
 | `PluginEventListener` | `PluginEvent` | `fr.paris.lutece.portal.service.plugin.PluginEventListener` |
 | `QueryEventListener` (core impl) | `QueryEvent` | `fr.paris.lutece.portal.service.search.QueryEventListener` |
 | `PortletEventListener` | `PortletEvent` | `fr.paris.lutece.portal.service.portlet.PortletEventListener` |
-| `LuteceUserEventManager` | `LuteceUserEvent` | `fr.paris.lutece.portal.service.security.LuteceUserEventManager` |
-| `ResourceEventManager` | `ResourceEvent` | `fr.paris.lutece.portal.service.event.ResourceEventManager` |
+
+`ResourceEventManager`, `LuteceUserEventManager` and `QueryListenersService` are **deprecated** (§1, §4, §5), not migrated listeners. Core bridges CDI events back to them in `fr.paris.lutece.portal.service.event.LegacyEventObserver` (`@Observes @Type(EventAction.*) ResourceEvent`, `LuteceUserEvent`, `QueryEvent`), so a plugin that fires CDI events still reaches legacy listeners; a plugin that still registers on them must migrate to `@Observes`.
 
 **What this means for plugin migration:**
 - If a plugin **fires** these events (e.g., `PageEventManager.firePageCreated()`), migrate the firing code to CDI events

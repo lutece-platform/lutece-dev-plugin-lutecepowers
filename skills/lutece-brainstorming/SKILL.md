@@ -23,9 +23,9 @@ Phase 7: Handoff    → set up for implementation (optional)
 
 | Situation | Tool |
 |-----------|------|
-| Yes/No, pick one, pick many | `AskUserQuestion` (multiple choice) |
+| Yes/No, pick one, pick many | Ask the user (multiple choice) |
 | Open-ended input (names, descriptions, context) | Text prompt in conversation |
-| Design section validation ("looks right so far?") | `AskUserQuestion` with Approve / Needs changes / Go back |
+| Design section validation ("looks right so far?") | Ask the user (multiple choice) with Approve / Needs changes / Go back |
 
 **Rule:** Only ONE question per message. If a topic needs more exploration, break it into multiple questions.
 
@@ -61,7 +61,7 @@ Ask questions to understand **purpose, constraints, and success criteria**.
 
 **Message 1:**
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "What type of component are you building?"
   options:
     - "New plugin from scratch"
@@ -72,7 +72,7 @@ AskUserQuestion:
 
 **Message 2** (adapts based on answer):
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "Who will use this feature?"
   options:
     - "Back-office administrators only"
@@ -139,7 +139,7 @@ If matches are found, present them:
 Then ask:
 
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "How do you want to proceed?"
   options:
     - "Use [module-xyz] as-is (just integrate it)"
@@ -193,7 +193,7 @@ Propose **2-3 different approaches** with trade-offs. Lead with your recommendat
 Then ask:
 
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "Which approach do you prefer?"
   options:
     - "Approach A — [Name] (Recommended)"
@@ -240,7 +240,7 @@ Once the approach is chosen, present the design **in sections of 200-300 words**
 ### After each section
 
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "Does this section look right?"
   options:
     - "Looks good, continue"
@@ -278,7 +278,7 @@ Once all sections are validated:
    [Chosen approach and rationale]
 
    ## Design
-   [All validated sections from Phase 4]
+   [All validated sections from Phase 5]
 
    ## Files to Create/Modify
    [Checklist of files with what each one needs]
@@ -287,18 +287,14 @@ Once all sections are validated:
    [Explicitly excluded items]
    ```
 
-2. **Commit the design:**
-   ```
-   git add docs/plans/YYYY-MM-DD-<topic>-design.md
-   git commit -m "docs: add design for [feature-name]"
-   ```
+2. **Do not commit.** Tell the user the file path. The user decides when and how to commit.
 
 ---
 
 ## Phase 7 — Handoff to Implementation (Optional)
 
 ```
-AskUserQuestion:
+Ask the user (multiple choice):
   question: "Ready to set up for implementation?"
   options:
     - "Yes, let's start implementing"
@@ -308,14 +304,13 @@ AskUserQuestion:
 
 If yes:
 
-1. **Scaffold** — if building a new plugin, suggest using `/lutece-scaffold`
-2. **Relevant skills** — point to the skills needed for implementation:
+1. **Relevant skills** — point to the skills needed for implementation:
    - `/lutece-dao` for DAO/Home layer
    - `/lutece-patterns` for architecture patterns
    - `/lutece-workflow` if workflow integration is needed
    - `/lutece-rbac` if RBAC is needed
    - `/lutece-cache` if caching is needed
-3. **Create a task list** — use your task-tracking tool to break the design into implementation tasks
+2. **Create a task list** — use your task-tracking tool to break the design into implementation tasks
 
 ---
 

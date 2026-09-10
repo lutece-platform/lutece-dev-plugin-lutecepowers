@@ -196,8 +196,7 @@ Some `.html` files present in `webapp/WEB-INF/templates/admin/plugins/<plugin>/`
 - **Embedded panels/fragments exception**: templates loaded as tab content or fragments included in a parent page do **not** use `<@pageContainer>` / `<@pageColumn>` / `<@pageHeader>`. They structure their content directly with `<@box>` / `<@boxHeader>` / `<@boxBody>`. Each logical section is a separate `<@box>` with a title in `<@boxHeader>` and the action buttons via `boxTools=true`.
 
 ### When to use @table vs @manageFeature
-- **`@manageFeature`**: **always use by default** for entity lists. This is the mandatory standard pattern for any BO management page. Systematically replaces `@table` when updating templates.
-- **`@table`**: reserved only for purely tabular data (statistical reports, data grids without CRUD actions, exports). Do not use for entity lists with edit/delete buttons.
+Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entity lists with CRUD actions (core and forms manage pages), `@table` for tabular data (several data columns, reports, child-entity tables). Convert an existing `@table` to `@manageFeature` only when its rows are entities with edit/delete actions.
 
 ### @manageFeature - Entity lists
 - Each item is a card with flexible columns
@@ -389,8 +388,8 @@ Some `.html` files present in `webapp/WEB-INF/templates/admin/plugins/<plugin>/`
                   <@formGroup labelFor='search_status' labelKey='#i18n{...columnTitleStatus}'>
                       <@select id='search_status' name='search_status' default_value='${search_status!}'>
                           <@option value='' label='#i18n{portal.util.labelAll}' />
-                          <@option value='1' label='#i18n{portal.util.labelActive}' />
-                          <@option value='0' label='#i18n{portal.util.labelInactive}' />
+                          <@option value='1' label='#i18n{portal.util.labelEnabled}' />
+                          <@option value='0' label='#i18n{portal.util.labelDisabled}' />
                       </@select>
                   </@formGroup>
                   <@formGroup>
@@ -484,11 +483,11 @@ The primary button (creation) stays visually the rightmost. The secondary button
 ### @offcanvas - Side panels
 - Used for inline editing: `<@offcanvas targetUrl="..." targetElement="..." btnIcon="edit" />`
 - Used for creation forms: `<@offcanvas id="..." btnTitle="..." position="end">...</@offcanvas>`
-- Used for search/filters: `<@offcanvas id="..." btnIcon="search" placement="end" size="sm">...</@offcanvas>`
+- Used for search/filters: `<@offcanvas id="..." btnIcon="search" position="end" size="sm">...</@offcanvas>`
 - Used for the properties of an editor: `<@offcanvas id="..." btnIcon="cog me-2" position="end" btnClass="me-1 rounded-end">...</@offcanvas>`
 - `position='end'` for panels on the right (recommended default)
 - `targetUrl` loads the content via AJAX
-- **Optional** — `useIframe=true`: loads the content of `targetUrl` in an iframe instead of an AJAX call. Useful when the target page is a full standalone page (e.g.: publication, history). Do not apply systematically, only on explicit user request. Pattern:
+- `useIframe=true`: loads the content of `targetUrl` in an iframe instead of an AJAX call. This is how create/modify pages are opened from a manage page in the references (forms `manage_categories.html`, 19 uses in core and forms); it is the default for the navigation buttons converted below. Pattern:
   ```freemarker
   <@offcanvas id='my-panel' targetUrl='jsp/admin/...' useIframe=true title='#i18n{...}' btnTitle='#i18n{...}' btnIcon='globe' btnClass='me-1' position='end' size='full' />
   ```
@@ -551,9 +550,8 @@ The primary button (creation) stays visually the rightmost. The secondary button
 - Use `<@formGroup>` to group label + input with `labelKey`, `helpKey`, `mandatory`
 
 ### @messages - Info/error messages
-- Place `<@messages infos=infos />` at the top of the main content (after `<@pageHeader>`)
-- Place `<@messages errors=errors />` in the relevant form (after `<@pageHeader>` in the editor pattern)
-- `<@messages warnings=warnings />` for warnings
+- Place `<@messages infos=infos![] errors=errors![] warnings=warnings![] />` at the top of the main content (after `<@pageHeader>`); in the editor pattern the errors call goes in the relevant form
+- `![]` is mandatory: the variables are absent until a message is added (`rules/template-back-office.md` § Messages)
 - Do not duplicate `<@messages>`: a single call per type
 
 ### @alert - Contextual alerts
@@ -603,6 +601,7 @@ The primary button (creation) stays visually the rightmost. The secondary button
 ### i18n
 - All displayed texts must use `#i18n{plugin.key}`
 - Do not write hardcoded text in the template
+- Reuse existing `portal.util.*` keys; the list of existing keys and of the ones that do NOT exist (`labelActive`, `labelInactive`, `labelSave`, `labelAdd`): `rules/template-back-office.md` § i18n
 
 ### @aButton → @offcanvas - Converting navigation buttons
 - **Always** convert the navigation `<@aButton>` to creation or modification pages into `<@offcanvas>` with `useIframe=true`
@@ -621,7 +620,7 @@ The primary button (creation) stays visually the rightmost. The secondary button
 - Do not use raw HTML when a macro exists
 - Do not add JavaScript unless requested
 - Do not wrap a `<@manageFeature>` in a `<@box>` (the items are already cards)
-- NEVER use `<@table>` for an entity list with CRUD actions → always convert to `<@manageFeature>`. Existing `@table` in the templates to update must be systematically replaced by `@manageFeature`
+- Do not use `<@table>` for an entity list with CRUD actions → convert to `<@manageFeature>`; keep `@table` for tabular data (`rules/template-back-office.md` § List Layout)
 - Do not put the creation form in a separate column → prefer an `<@offcanvas>` in the `<@pageHeader>`
 - Do not use `<@aButton>` to navigate to a creation or modification page → use `<@offcanvas>` with `useIframe=true` instead
 - Do not duplicate `<@messages>` (a single call per message type)
@@ -672,7 +671,7 @@ If in doubt about a macro's parameters, **read the corresponding .ftl file** to 
 				</@manageFeatureItemColumn>
 				<@manageFeatureItemColumn auto=true align='end'>
 					<@offcanvas targetUrl="jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}" targetElement="#edit_item" id="item-edit-${item.id}" btnIcon="edit" btnColor="primary" position="end" title="#i18n{portal.util.labelModify}" />
-					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?action=confirmRemoveItem&id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' color='danger' size='' hideTitle=['all'] />
+					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' color='danger' size='' hideTitle=['all'] />
 				</@manageFeatureItemColumn>
 			</@manageFeatureItem>
 			</#list>
@@ -708,7 +707,7 @@ If in doubt about a macro's parameters, **read the corresponding .ftl file** to 
 						<@td>${data.date}</@td>
 						<@td>
 							<@aButton href='jsp/admin/plugins/myplugin/ModifyData.jsp?id=${data.id}' buttonIcon='edit' color='primary' title='#i18n{portal.util.labelModify}' size='' hideTitle=['all'] />
-							<@aButton href='jsp/admin/plugins/myplugin/ManageData.jsp?action=confirmRemoveData&id=${data.id}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' size='' hideTitle=['all'] />
+							<@aButton href='jsp/admin/plugins/myplugin/ManageData.jsp?view=confirmRemoveData&id=${data.id}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' size='' hideTitle=['all'] />
 						</@td>
 					</@tr>
 					</#list>
@@ -813,7 +812,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 				</@tform>
 			</#if>
 			<#if item_list?has_content && item_list?size gt 1>
-				<@offcanvas id='offcanvasSearch' title='#i18n{plugin.manage_items.search}' btnTitle='#i18n{plugin.manage_items.search}' placement='end' btnIcon='search' size='sm'>
+				<@offcanvas id='offcanvasSearch' title='#i18n{plugin.manage_items.search}' btnTitle='#i18n{plugin.manage_items.search}' position='end' btnIcon='search' size='sm'>
 					<@tform id='form-search' action='jsp/admin/plugins/myplugin/ManageItems.jsp?search='>
 						<@formGroup labelFor='search_text' labelKey='#i18n{plugin.manage_items.search}'>
 							<@inputGroup>
@@ -880,7 +879,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 						</@manageFeatureItemColumn>
 						<@manageFeatureItemColumn align='end'>
 							<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&amp;id=${item.id}' title='#i18n{portal.util.labelModify}' buttonIcon='pencil' hideTitle=['all'] />
-							<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?action=confirmRemoveItem&amp;id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['all'] color='danger' />
+							<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['all'] color='danger' />
 						</@manageFeatureItemColumn>
 					</@manageFeatureItem>
 					</#list>
@@ -912,7 +911,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 				<@row id='toolbar-wrapper'>
 					<@columns id='toolbar' class='d-flex justify-content-end align-items-center'>
 						<@button class='me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save' name='action_save' hideTitle=['xs','sm', 'md', 'lg'] />
-						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?action=confirmRemoveItem&amp;id=${item.id}' color='danger' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['xs','sm', 'md', 'lg'] size='' />
+						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' color='danger' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['xs','sm', 'md', 'lg'] size='' />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=previewItem&id=${item.id}' title='#i18n{plugin.modify_item.labelPreview}' hideTitle=['xs','sm', 'md', 'lg'] color='default' size='' buttonIcon='eye' />
 						<@offcanvas id='item-properties' title='#i18n{plugin.modify_item.labelProperties}' btnTitle='#i18n{plugin.modify_item.labelProperties}' position='end' btnIcon='cog me-2' btnClass='me-1 rounded-end' hideTitle=['xs','sm', 'md', 'lg']>
 							<@box>

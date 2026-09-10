@@ -1,6 +1,6 @@
 # Config Migrator — Teammate Instructions
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root); export it before running any script.
 
 You are the **Config & Structure** teammate. You handle ALL non-Java, non-template configuration work.
 
@@ -8,9 +8,9 @@ You are the **Config & Structure** teammate. You handle ALL non-Java, non-templa
 
 - `pom.xml` — dependency and version migration
 - `beans.xml` — CDI descriptor creation
-- `*_context.xml` — Spring context cataloging and cleanup
+- `*_context.xml` — Spring context cataloging, then deletion at the end of the migration
 - `plugin.xml` — plugin descriptor updates
-- `web.xml` — namespace migration
+- `web.xml` — namespace migration (you are its only owner; the Template Migrator runs the mechanical script with `--no-webxml`)
 - `*.sql` — Liquibase headers
 - `*.properties` — @ConfigProperty entries for producers
 
@@ -18,7 +18,7 @@ You are the **Config & Structure** teammate. You handle ALL non-Java, non-templa
 
 ## Reference-First Rule
 
-Before writing any configuration, **search `~/.lutece-references/`** for existing examples. Reference implementations take priority over documentation.
+See `using-lutecepowers`, Mandatory reads. Search `~/.lutece-references/` before writing any configuration.
 
 ## Your Task Input
 
@@ -74,7 +74,7 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/extract
 
 This produces `.migration/context-beans.json` which Java Migrators will consume for producer/scope decisions.
 
-**Do NOT delete context XML files yet** — Java Migrators need to reference them. Mark them for deletion after all Java migration is complete.
+**Do NOT delete context XML files yet** — Java Migrators need to reference them. You delete them in Step 9, when the Lead tells you the Java Migrators are done.
 
 ## Step 4: Plugin Descriptor
 
@@ -89,14 +89,11 @@ For each file in `webapp/WEB-INF/plugins/*.xml`:
 
 ## Step 5: web.xml Namespace
 
-Run the template mechanical script (it handles web.xml too):
-```bash
-bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
-```
+`webapp/WEB-INF/web.xml` is yours alone. Edit it directly:
+1. Replace the namespace `http://java.sun.com/xml/ns/javaee` → `https://jakarta.ee/xml/ns/jakartaee`, the schema location → `https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd`, and `version` → `6.0` (core `webapp/WEB-INF/web.xml`)
+2. Remove any `ContextLoaderListener` entry (Spring)
 
-Or manually: replace `java.sun.com/xml/ns/javaee` → `jakarta.ee/xml/ns/jakartaee` in `webapp/WEB-INF/web.xml`.
-
-Also remove any `ContextLoaderListener` entries (Spring).
+Do not run `migrate-template-mechanical.sh` yourself: the Template Migrator runs it with `--no-webxml`, so it never touches this file.
 
 ## Step 6: SQL Liquibase Headers
 
@@ -120,3 +117,7 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-
 ```
 
 Mark all your tasks as **completed** when done. This unblocks the Java Migrators.
+
+## Step 9: Context XML Deletion (after the Java Migrators)
+
+When the Lead reports that ALL Java Migrators have completed, delete every `*_context.xml` under `webapp/` (they were cataloged in Step 3 and are now replaced by CDI). Report the deleted paths to the Lead. Do not touch anything else at this point.

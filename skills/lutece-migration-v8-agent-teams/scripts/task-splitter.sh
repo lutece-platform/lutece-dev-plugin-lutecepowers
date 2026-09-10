@@ -1,7 +1,7 @@
 #!/bin/bash
 # task-splitter.sh — Decompose scan.json into per-teammate task assignments
 # Usage: bash task-splitter.sh <scan.json> [output_dir]
-# Output: tasks-config.json, tasks-java-0.json, ..., tasks-template.json, tasks-test.json
+# Output: tasks-config.json, tasks-java-0.json, ..., tasks-java-homes.json (owned by java-migrator-0), tasks-template.json, tasks-test.json
 
 set -euo pipefail
 

@@ -1,6 +1,6 @@
 # Teammate — Externalized config & cluster robustness
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root). `${SKILL}` = `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8`; export both before running any script.
 
 ## Role
 Externalize hardcoded config and fix cluster robustness anti-patterns (streams, thread-locals, determinism, shared resources).

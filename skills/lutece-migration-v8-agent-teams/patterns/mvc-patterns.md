@@ -1,5 +1,8 @@
 # MVC Patterns — Lutece v8
 
+> Canonical rules: `rules/web-bean.md` (@Controller attributes, Models, CSRF policy, CRUD lifecycle). This file only shows the v7 → v8 rewrites.
+> Core sources: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/util/mvc/` (`commons/annotations/*`, `binding/BindingResult.java`, `binding/ParamError.java`, `admin/MVCAdminJspBean.java`, `xpage/MVCApplication.java`).
+
 ## 1. @RequestParam
 
 Binds query parameters directly to method parameters.
@@ -14,8 +17,9 @@ int nPage = Integer.parseInt(request.getParameter("page"));
 ```java
 @View(VIEW_LIST)
 public String getList(@RequestParam(value = "page", defaultValue = "1") int nPage,
-                      @RequestParam(value = "query", defaultValue = "") String strQuery) {
-    // parameters auto-bound
+                      @RequestParam(value = "query", defaultValue = "") String strQuery,
+                      Models model) {
+    return getPage(PROPERTY_PAGE_TITLE, TEMPLATE_LIST);
 }
 ```
 
@@ -28,20 +32,24 @@ public String getList(@RequestHeader(value = "Accept-Language") String strLang,
 }
 ```
 
-## 3. @ModelAttribute
+## 3. @ModelAttribute + BindingResult
 
-Auto-binds request parameters to a Java bean.
+Auto-binds request parameters to a Java bean. `BindingResult` must be the parameter right after the bound bean. Reference: xmltransformer `StylesJspBean.doCreateStyle`.
 
 ```java
 @Action(ACTION_CREATE)
-public String doCreate(@ModelAttribute MyItem item, BindingResult result) {
-    if (result.hasErrors()) {
-        // handle binding errors
+public String doCreate(@Valid @ModelAttribute MyItem item, BindingResult bindingResult,
+                       Models model, HttpServletRequest request) {
+    if (bindingResult.isFailed()) {
+        model.put(MVCUtils.MARK_ERRORS, bindingResult.getAllErrors());
+        return getCreate(model, request);
     }
     MyItemHome.create(item);
     return redirectView(request, VIEW_LIST);
 }
 ```
+
+`BindingResult` API: `isFailed()`, `getAllMessages()` (`List<String>`), `getAllErrors()` (`Set<ParamError>`), `getBindingErrors()`, `getValidationErrors()`, `getErrors(param)`. `ParamError`: `getMessage()`, `getParamName()`. There is no `hasErrors()` nor `getDefaultMessage()`.
 
 ## 4. @Validated + BindingResult
 
@@ -50,12 +58,13 @@ Bean validation with groups.
 ```java
 @Action(ACTION_CREATE)
 public String doCreate(@Validated({ValidationGroups.Creation.class}) @ModelAttribute MyItem item,
-                       BindingResult result) {
-    if (result.hasErrors()) {
-        result.getAllErrors().forEach(e -> addError(e.getDefaultMessage()));
+                       BindingResult bindingResult, HttpServletRequest request) {
+    if (bindingResult.isFailed()) {
+        bindingResult.getAllMessages().forEach(this::addError);
         return redirectView(request, VIEW_CREATE);
     }
-    // ...
+    MyItemHome.create(item);
+    return redirectView(request, VIEW_LIST);
 }
 ```
 
@@ -71,7 +80,7 @@ public List<MyItem> getData(@RequestParam("page") int nPage) {
 }
 ```
 
-Used for AJAX pagination with `paginationAjax` macro.
+Used for AJAX pagination with the `paginationAjax` macro — see `/lutece-patterns` §5 for the macro and the JSON endpoint. GET requests are never filtered by the CSRF filter; add `securityTokenDisabled = true` only if the endpoint is called by POST without a form token.
 
 ## 6. @RequestBody
 
@@ -79,82 +88,29 @@ Bind HTTP body (JSON/XML) to a Java object.
 
 ```java
 @Action(ACTION_API_CREATE)
-public String doApiCreate(@RequestBody MyItem item) {
+public String doApiCreate(@RequestBody MyItem item, HttpServletRequest request) {
     MyItemHome.create(item);
     return redirectView(request, VIEW_LIST);
 }
 ```
 
-## 7. CSRF Auto-Filter
+## 7. CSRF — `securityTokenEnabled = true`
 
-In v8, CSRF protection is automatic via `SecurityTokenFilterSite` / `SecurityTokenFilterAdmin`.
+Policy and mechanism: `rules/web-bean.md` § CSRF Policy. Migration steps for a `@Controller` bean:
 
-### What to remove
-- `SecurityTokenService.MARK_TOKEN` in model.put() calls
-- `getSecurityTokenService().getToken()` in model
-- Manual token validation in simple @Action methods
+1. Add `securityTokenEnabled = true` to `@Controller`.
+2. Remove `SecurityTokenService.MARK_TOKEN` puts, `getSecurityTokenService().getToken()/validate()`, `_securityTokenService` injection and `SecurityTokenService.getInstance()`.
+3. Make sure each form view and its action share the same constant value (`VIEW_CREATE = ACTION_CREATE = "createItem"`), or set `@View(securityTokenAction = ACTION_X)`.
+4. Confirm dialogs: `@View(value = VIEW_CONFIRM_REMOVE, securityTokenAction = ACTION_REMOVE)` redirecting to `AdminMessageService.getMessageUrl(..., TYPE_CONFIRMATION)`; the remove `@Action` needs nothing.
+5. POST actions that cannot carry a form token (external clients, imports validated otherwise): `@Action(value = ACTION_X, securityTokenDisabled = true)`. GET requests are never filtered.
+6. Templates: remove `<input type="hidden" name="token" ...>`; the core injects `_csrftoken` into every `<form>`.
 
-### What happens automatically
-- Token generated on `@View` (GET request)
-- Token validated on `@Action` (POST request)
-- Requires `@Inject Models` (token attached there). **NEVER use `getModel()`** — it is deprecated and returns an unmodifiable map in v8
-
-### Confirmation pages (special case)
-For actions that need a confirmation dialog before executing:
-
-```java
-// The confirmation action references the actual action that needs the token
-@Action(value = ACTION_CONFIRM_REMOVE, securityTokenAction = ACTION_REMOVE)
-public String getConfirmRemove(HttpServletRequest request) {
-    // Show confirmation page — token is generated for ACTION_REMOVE
-    return redirect(request, getConfirmUrl(request));
-}
-
-@Action(ACTION_REMOVE)
-public String doRemove(HttpServletRequest request) {
-    // Token is automatically validated
-    MyItemHome.remove(nId);
-    return redirectView(request, VIEW_LIST);
-}
-```
-
-### Disabling CSRF for specific actions
-```java
-@Action(value = ACTION_AJAX_UPDATE, securityTokenDisabled = true)
-public String doAjaxUpdate(HttpServletRequest request) {
-    // No CSRF check — use only for safe operations
-}
-```
+Non-MVC beans (no `@Controller`, portlets): keep `getSecurityTokenService().getToken()/validate()` (inherited accessor), never `SecurityTokenService.getInstance()`.
 
 ## 8. MultipartItem for File Upload
 
 See `fileupload-patterns.md` for complete migration guide.
 
-## 9. paginationAjax
+## 9. Pagination
 
-JavaScript-driven pagination without page reload.
-
-### Template
-```html
-<@table id="myTable" items=items_list paginationAjax=true>
-    <@columns headers=["#i18n{...}", "#i18n{...}"]>
-        <@column>${item.name}</@column>
-        <@column>${item.description}</@column>
-    </@columns>
-</@table>
-```
-
-### Controller
-```java
-@Action("getData")
-@ResponseBody
-public List<MyItem> getData(@RequestParam("page") int nPage,
-                            @RequestParam("itemsPerPage") int nItemsPerPage) {
-    return MyItemHome.getItemsList(nPage, nItemsPerPage);
-}
-```
-
-### JavaScript API
-```javascript
-window.LutecePaginationAjax.myTable  // Access the pagination instance
-```
+`@Inject @Pager IPager` and the `paginationAdmin` / `paginationAjax` macros: `/lutece-patterns` §5 (single source). List layout choice (`@manageFeature` vs `@table`): `rules/template-back-office.md`.

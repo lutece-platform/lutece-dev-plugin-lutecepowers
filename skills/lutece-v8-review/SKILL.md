@@ -15,6 +15,6 @@ Read-only compliance review of the current Lutece 8 project. The full procedure 
 2. Read `${LUTECEPOWERS_ROOT}/agents/lutece-v8-reviewer.md`.
 3. Run it:
    - **Harness with a native agent named `lutece-v8-reviewer`** (Claude Code, Cursor, Grok): invoke that agent on the current directory.
-   - **Harness with a generic subagent tool** (Codex `spawn_agent`, OpenCode `task`): dispatch one subagent whose prompt is the whole file content followed by: "Review the project in <absolute path>. Do NOT modify any files. Reference implementations: ~/.lutece-references/."
+   - **Harness with a generic subagent tool** (Codex `spawn_agent`, OpenCode `task`): dispatch one subagent whose prompt starts with `LUTECEPOWERS_ROOT=<literal absolute path>` (the subagent does not see your session context), then the whole file content, then: "Review the project in <absolute path>. Do NOT modify any files. Reference implementations: ~/.lutece-references/."
    - **No dispatch**: follow the file yourself, step by step, without modifying any source file.
 4. Return the report in the format defined at the end of that file. Never fix anything unless the user asks after reading the report.

@@ -1,9 +1,17 @@
 ---
-description: "Lutece 8 front-office (skin/site) templates: Bootstrap 5, vanilla JS, core modules"
+description: "Lutece 8 front-office (skin/site) templates: FO macros (c*), Bootstrap 5, vanilla JS, messages null-safety"
 globs: **/templates/skin/**/*.html
 alwaysApply: false
 ---
 # Front-Office Templates — Lutece 8
+
+## Reference Sources — MANDATORY
+
+- Macro definitions: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/themes/macros/{components,elements,forms,layout,utilities}/**/*.ftl` (one file per macro, e.g. `components/alert/cAlert.ftl`, `forms/inputs/cField.ftl`, `elements/footer/cFooter.ftl`).
+- `@cTpl` is defined in `skin/themes/global_theme_commons.ftl`: it lets a site theme override the whole template; wrap every FO template in it.
+- Template examples: `~/.lutece-references/lutece-form-plugin-forms/webapp/WEB-INF/templates/skin/plugins/forms/*.html`.
+
+Read the `.ftl` signature before using a macro parameter. FreeMarker allows `<@m />` for any macro, so a macro without nested content may be self-closing.
 
 ## Already Loaded by the Core — No Import Needed
 
@@ -15,9 +23,11 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 
 ## JavaScript — Vanilla Only, No jQuery
 
+- The site frameset does NOT load jQuery (`page_frameset.html`: "jQuery JS is no more included", loaded only when the optional `library-theme-jquery` provides `commons_theme_jquery.html`). Any `$`/`jQuery` call fails at runtime.
 - **NEVER** use jQuery (`$`, `jQuery`, `$.ajax`, `.click()`, `.on()`, etc.)
 - Use native DOM APIs: `document.querySelector`, `addEventListener`, `fetch`, `classList`, `dataset`
 - Use ES6+: `const`/`let`, arrow functions, template literals, destructuring, `async`/`await`
+- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: port it manually or add `library-theme-jquery` as an explicit, documented dependency.
 
 ## Third-Party Libraries — No CDN
 
@@ -27,13 +37,21 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 
 ## Common Patterns
 
-- Icons: use Tabler icon classes (`ti ti-*`)
+- Icons: `@cIcon` or Tabler icon classes (`ti ti-*`)
 - Null safety in Freemarker: always `${value!}`
-- i18n: `#i18n{prefix.key}` — reuse `portal.util.*` keys `from ~/.lutece-references/lutece-core` when possible
+- i18n: `#i18n{prefix.key}` — reuse `portal.util.*` keys from `~/.lutece-references/lutece-core` when possible (see `rules/template-back-office.md` for the list of existing keys)
+- Forms: no `_csrftoken` hidden field, the core injects it into every `<form>` when the XPage `@Controller` has `securityTokenEnabled = true` (see `rules/web-bean.md`)
 
-## Model Variables Null-Safety (MANDATORY)
+## Model Messages — Null-Safety and Value Types (MANDATORY)
 
-`errors`, `infos`, `warnings` are **NOT pre-initialized** in the model — they only exist after `addError()`/`addInfo()`/`addWarning()` is called. Always use null-safe access:
-- `<#if (errors!)?size gt 0>` NOT `<#if errors?size gt 0>`
-- `<#list (errors![]) as error>` NOT `<#list errors as error>`
-- Same for `infos` and `warnings`
+`errors`, `infos`, `warnings` are **NOT pre-initialized** in the model — they only exist after `addError()`/`addInfo()`/`addWarning()` is called (`MVCApplication.addMessage`). Value types differ:
+- `errors`: objects (`MVCMessage`, or `ParamError` from `BindingResult`) → `${error.message}`
+- `infos`, `warnings`: `Set<String>` → `${info}`, `${warning}`. `${info.message}` throws `NonHashException`.
+
+```html
+<#list (errors![]) as error><@cAlert type='danger' title=error.message! /></#list>
+<#list (infos![]) as info><@cAlert type='info' title=info /></#list>
+<#list (warnings![]) as warning><@cAlert type='warning' title=warning /></#list>
+```
+
+Never `<#if errors?size gt 0>` or `<#list errors as error>` without the `!` default.

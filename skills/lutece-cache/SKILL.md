@@ -153,7 +153,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
 | CDI-managed bean (`@ApplicationScoped`, `@RequestScoped`, etc.) | `@Inject` | Service class |
 | Static context (Home class, static utility) | `CDI.current().select()` direct field init | Home class |
 
-**NEVER provide a `getInstance()` method** on the cache service — it is `@Deprecated(since = "8.0", forRemoval = true)` in lutece-core.
+No `getInstance()` on the cache service (`rules/service-layer.md`).
 
 ### Pattern A — `@Inject` in a CDI-managed Service (preferred)
 
@@ -242,7 +242,7 @@ public class EntityHome
 Observe domain events to automatically invalidate cache:
 
 ```java
-import fr.paris.lutece.portal.service.event.ResourceEvent;
+import fr.paris.lutece.portal.business.event.ResourceEvent;
 import jakarta.enterprise.event.Observes;
 
 @ApplicationScoped
@@ -252,7 +252,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
 
     public void onResourceEvent( @Observes ResourceEvent event )
     {
-        if ( isCacheEnable( ) && "MYPLUGIN_ENTITY".equals( event.getResourceType( ) ) )
+        if ( isCacheEnable( ) && "MYPLUGIN_ENTITY".equals( event.getTypeResource( ) ) )
         {
             resetCache( );
         }
@@ -265,7 +265,7 @@ For finer-grained invalidation (remove specific key instead of full reset):
 ```java
 public void onResourceEvent( @Observes ResourceEvent event )
 {
-    if ( isCacheEnable( ) && "MYPLUGIN_ENTITY".equals( event.getResourceType( ) ) )
+    if ( isCacheEnable( ) && "MYPLUGIN_ENTITY".equals( event.getTypeResource( ) ) )
     {
         String strId = event.getIdResource( );
 

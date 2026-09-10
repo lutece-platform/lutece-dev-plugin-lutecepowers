@@ -7,9 +7,9 @@ description: "Use when migrating a Lutece v7 plugin, module or library to v8: Sp
 
 ## Purpose
 
-Migrates any Lutece plugin/module/library from v7 to v8 using **Agent Teams (Swarm Mode)**. The Team Lead (you) orchestrates, specialized teammates execute in parallel, and bash scripts handle all mechanical work.
+Migrates any Lutece plugin/module/library from v7 to v8 with a team of teammates. The Lead (you) orchestrates, specialized teammates execute in parallel, and bash scripts handle all mechanical work.
 
-**Prerequisites:** a harness that can dispatch subagents or teammates. On Claude Code, Agent Teams is experimental and needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; plain subagents also work. Without any dispatch tool, run the teammates yourself sequentially in the dependency order below (see `using-lutecepowers`, section Subagents and teams).
+**Prerequisites:** subagent or teammate dispatch, or the sequential fallback (`using-lutecepowers`, section Subagents and teams).
 
 ---
 
@@ -34,14 +34,9 @@ Read `.migration/scan.json` and show the user:
 ### A.4 — Dependency v8 check (BLOCKER)
 For every Lutece dependency in `scan.json`:
 1. If `v8Status: "available"` → OK (already cloned in `~/.lutece-references/`)
-2. If `v8Status: "unknown"` → Search GitHub orgs `lutece-platform` and `lutece-secteur-public` for v8 branch
-3. Branch priority: `develop_core8` > `develop8` > `develop8.x` > `develop`
-4. If a dependency has NO v8 version → **STOP**. Do not proceed. Report to user.
-5. **Clone missing dependencies** — For each dependency confirmed v8 but not yet in `~/.lutece-references/`:
-   ```bash
-   git clone -q --branch <v8_branch> --single-branch https://github.com/<org>/<artifactId>.git ~/.lutece-references/<artifactId>
-   ```
-   This ensures teammates can search reference sources for ALL dependencies, not just the 21 pre-cloned repos.
+2. If `v8Status: "unknown"` → find the repository and check its v8 branch as described in the `dependency-references` rule (v8 lives on `develop`; the pom parent must be `8.x`)
+3. If a dependency has NO v8 version → **STOP**. Do not proceed. Report to user.
+4. **Clone missing dependencies** — for each dependency confirmed v8 but not yet in `~/.lutece-references/`, add it to the `REPOS` list of `${LUTECEPOWERS_ROOT}/hooks/sync-references` and run the hook (it clones `develop` and fetches the v7 branches). Teammates can then search reference sources for ALL dependencies, not just the repositories listed in the hook.
 
 ---
 
@@ -57,26 +52,29 @@ Read the output to know how many teammates to spawn.
 
 ## PHASE C — Spawn Teammates
 
-On Claude Code with Agent Teams, switch to **Delegate Mode** (Shift+Tab). From this point, you orchestrate only — never implement. On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
+From here the lead only orchestrates and never edits files (on Claude Code with Agent Teams: Shift+Tab). On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
 
 ### Always spawn:
 1. **Config Migrator** (1 teammate)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/config-migrator.md`
    - Task file: `.migration/tasks-config.json`
+   - Sole owner of `webapp/WEB-INF/web.xml` and of the `*_context.xml` files (deleted by it once the Java Migrators are done)
 
 2. **Verifier** (1 teammate)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/verifier.md`
-   - Starts monitoring immediately, builds only after all others complete
+   - Starts monitoring immediately, builds only after all others complete; strictly read-only
 
 ### Conditionally spawn:
 3. **Java Migrator(s)** (1-3, based on `scan.json` recommendation)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/java-migrator.md`
    - Task files: `.migration/tasks-java-0.json`, `.migration/tasks-java-1.json`, `.migration/tasks-java-2.json`
    - Each gets a DISTINCT file partition — no overlap
+   - Java Migrator 0 also owns `.migration/tasks-java-homes.json` (Home and interface files, excluded from the other partitions)
 
 4. **Template Migrator** (0-1, if templates/JSP exist)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/template-migrator.md`
    - Task file: `.migration/tasks-template.json`
+   - Runs `migrate-template-mechanical.sh` with `--no-webxml` (web.xml belongs to the Config Migrator)
 
 5. **Test Migrator** (0-1, if test files exist)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/test-migrator.md`
@@ -87,11 +85,10 @@ When spawning each teammate, provide the text below **with `${LUTECEPOWERS_ROOT}
 ```
 LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (export it in your shell before running any script)
 Read your instruction file at [path to teammates/*.md].
-Read your task assignment at [path to .migration/tasks-*.json].
+Read your task assignment at [path to .migration/tasks-*.json] (Java Migrator 0: also .migration/tasks-java-homes.json).
 Execute all steps in your instructions. Use scripts from ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/.
 Pattern files are at ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/ — load only when needed.
-Reference implementations: always search ~/.lutece-references/ before writing any new pattern.
-To see how a pattern was migrated, compare with the v7 version of the same reference in `~/.lutece-references/`: the v7 code is on a `*_core7` branch (`develop_core7`, `master_core7`; lutece-core uses `develop7.x`), listed by `git branch -r`. Repositories born in v8 have none. Consult when stuck on a specific migration pattern.
+Reference implementations: always search ~/.lutece-references/ before writing any new pattern; each clone also carries the v7 branches (see using-lutecepowers, Mandatory reads) to compare a pattern before and after migration.
 Run verify-file.sh after each file you complete.
 ```
 
@@ -114,8 +111,9 @@ Config Migrator ─────────────────────�
                                       └──→ Verifier: Final Build (blocked by ALL above)
 ```
 
-- Config Migrator runs first (POM, beans.xml, context XML catalog)
+- Config Migrator runs first (POM, beans.xml, web.xml, context XML catalog)
 - Java Migrators start after Config completes (they need context-beans.json)
+- Config Migrator deletes the `*_context.xml` files once ALL Java Migrators complete
 - Template Migrator starts after ALL Java Migrators complete (needs @Named bean names)
 - Test Migrator starts after Config + at least 1 Java Migrator complete
 - Verifier monitors continuously but only builds after ALL others complete
@@ -131,7 +129,7 @@ While teammates work:
    ```bash
    bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
    ```
-3. **If a teammate is stuck** (same task > 5 min): send a message via mailbox asking for status
+3. **If a teammate is stuck** (same task > 5 min): ask it for status
 4. **If a teammate reports a blocker**: investigate and either reassign, advise, or fix the blocker
 5. **If the Verifier reports increasing FAILs**: pause the responsible teammate and investigate
 
@@ -139,17 +137,16 @@ While teammates work:
 
 ## PHASE F — V8 Reviewer (Lead spawns as teammate)
 
-When the Verifier reports **BUILD SUCCESS** (compile + tests) and **verify-migration.sh: 0 FAIL**, spawn a **Reviewer teammate**:
+When the Verifier reports compile **BUILD SUCCESS**, **0 failures and 0 errors in `target/surefire-reports/*.txt`** (the global-pom sets `testFailureIgnore=true`, so BUILD SUCCESS alone says nothing about the tests) and **verify-migration.sh: 0 FAIL**, spawn a **Reviewer teammate**:
 
 ```
 LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (literal path, export it in your shell)
 Read your instruction file at ${LUTECEPOWERS_ROOT}/agents/lutece-v8-reviewer.md.
 Review this project for v8 compliance. Do NOT modify any files.
 Reference implementations: ~/.lutece-references/
-v7 versions of the references: `*_core7` branches in each repository under ~/.lutece-references/ (see `git branch -r`).
 ```
 
-**Why a teammate?** In Delegate Mode the Lead can only spawn teammates. The reviewer runs as a read-only teammate (or a read-only subagent, or inline when no dispatch exists) and reports findings without modifying files.
+**Why a teammate?** The Lead does not edit or review files itself after Phase B. The reviewer runs as a read-only teammate (or a read-only subagent, or inline when no dispatch exists) and reports findings without modifying files.
 
 Process the reviewer's findings:
 - **FAIL items**: Assign fixes to the appropriate teammate. Re-spawn reviewer after fixes.
@@ -161,16 +158,16 @@ Process the reviewer's findings:
 ## PHASE G — Final Gate
 
 When ALL of the following are true:
-- **BUILD SUCCESS** (both compile and tests)
+- Compile **BUILD SUCCESS** and surefire reports with 0 failures and 0 errors
 - **verify-migration.sh**: 0 FAIL
 - **Reviewer agent**: all FAIL items resolved
 
 Then:
-1. Ask the Verifier to run final cleanup (.migration/ removal, context XML deletion)
+1. Ask the Config Migrator to delete the remaining `*_context.xml` files, then the Verifier to run the final sweep and remove `.migration/`
 2. Present the migration summary to the user:
    - `verify-migration.sh` results (PASS/FAIL/WARN counts)
-   - Build result (`mvn clean install` — compile + tests)
-   - Number of test classes, tests run, tests passed/failed/skipped
+   - Compile result (`mvn clean install -Dmaven.test.skip=true`)
+   - Test result (`mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test`): tests run, failures, errors, skipped from `target/surefire-reports/*.txt`
    - Reviewer agent verdict (PASS/FAIL/WARN counts)
    - List of files modified
 3. Clean up the team
@@ -180,10 +177,10 @@ Then:
 
 ## Strict Rules
 
-1. **Delegate mode**: After Phase B, the Lead orchestrates only — never modifies files
+1. **Lead orchestrates only**: after Phase B the Lead never modifies files
 2. **No builds before completion**: The project WILL NOT compile during migration. Only the Verifier builds.
 3. **NEVER commit**: The skill must NEVER create git commits. Leave that to the user.
-4. **Reference-First Rule**: ALL teammates must search `~/.lutece-references/` before writing new patterns
+4. **Reference-First Rule**: `using-lutecepowers`, Mandatory reads — ALL teammates search `~/.lutece-references/` before writing new patterns
 5. **File ownership**: Each file is owned by exactly one teammate. No two teammates touch the same file.
 6. **Script-first**: Teammates run mechanical scripts FIRST, then apply intelligence to remaining issues
 7. **Verify per-file**: Teammates run `verify-file.sh` after each file, not just at the end
@@ -217,9 +214,9 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `scan-project.sh` | Full project scan → JSON | Lead (Phase A) |
 | `task-splitter.sh` | JSON scan → per-teammate task files | Lead (Phase B) |
 | `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI + net.sf.json imports | Java Migrators |
-| `migrate-template-mechanical.sh` | BO macros + null-safety + namespace | Template Migrator |
+| `migrate-template-mechanical.sh` | BO macros + null-safety (`--no-webxml` for the Template Migrator) | Template Migrator |
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
-| `verify-migration.sh` | 70+ checks, optional --json mode | Verifier |
+| `verify-migration.sh` | 78 checks (see `verification/checks.md`), optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |

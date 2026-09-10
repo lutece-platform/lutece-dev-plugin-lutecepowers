@@ -1,6 +1,7 @@
 # Freemarker Macros — Lutece v8 Quick Reference
 
-> Full macro source: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/`
+> Canonical rules: `rules/template-back-office.md` (BO) and `rules/template-front-office.md` (FO): layout, list layout choice, messages, null-safety, i18n keys, JavaScript. This file only lists macro signatures for the migration.
+> Macro sources: BO `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/{components,elements,forms,layout,utilities}/**/*.ftl`, FO `.../skin/themes/macros/{components,elements,forms,layout,utilities}/**/*.ftl`. Always read the `.ftl` signature before using a parameter.
 
 ## Layout Macros
 
@@ -16,177 +17,122 @@
 
 ## Data Display
 
-### @table
-```html
-<@table>
-    <tr>
-        <th>#i18n{myplugin.column.name}</th>
-        <th>#i18n{portal.util.labelActions}</th>
-    </tr>
-    <#list items_list as item>
-    <tr>
-        <td>${item.name!}</td>
-        <td>
-            <@aButton href="jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}" title="#i18n{portal.util.labelModify}" color="primary" size="sm" iconClass="ti ti-pencil" />
-            <@aButton href="jsp/admin/plugins/myplugin/ManageItems.jsp?action=confirmRemoveItem&id=${item.id}" title="#i18n{portal.util.labelDelete}" color="danger" size="sm" iconClass="ti ti-trash" />
-        </td>
-    </tr>
-    </#list>
-</@table>
-```
+### @manageFeature (entity lists) / @table (tabular data)
+`manageFeature class colClass listClass id` > `manageFeatureItem class align valign liClass bodyClass id` > `manageFeatureItemColumn bp auto flex dir cols valign align class id` (`components/features/features.ftl`). `table id class responsive condensed hover striped headBody bordered narrow collapsed caption` (`components/table/table.ftl`). Full example and the choice rule: `rules/template-back-office.md` § List Layout.
 
 ### @alert
+`alert class color titleLevel title titleClass iconTitle iconClass dismissible id` (`components/alert/alert.ftl`). The parameter is `color`, not `type`.
 ```html
-<@alert type="info">#i18n{myplugin.message.info}</@alert>
-<@alert type="warning">#i18n{myplugin.message.warning}</@alert>
-<@alert type="danger">#i18n{myplugin.message.error}</@alert>
-<@alert type="success">#i18n{myplugin.message.success}</@alert>
+<@alert color="info">#i18n{myplugin.message.info}</@alert>
+<@alert color="danger" title="#i18n{myplugin.message.error}" />
 ```
+
+### @messages
+`messages errors=[] infos=[] warnings=[]` (`components/alert/messages.ftl`). Use `<@messages errors=errors![] infos=infos![] warnings=warnings![] />`: see `rules/template-back-office.md` § Messages.
+
+### @empty
+`empty title subtitle id class iconName iconClass img imgClass actionTitle actionBtn actionIcon actionClass actionUrl` (`utilities/empty/empty.ftl`).
 
 ## Form Macros
 
-### @tform
+### @tform / @formGroup / @input / @select / @checkBox / @radioButton
+- `tform type class align hide required action method='post' name id role collapsed enctype boxed boxClass` (`forms/form/tform.ftl`)
+- `formGroup id formStyle groupStyle class rows labelKey labelKeyDesc labelFor labelId labelClass helpKey mandatory hideLabel collapsed` (`forms/form/formGroup.ftl`) — `mandatory`, not `required`
+- `input name id type='text' value class size helpKey inputSize maxlength placeHolder autoComplete rows cols richtext=false tabIndex disabled readonly pattern title min max step mandatory ...` (`forms/input/input.ftl`) — types: `text`, `textarea`, `password`, `email`, `number`, `date`, `hidden`, `url`, `tel`, `file`, `color`, `range`. No `richtext` type: `type='textarea' richtext=true`.
+- `select name id class items='' default_value size sort multiple title disabled mandatory` (`forms/select/select.ftl`) — `items` is a `ReferenceList` from the model; for literal options nest `<@option value label selected />`
+- `checkBox name id class labelKey labelClass wrapperClass orientation value title disabled readonly checked mandatory` (`forms/checkbox/checkBox.ftl`)
+- `radioButton name id class labelKey labelClass labelFor orientation value title disabled readonly checked mandatory` (`forms/radio/radioButton.ftl`) — `labelKey`, not `label`
+
 ```html
 <@tform action="jsp/admin/plugins/myplugin/ManageItems.jsp" method="post">
-    <@formGroup labelKey="#i18n{myplugin.label.name}" required=true>
-        <@input type="text" name="name" id="name" value="${item.name!}" required=true />
+    <@input type="hidden" name="action" value="createItem" />
+    <@formGroup labelFor="name" labelKey="#i18n{myplugin.label.name}" mandatory=true>
+        <@input type="text" name="name" id="name" value="${item.name!}" mandatory=true />
     </@formGroup>
-    <@formGroup labelKey="#i18n{myplugin.label.description}">
-        <@input type="textarea" name="description" id="description" value="${item.description!}" rows=5 />
+    <@formGroup labelFor="description" labelKey="#i18n{myplugin.label.description}">
+        <@input type="textarea" name="description" id="description" rows=5>${item.description!}</@input>
     </@formGroup>
-    <@formGroup labelKey="#i18n{myplugin.label.category}">
-        <@select name="category" id="category" items=categories_list itemValue="id" itemLabel="name" selectedValue="${item.category!}" />
+    <@formGroup labelFor="id_category" labelKey="#i18n{myplugin.label.category}">
+        <@select name="id_category" id="id_category" items=category_list default_value="${item.idCategory!}" />
     </@formGroup>
-    <@formGroup labelKey="#i18n{myplugin.label.active}">
-        <@checkBox name="active" id="active" checked=(item.active!false) />
+    <@formGroup labelKey="#i18n{myplugin.label.status}">
+        <@radioButton name="status" id="status_enabled" value="1" labelKey="#i18n{portal.util.labelEnabled}" checked=(item.status == 1) />
+        <@radioButton name="status" id="status_disabled" value="0" labelKey="#i18n{portal.util.labelDisabled}" checked=(item.status == 0) />
     </@formGroup>
-    <@button type="submit" color="primary" labelKey="#i18n{portal.util.labelValidate}" />
-    <@aButton href="jsp/admin/plugins/myplugin/ManageItems.jsp" color="default" labelKey="#i18n{portal.util.labelCancel}" />
+    <@formGroup labelFor="active" labelKey="#i18n{myplugin.label.active}">
+        <@checkBox orientation="switch" name="active" id="active" value="true" labelKey="#i18n{myplugin.label.active}" checked=(item.active!false) />
+    </@formGroup>
+    <@button type="submit" color="primary" buttonIcon="check" title="#i18n{portal.util.labelValidate}" />
+    <@aButton href="jsp/admin/plugins/myplugin/ManageItems.jsp" buttonIcon="x" title="#i18n{portal.util.labelCancel}" />
 </@tform>
 ```
 
-### @input types
-- `text`, `textarea`, `password`, `email`, `number`, `date`, `hidden`, `url`, `tel`
-- `richtext` (WYSIWYG editor)
-
-### @radioButton
-```html
-<@radioButton name="status" id="status_active" value="1" label="#i18n{myplugin.label.active}" checked=(item.status == 1) />
-<@radioButton name="status" id="status_inactive" value="0" label="#i18n{myplugin.label.inactive}" checked=(item.status == 0) />
-```
+No `token` hidden field: the core injects `_csrftoken` when the bean has `securityTokenEnabled = true` (`rules/web-bean.md`).
 
 ## Button Macros
 
-### @button (submit/reset)
-```html
-<@button type="submit" color="primary" labelKey="#i18n{portal.util.labelValidate}" />
-<@button type="submit" color="primary" iconClass="ti ti-device-floppy" labelKey="#i18n{portal.util.labelSave}" />
-```
+- `button name id type='button' size color style class value title tooltip tabIndex hideTitle buttonIcon disabled iconPosition dropdownMenu cancel formId buttonTargetId` (`components/button/button.ftl`)
+- `aButton name id href target size color='primary' style class title tabIndex hideTitle buttonIcon disabled iconPosition dropdownMenu` (`components/button/aButton.ftl`)
 
-### @aButton (link styled as button)
-```html
-<@aButton href="..." color="primary" size="sm" iconClass="ti ti-pencil" title="#i18n{portal.util.labelModify}" />
-<@aButton href="..." color="danger" size="sm" iconClass="ti ti-trash" title="#i18n{portal.util.labelDelete}" />
-<@aButton href="..." color="success" iconClass="ti ti-plus" labelKey="#i18n{portal.util.labelAdd}" />
-```
-
-### Common button colors
-`primary`, `secondary`, `success`, `danger`, `warning`, `info`, `default`
-
-## Upload Macros (Back-Office)
+`title` is the label, `buttonIcon` the Tabler icon name without the `ti ti-` prefix. There is no `labelKey` nor `iconClass`.
 
 ```html
-<@addFileBOInput name="file_upload" labelKey="#i18n{myplugin.label.file}" />
-<@addBOUploadedFilesBox name="file_upload" />
-<@inputDropFiles name="file_drop" />
+<@button type="submit" color="primary" buttonIcon="check" title="#i18n{portal.util.labelValidate}" />
+<@aButton href="..." size="sm" buttonIcon="edit" title="#i18n{portal.util.labelModify}" />
+<@aButton href="..." size="sm" color="danger" buttonIcon="trash" title="#i18n{portal.util.labelDelete}" />
+<@aButton href="..." color="success" buttonIcon="plus" title="#i18n{portal.util.labelCreate}" />
 ```
+
+Colors: `primary`, `secondary`, `success`, `danger`, `warning`, `info`, `default`.
+
+### @offcanvas
+`offcanvas id position='end' class title btnColor btnTitle btnDropdown btnDropdownContent hideTitle btnIcon btnClass btnDisabled bodyClass badgeContent badgeColor backdrop size btnSize targetUrl targetElement useIframe redirectForm reloadOnClose keepPageHeader` (`components/offcanvas/offcanvas.ftl`). The side parameter is `position`, not `placement`.
+
+## Upload Macros (Back-Office) — plugin-asynchronousupload
+
+Not in the core. Requires the `plugin-asynchronousupload` dependency, the include and the JS bootstrap:
+
+```html
+<#include "/admin/plugins/asynchronousupload/upload_commons.html" />
+<@addRequiredBOJsFiles />
+<@addFileBOInput fieldName="file_upload" handler=uploadHandler cssClass="" multiple=false />
+<@addBOUploadedFilesBox fieldName="file_upload" handler=uploadHandler listFiles=listFiles />
+```
+
+Signatures (`admin/plugins/asynchronousupload/upload_commons.html`): `addFileBOInput fieldName handler cssClass multiple=false submitBtnName hasError=false required=false`, `addBOUploadedFilesBox fieldName handler listFiles submitBtnName noJs=false`, `addFileBOInputAndfilesBox fieldName handler listUploadedFiles inputCssClass multiple=false`. `handler` is the `IAsyncUploadHandler` put in the model. Reference: forms `forms_commons.html:304-324`. FO equivalents: `skin/plugins/asynchronousupload/upload_commons.html` (`addFileInput`, `addUploadedFilesBox`). Core alternative without the plugin: `@inputDropFiles name handler ...` (`forms/upload/inputDropFiles.ftl`).
 
 ## Front-Office Macros
+
+`rules/template-front-office.md` (paths, messages). Wrap every skin template:
 
 ```html
 <@cTpl>
     <@cContainer>
-        <h1>#i18n{myplugin.xpage.title}</h1>
+        <@cTitle level=1>#i18n{myplugin.xpage.title}</@cTitle>
         <!-- content -->
     </@cContainer>
 </@cTpl>
 ```
 
+Available FO macros include `cAlert`, `cBtn`, `cForm`, `cField`, `cInput`, `cInputDate`, `cSelect`, `cCard`, `cTable`, `cFooter`, `cEmpty`, `cOffcanvas`, `cPagination`, `cTabs`/`cTab`/`cTabPane`, `cDropdown`, `cBadge`, `cIcon`, `cInline` (one `.ftl` per macro under `skin/themes/macros/`).
+
 ## Pagination
 
-### Admin (server-side)
-```html
-<@paginationAdmin paginator=paginator />
-```
-
-### AJAX (client-side, recommended)
-```html
-<@table id="myTable" items=items_list paginationAjax=true>
-    <!-- columns -->
-</@table>
-```
+`<@paginationAdmin paginator=paginator combo=1 />` after the list (server-side). `@paginationAjax paginator columns ajaxUrl tableId combo showcount actions` with a `@ResponseBody` endpoint: `/lutece-patterns` §5.
 
 ## Icons
 
-Tabler Icons: `ti ti-{name}` — https://tabler.io/icons
-Common: `ti-pencil`, `ti-trash`, `ti-plus`, `ti-eye`, `ti-search`, `ti-download`, `ti-upload`, `ti-check`, `ti-x`, `ti-arrow-left`, `ti-arrow-right`
+Tabler Icons: `ti ti-{name}` — https://tabler.io/icons. In macros pass the bare name (`buttonIcon='pencil'`).
+Common: `pencil`, `edit`, `trash`, `plus`, `eye`, `search`, `download`, `upload`, `check`, `x`, `arrow-left`, `arrow-right`
 
 ## i18n
 
-```html
-#i18n{pluginName.key.subkey}
-```
-Reuse portal utility keys: `portal.util.labelValidate`, `portal.util.labelCancel`, `portal.util.labelDelete`, `portal.util.labelModify`, `portal.util.labelActions`
+`#i18n{pluginName.key.subkey}`. Existing `portal.util.*` keys and the ones that do NOT exist: `rules/template-back-office.md` § i18n.
 
-## Null Safety (CRITICAL in v8)
+## Null Safety and Message Types
 
-```html
-${value!}                      <!-- empty string if null -->
-${value!"default"}             <!-- default value if null -->
-<#if value??>                  <!-- null check -->
-(errors!)?size                 <!-- MANDATORY for errors/infos/warnings -->
-(errors!)?has_content          <!-- MANDATORY -->
-<#list (errors![]) as error>   <!-- safe list iteration -->
-```
+`rules/template-back-office.md` § Null Safety (BO) / `rules/template-front-office.md` § Model Messages (FO): `(errors![])`, `${error.message}` for errors, `${info}` / `${warning}` for infos and warnings.
 
 ## JavaScript Migration (jQuery → Vanilla ES6)
 
-Replace jQuery with vanilla JS. Use ES6+ syntax: `const`/`let`, arrow functions, template literals, destructuring.
-
-| jQuery | Vanilla JS |
-|--------|-----------|
-| `$(document).ready(fn)` | `document.addEventListener('DOMContentLoaded', fn)` |
-| `$('#id')` | `document.getElementById('id')` or `document.querySelector('#id')` |
-| `$('.class')` | `document.querySelectorAll('.class')` |
-| `$.ajax({...})` | `fetch(url, options).then(r => r.json())` |
-| `$(el).on('click', fn)` | `el.addEventListener('click', fn)` |
-| `$(el).hide()` | `el.style.display = 'none'` or `el.classList.add('d-none')` |
-| `$(el).show()` | `el.style.display = ''` or `el.classList.remove('d-none')` |
-| `$(el).val()` | `el.value` |
-| `$(el).text()` | `el.textContent` |
-| `$(el).html()` | `el.innerHTML` |
-
-**Do NOT convert** jQuery code that depends on jQuery plugins (DataTables, Select2, jQuery UI, etc.) — those still require jQuery.
-
-## MVCMessage in templates (v8 BREAKING CHANGE)
-
-In Lutece 8, **errors** are `MVCMessage` objects — NOT plain strings. Using `${error}` displays the object's `toString()` instead of the message text.
-
-```html
-<!-- ERRORS: MVCMessage objects — MUST use .message -->
-<#if (errors!)?has_content>
-    <@alert type="danger"><#list (errors![]) as error>${error.message}</#list></@alert>
-</#if>
-
-<!-- INFOS: plain strings — direct access -->
-<#if (infos!)?has_content>
-    <@alert type="info"><#list (infos![]) as info>${info}</#list></@alert>
-</#if>
-
-<!-- WARNINGS: plain strings — direct access -->
-<#if (warnings!)?has_content>
-    <@alert type="warning"><#list (warnings![]) as warning>${warning}</#list></@alert>
-</#if>
-```
-
-Reference: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/util/mvc/utils/MVCMessage.java`
+Conversion table: `skills/lutece-update-template-fo/SKILL.md` § jQuery → Vanilla JS. Neither the admin theme nor the site frameset loads jQuery. Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) is a **WARN / manual port**: it will fail at runtime as-is; port it to a vanilla equivalent or a core macro, or add `library-theme-jquery` as an explicit dependency. Never mark it as PASS.

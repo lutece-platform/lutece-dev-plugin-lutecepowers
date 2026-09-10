@@ -5,7 +5,7 @@ description: "Use when adding or reviewing permissions in a Lutece 8 plugin: RBA
 
 # Lutece 8 RBAC Implementation
 
-> Before implementing RBAC, consult `~/.lutece-references/lutece-form-plugin-forms/` — specifically `FormsResourceIdService.java`, `AbstractJspBean.java`, and `FormJspBean.java`.
+> Before implementing RBAC, consult `~/.lutece-references/lutece-form-plugin-forms/` — specifically `FormsResourceIdService.java`, `AbstractJspBean.java`, and `FormJspBean.java`. Caveat: `FormJspBean` still uses the deprecated `getModel()`, manual `LocalizedPaginator` pagination and manual `MARK_TOKEN` puts although its `@Controller` has `securityTokenEnabled=true`; copy its RBAC logic only, and follow `rules/web-bean.md` for Models, pagination and CSRF.
 
 ## Architecture Overview
 
@@ -195,10 +195,10 @@ if ( entity == null || !RBACService.isAuthorized( Entity.RESOURCE_TYPE,
 ### Pass permissions to template (for conditional display)
 
 ```java
-// In the manage view — pass permission flags to template (uses @Inject Models _models)
-_models.put( "canCreate", RBACService.isAuthorized( Entity.RESOURCE_TYPE,
+// In the manage view — pass permission flags to template (Models model is a method parameter, see rules/web-bean.md)
+model.put( "canCreate", RBACService.isAuthorized( Entity.RESOURCE_TYPE,
     RBAC.WILDCARD_RESOURCES_ID, EntityResourceIdService.PERMISSION_CREATE, getUser( ) ) );
-_models.put( "canDelete", RBACService.isAuthorized( Entity.RESOURCE_TYPE,
+model.put( "canDelete", RBACService.isAuthorized( Entity.RESOURCE_TYPE,
     RBAC.WILDCARD_RESOURCES_ID, EntityResourceIdService.PERMISSION_DELETE, getUser( ) ) );
 ```
 
@@ -210,7 +210,7 @@ _models.put( "canDelete", RBACService.isAuthorized( Entity.RESOURCE_TYPE,
 </#if>
 
 <#if canDelete>
-    <@aButton href='jsp/admin/plugins/myplugin/ManageEntities.jsp?action=confirmRemoveEntity&id=${entity.id}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' />
+    <@aButton href='jsp/admin/plugins/myplugin/ManageEntities.jsp?view=confirmRemoveEntity&id=${entity.id}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' />
 </#if>
 ```
 
@@ -240,24 +240,15 @@ for ( Entity entity : paginator.getPageItems( ) )
 
 Requires `EntityAction` to implement `RBACAction` (return permission key via `getPermission()`).
 
-## Advanced — Helper Method (forms pattern)
+## Advanced — Helper Method
 
-The forms plugin combines CSRF token validation + RBAC check in a single reusable method:
+CSRF is handled by the core when the `@Controller` has `securityTokenEnabled = true` (`rules/web-bean.md` § CSRF Policy): no `SecurityTokenService` injection nor `validate()` in the bean. The helper only checks RBAC:
 
 ```java
-protected void checkUserPermission( String strResourceType, String strResourceId,
-        String strPermission, HttpServletRequest request, String strCsrfAction )
+protected void checkUserPermission( String strResourceType, String strResourceId, String strPermission, HttpServletRequest request )
     throws AccessDeniedException
 {
-    // CSRF validation (if action requires it)
-    if ( strCsrfAction != null && !_securityTokenService.validate( request, strCsrfAction ) )
-    {
-        throw new AccessDeniedException( "Invalid security token" );
-    }
-
-    // RBAC check
-    if ( !RBACService.isAuthorized( strResourceType, strResourceId, strPermission,
-            (User) AdminUserService.getAdminUser( request ) ) )
+    if ( !RBACService.isAuthorized( strResourceType, strResourceId, strPermission, (User) AdminUserService.getAdminUser( request ) ) )
     {
         throw new AccessDeniedException( "Unauthorized" );
     }
@@ -269,22 +260,19 @@ Usage:
 @View( VIEW_CREATE_ENTITY )
 public String getCreateEntity( HttpServletRequest request ) throws AccessDeniedException
 {
-    checkUserPermission( Entity.RESOURCE_TYPE, RBAC.WILDCARD_RESOURCES_ID,
-        EntityResourceIdService.PERMISSION_CREATE, request, null );
+    checkUserPermission( Entity.RESOURCE_TYPE, RBAC.WILDCARD_RESOURCES_ID, EntityResourceIdService.PERMISSION_CREATE, request );
     // ...
 }
 
 @Action( ACTION_CREATE_ENTITY )
 public String doCreateEntity( HttpServletRequest request ) throws AccessDeniedException
 {
-    checkUserPermission( Entity.RESOURCE_TYPE, RBAC.WILDCARD_RESOURCES_ID,
-        EntityResourceIdService.PERMISSION_CREATE, request, ACTION_CREATE_ENTITY );
+    checkUserPermission( Entity.RESOURCE_TYPE, RBAC.WILDCARD_RESOURCES_ID, EntityResourceIdService.PERMISSION_CREATE, request );
     // ...
 }
 ```
 
-- Pass `null` for CSRF on `@View` methods (GET, no state change)
-- Pass the action name for `@Action` methods (POST, state change)
+The forms `AbstractJspBean.checkUserPermission( ..., strCsrfAction )` variant that also calls `_securityTokenService.validate()` is the legacy form; do not copy it into a `securityTokenEnabled = true` bean.
 
 ## Advanced — Workgroup Authorization (forms pattern)
 
@@ -345,11 +333,11 @@ public interface AdminWorkgroupResource
 
 ## Reference Sources
 
-### Forms plugin (RBAC + workgroups + CSRF)
+### Forms plugin (RBAC + workgroups)
 | Need | File to consult |
 |------|----------------|
 | ResourceIdService (fine-grained, 13 perms) | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/service/FormsResourceIdService.java` |
-| checkUserPermission() helper | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/web/admin/AbstractJspBean.java` |
+| checkUserPermission() helper (legacy CSRF part, see caveat above) | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/web/admin/AbstractJspBean.java` |
 | Workgroup + RBAC combined | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/web/admin/FormJspBean.java` |
 | Action filtering per entity | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/web/admin/FormJspBean.java` (getManageForms) |
 | Multiple resource types | `~/.lutece-references/lutece-form-plugin-forms/webapp/WEB-INF/plugins/forms.xml` |

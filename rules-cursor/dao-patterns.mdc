@@ -1,5 +1,5 @@
 ---
-description: "Lutece 8 DAO/Home constraints: DAOUtil lifecycle, SQL constants, Home facade, CDI lookup"
+description: "Lutece 8 DAO/Home constraints: DAOUtil lifecycle, generated keys, SQL constants, Home facade, CDI lookup"
 globs: **/business/**/*.java
 alwaysApply: false
 ---
@@ -7,8 +7,10 @@ alwaysApply: false
 
 ## DAO Class
 
-- `@ApplicationScoped` + `@Named("plugin.entityDAO")` + implements `IEntityDAO`
-- SQL constants: `SQL_QUERY_SELECT`, `SQL_QUERY_INSERT`, `SQL_QUERY_UPDATE`, `SQL_QUERY_DELETE`, `SQL_QUERY_SELECTALL`
+- `@ApplicationScoped public class EntityDAO implements IEntityDAO` — resolved through its interface. `final` is allowed (core and forms DAOs are `final`) as long as nothing resolves the concrete class (`@Inject EntityDAO`, `select( EntityDAO.class )`).
+- `@Named( "plugin.entityDAO" )` only when a producer or a `NamedLiteral` lookup resolves the bean by name (workflow `ITaskConfigDAO` producers). Default: no `@Named`.
+- SQL constants: `SQL_QUERY_SELECT`, `SQL_QUERY_INSERT`, `SQL_QUERY_UPDATE`, `SQL_QUERY_DELETE`, `SQL_QUERY_SELECTALL`. No `SQL_QUERY_NEWPK` / `SELECT max( id )`.
+- Primary key: `AUTO_INCREMENT` column + `new DAOUtil( SQL_QUERY_INSERT, Statement.RETURN_GENERATED_KEYS, plugin )`, then `if ( daoUtil.nextGeneratedKey( ) ) entity.setId( daoUtil.getGeneratedKeyInt( 1 ) );`
 - DAOUtil ALWAYS with try-with-resources: `try ( DAOUtil daoUtil = new DAOUtil( SQL_QUERY, plugin ) )`
 - Parameters are **1-indexed**, use `nIndex++` for sequential access
 - `executeUpdate()` for INSERT/UPDATE/DELETE, `executeQuery()` for SELECT
@@ -16,15 +18,15 @@ alwaysApply: false
 
 ## Home — Static Facade
 
-- `private static IEntityDAO _dao = CDI.current().select( IEntityDAO.class ).get();`
+- `private static IEntityDAO _dao = CDI.current().select( IEntityDAO.class ).get();` — the static field initializer is the idiom (core `RoleHome`, forms `FormHome`)
 - `private static Plugin _plugin = PluginService.getPlugin( "pluginname" );`
 - Private constructor, all methods static
-- Methods: `create`, `update`, `remove`, `findByPrimaryKey`, `findAll`, `findReferenceList`
-- NEVER declare a `BEAN_xxx_DAO` / `DAO_BEAN_NAME` string constant — the typesafe `CDI.current().select( IEntityDAO.class )` lookup makes it dead code. The DAO's `@Named("plugin.entityDAO")` is the only place the bean name lives.
+- Methods: `create`, `update`, `remove`, `findByPrimaryKey`, `findAll`, plus finders per need (`findReferenceList` only when a `<select>` needs it)
+- NEVER declare a `BEAN_xxx_DAO` / `DAO_BEAN_NAME` string constant — the typesafe `CDI.current().select( IEntityDAO.class )` lookup makes it dead code
 
 ## Interface
 
-Every DAO MUST have an `IEntityDAO` interface with: `insert`, `load`, `store`, `delete`, `selectAll`, `selectReferenceList`. All methods take `Plugin plugin` as last parameter.
+Every DAO has an `IEntityDAO` interface with `insert`, `load`, `store`, `delete`, `selectAll` and its custom finders. All methods take `Plugin plugin` as last parameter. A `ReferenceList selectXxxReferenceList` exists only when a dropdown needs it.
 
 ## Return Types
 

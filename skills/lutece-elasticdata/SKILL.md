@@ -19,7 +19,7 @@ module-myentity-elasticdata (@ApplicationScoped DataSource)
 MyEntityDataObject (extends AbstractDataObject)
     ↓ indexed by two daemons
 FullIndexingDaemon (daily, bulk reindex)
-IncrementalIndexingDaemon (every 3s, processes IndexerAction queue)
+IncrementalIndexingDaemon (interval `daemon.incrementalIndexingDaemon.interval`, processes IndexerAction queue)
 
 Incremental path:
 Entity CRUD → CDI event fired
@@ -48,25 +48,31 @@ CDI.current( ).select( DataSource.class ).stream( )
 
 ```xml
 <parent>
-    <groupId>fr.paris.lutece.plugins</groupId>
-    <artifactId>lutece-form-module-myentity-elasticdata</artifactId>
+    <groupId>fr.paris.lutece.tools</groupId>
+    <artifactId>lutece-global-pom</artifactId>
+    <version>LATEST_RELEASED_8_X</version>
 </parent>
+
+<artifactId>module-elasticdata-myentity</artifactId>
+<packaging>lutece-plugin</packaging>
 
 <dependencies>
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-elasticdata</artifactId>
-        <version>[3.0.0-SNAPSHOT,)</version>
+        <version>[3.0.0,)</version>
         <type>lutece-plugin</type>
     </dependency>
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-myentity</artifactId>
-        <version>[X.0.0-SNAPSHOT,)</version>
+        <version>[X.0.0,)</version>
         <type>lutece-plugin</type>
     </dependency>
 </dependencies>
 ```
+
+Replace `LATEST_RELEASED_8_X` with the latest released `lutece-global-pom` 8.x (check the Lutece Maven repository, never hardcode a guess). The module is never its own parent (reference: `lutece-form-module-elasticdata-forms/pom.xml`).
 
 ## Step 2 — DataSource Implementation
 
@@ -82,6 +88,10 @@ import fr.paris.lutece.plugins.elasticdata.business.DataObject;
 @ApplicationScoped
 public class MyEntityDataSource extends AbstractDataSource
 {
+    public MyEntityDataSource( )
+    {
+    }
+
     @Inject
     public MyEntityDataSource(
             @ConfigProperty( name = "elasticdata-myentity.dataSource.id" ) String strId,
@@ -149,6 +159,7 @@ public class MyEntityDataSource extends AbstractDataSource
 ```
 
 **Key points:**
+- The no-arg constructor is required next to the `@Inject` one: `@ApplicationScoped` beans are proxied by their concrete class (reference `FormsDataSource.java:116`)
 - `@ConfigProperty` injects values from properties file (MicroProfile Config)
 - `getIdDataObjects()` returns ALL IDs — the framework handles batching via `BatchDataObjectsIterator`
 - `getDataObjects(List)` fetches a batch of entities — keep this efficient (single SQL query for the batch)
@@ -319,7 +330,7 @@ public void remove( int nIdEntity )
 - `IndexerAction.TASK_MODIFY` (2) — Partial update
 - `IndexerAction.TASK_DELETE` (3) — Delete by query
 
-The `IncrementalIndexingDaemon` runs every 3 seconds and processes the queue. It handles conflict resolution automatically (e.g., CREATE followed by DELETE = task removed).
+The `IncrementalIndexingDaemon` processes the queue on the interval set by `daemon.incrementalIndexingDaemon.interval` (seconds; plugin-elasticdata ships `3000`, and `daemon.fullIndexingDaemon.interval=86400`). It handles conflict resolution automatically (e.g., CREATE followed by DELETE = task removed).
 
 ## Step 5 — Elasticsearch Mappings
 
@@ -422,8 +433,8 @@ Providers are auto-discovered via CDI and called during full indexing (`complete
 
 | Mode | Daemon | Interval | Trigger | What happens |
 |------|--------|----------|---------|--------------|
-| Full | `FullIndexingDaemon` | 86400s (daily) | Admin button or daemon schedule | Delete index → recreate with mappings → bulk index all DataObjects |
-| Incremental | `IncrementalIndexingDaemon` | 3s | CDI events → `DataSourceIncrementalService.addTask()` | Process IndexerAction queue (create/update/delete) |
+| Full | `FullIndexingDaemon` | `daemon.fullIndexingDaemon.interval` (shipped: 86400 s) | Admin button or daemon schedule | Delete index → recreate with mappings → bulk index all DataObjects |
+| Incremental | `IncrementalIndexingDaemon` | `daemon.incrementalIndexingDaemon.interval` (shipped: 3000 s) | CDI events → `DataSourceIncrementalService.addTask()` | Process IndexerAction queue (create/update/delete) |
 
 **Transaction safety:** Incremental indexing wraps ES operations + DB task removal in a single transaction. If ES fails, the task remains in queue for retry.
 

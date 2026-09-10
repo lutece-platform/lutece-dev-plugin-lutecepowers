@@ -1,6 +1,6 @@
 # Teammate — CDI scopes & singletons
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root). `${SKILL}` = `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8`; export both before running any script.
 
 ## Role
 Eliminate mutable static singletons and JVM-local state; make services stateless and correctly scoped.
@@ -11,10 +11,10 @@ Eliminate mutable static singletons and JVM-local state; make services stateless
 - References: `~/.lutece-references/lutece-core` (LUT‑28726, LUT‑32353 `RSAKeyPairUtil`), `lutece-form-plugin-forms` (LUT‑32088/32425/32038).
 
 ## Procedure
-1. `private static X _instance` + `getInstance()` → `@ApplicationScoped`. **Remove `getInstance()` entirely (no `@Deprecated` — house rule)** and migrate every caller: `@Inject` in CDI beans, `CDI.current().select(...)`/`CdiHelper.getBean(...)` (lazy, not a static field) in non-CDI contexts.
+1. `private static X _instance` + `getInstance()` → `@ApplicationScoped`. **Remove `getInstance()` entirely** (`rules/service-layer.md`) and migrate every caller: `@Inject` in CDI beans, `private static final X _x = CDI.current().select(...).get()` in Home facades / static utils, cached `private final` field in objects created with `new`.
 2. Constructor init → `@PostConstruct`. Injected fields via `@Inject` (no static).
-3. Proxyability: drop `final`, add a non-private no-arg ctor alongside the `@Inject` ctor.
-4. Static `CDI.current()` field init → injection, or (non-CDI serialised object) `transient` + lazy getter.
+3. Proxyability: when the bean is resolved by its concrete class, drop `final` and add a non-private no-arg ctor alongside the `@Inject` ctor. Interface-resolved beans may stay `final`.
+4. `CDI.current()` field init inside a CDI bean → `@Inject`; inside a Home facade → keep (idiom); inside a non-CDI serialised object → `transient` + lazy getter.
 5. Multi-implementation / optional dependency → `@Inject @Any Instance<I>` collected in `@PostConstruct`.
 6. State genuinely shared across nodes (key, secret, global counter) → datastore with **atomic** write `insertDataValueIfAbsent` (never `setDataValue`).
 7. In-memory `static Map` cache → `AbstractCacheableService` (see the serialization teammate for value serializability).

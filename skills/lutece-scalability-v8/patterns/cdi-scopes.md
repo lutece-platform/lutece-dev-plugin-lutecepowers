@@ -9,8 +9,6 @@ public final class XService {
     public static XService getInstance() { return _instance; }
     private final Map<...> _cache = new HashMap<>();      // diverges across instances
 }
-// or worse: init too early at class load
-private static final FormService S = CDI.current().select(FormService.class).get();
 ```
 
 ## Target pattern
@@ -22,14 +20,15 @@ public class XService {
     @PostConstruct void init() { ... }   // thread-safe init
 }
 ```
-**Remove `getInstance()` entirely** — no `@Deprecated` bridge (house rule: never deprecate). Migrate every caller:
+**Remove `getInstance()` entirely** (rule: `rules/service-layer.md`). Migrate every caller:
 - in a CDI bean → `@Inject` the service;
-- in a non-CDI context (Home facade, object created with `new`, static util) → `CDI.current().select(XService.class).get()` or `CdiHelper.getBean(XService.class)`, resolved lazily (not in a static field initializer).
-**Proxyability** (LUT‑30894): a normal-scoped bean injected elsewhere must be **non-`final`** + have a **non-private no-arg ctor** (alongside the `@Inject` ctor).
+- in a Home facade or static util → `private static final XService _x = CDI.current().select(XService.class).get();` — the static initializer is the core idiom (`RoleHome.java:58`, forms `FormHome.java:52`); the reference is effectively immutable, not divergent state;
+- in an object created with `new` → cached `private final` field.
+**Proxyability** (LUT‑30894): a normal-scoped bean resolved by its **concrete class** must be **non-`final`** + have a **non-private no-arg ctor** (alongside the `@Inject` ctor). A bean resolved only through its interface may stay `final` (core/forms DAOs).
 
 **Optional / multi-implementation dependency** (LUT‑30896, EntryServiceManager): `@Inject @Any Instance<I>` + `isResolvable()`/`stream()` collected in `@PostConstruct` — never a direct `@Named IService` of an optional plugin.
 
-**Non-CDI object serialised into the session** (created with `new`, e.g. a display tree): dependencies as **`transient` + lazy getter** `if(_x==null) _x=CDI.current().select(...).get()` — never `static final = CDI.current()...`.
+**Non-CDI object serialised into the session** (created with `new`, e.g. a display tree): dependencies as **`transient` + lazy getter** `if(_x==null) _x=CDI.current().select(...).get()`. This lazy rule applies to serialised objects only, not to Home facades.
 
 **Value genuinely shared across nodes** (keys, secrets): move it to the **database** with an **atomic** write `insertDataValueIfAbsent` (relies on the PK; tolerate `false` = another node won) — **never** `setDataValue`/upsert (overwrite race).
 
@@ -43,4 +42,4 @@ public class XService {
 
 ## Rules
 - DO: explicit scope; **stateless** services, shared state in DB; `@PostConstruct` for init; inject (reserve `CDI.current()` for Home/non-CDI objects).
-- DON'T: mutable `static`; static `CDI.current()` init in a field; mutable business state in an `@ApplicationScoped`; `final` bean or `@Inject`-only ctor.
+- DON'T: mutable `static`; `CDI.current()` field init inside a serialised non-CDI object; mutable business state in an `@ApplicationScoped`; `final` or `@Inject`-only ctor on a bean resolved by its concrete class.

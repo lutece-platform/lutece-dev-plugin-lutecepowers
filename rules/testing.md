@@ -16,9 +16,20 @@ paths:
 
 **NEVER use `mvn test` alone** — Lutece requires `lutece:exploded` (webapp explosion) + `antrun:run` (HSQL DB setup via `-Dlutece-test-hsql`) before tests can run.
 
+## Reading the result
+
+The global-pom configures surefire with `testFailureIgnore=true`: **BUILD SUCCESS does not mean the tests pass.** The verdict comes from `target/surefire-reports/*.txt`:
+
+```bash
+cat target/surefire-reports/*.txt | grep -h '^Tests run:' \
+  | awk -F'[:,]' '{r+=$2; f+=$4; e+=$6; s+=$8} END {printf "Tests run: %d, Failures: %d, Errors: %d, Skipped: %d\n", r, f, e, s}'
+```
+
+Tests pass only when Failures = 0 and Errors = 0. No `target/surefire-reports/` directory means no test ran.
+
 ## JUnit 5
 
-- `@Test` from `org.junit.jupiter.api.Test` (NOT `org.junit.Test`)
+- `@Test` from `org.junit.jupiter.api.Test` (NOT `org.junit.Test`) on every test method. `LuteceTestCase` still runs un-annotated `testXXX()` methods through a `@TestFactory`, but that compatibility net is not a target: `verify-migration.sh` fails (TS06) on any test method without `@Test`
 - Assertions from `org.junit.jupiter.api.Assertions` — message parameter is LAST: `assertEquals(expected, actual, "msg")`
 - `@BeforeEach` / `@AfterEach` (NOT `@Before` / `@After`)
 - `@BeforeAll` / `@AfterAll` (NOT `@BeforeClass` / `@AfterClass`)

@@ -1,6 +1,6 @@
 # Test Migrator — Teammate Instructions
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root); export it before running any script.
 
 You are the **Test Migration** teammate. You handle all test file migration from JUnit 3/4 to JUnit 5 + CDI.
 
@@ -24,7 +24,7 @@ Only files in `src/test/java/`. **You do NOT touch** production source code, tem
 
 ## Reference-First Rule
 
-Before writing any test pattern, **search `~/.lutece-references/`** for existing migrated tests:
+See `using-lutecepowers`, Mandatory reads. Existing migrated tests to search first:
 - **Test library source:** `~/.lutece-references/lutece-test-library-lutece-unit-testing/src/java/fr/paris/lutece/test/` — `LuteceTestCase`, mocks, utilities
 - **Forms plugin tests:** `~/.lutece-references/lutece-form-plugin-forms/src/test/java/` — real migrated tests (service, business, web)
 - **Any reference repo:** `~/.lutece-references/*/src/test/java/` — search for similar test patterns
@@ -41,13 +41,13 @@ Read `.migration/tasks-test.json` for your file list.
 
 1. **LuteceTestCase extends `org.junit.jupiter.api.Assertions`** — So tests inheriting `LuteceTestCase` can call `assertEquals(...)`, `assertNotNull(...)`, `assertTrue(...)` etc. **directly without imports or `Assertions.` prefix**.
 
-2. **JUnit 3 methods still work** — Old tests with `testXXX()` methods (no `@Test` annotation) are auto-discovered via `@TestFactory dynamicTestsJunit3Style()`. `setUp()` and `tearDown()` without annotations also work.
+2. **JUnit 3 methods still run** — `testXXX()` methods without `@Test` are discovered by `@TestFactory dynamicTestsJunit3Style()`, and un-annotated `setUp()`/`tearDown()` (declared `protected` in `LuteceTestCase`) are called around them. This is a compatibility net, **not a target**: `verify-migration.sh` check TS06 fails on any `public void testXXX()` without `@Test`, and the final gate requires 0 FAIL. Every test method you deliver carries `@Test`.
 
 3. **Message-first assertion wrappers** — `LuteceTestCase` has built-in wrapper methods like `assertTrue(String message, boolean condition)` and `assertEquals(String message, long expected, long actual)` that internally swap parameters to JUnit 5 order. So message-first assertions **compile and work** — but you SHOULD still migrate them for clarity.
 
 4. **`@Resource` → `@Inject` auto-conversion** — `LuteceTestCase` Weld config automatically converts `@Resource` to `@Inject`. No manual migration needed for `@Resource` in tests.
 
-**Bottom line:** Many old tests will compile as-is after the mechanical import migration. Focus your effort on `SpringContextService.getBean()` calls and concrete class → interface changes.
+**Bottom line:** Many old tests compile as-is after the mechanical import migration. Your job is still to make every class JUnit 5 (Step 2), then handle `SpringContextService.getBean()` calls and concrete class → interface changes.
 
 ---
 
@@ -69,13 +69,13 @@ This handles:
 - `MokeHttpServletRequest` → `MockHttpServletRequest`
 - `org.springframework.mock.web` → `fr.paris.lutece.test.mocks`
 
-## Step 2: JUnit 3 → JUnit 5 (if applicable)
+## Step 2: JUnit 3 → JUnit 5 (MANDATORY)
 
 Many old Lutece tests are **JUnit 3** style (not JUnit 4). They have:
 - `testXXX()` methods without `@Test` annotation
 - `setUp()`/`tearDown()` without `@BeforeEach`/`@AfterEach`
 
-**These still work** via `LuteceTestCase` retrocompatibility. However, migrate them properly:
+Migrate every such class to JUnit 5. Imports: `org.junit.jupiter.api.Test`, `org.junit.jupiter.api.BeforeEach`, `org.junit.jupiter.api.AfterEach`.
 
 ```java
 // Before (JUnit 3) — no annotations
@@ -93,9 +93,7 @@ protected void setUp() throws Exception {
 public void testSomething() { ... }
 ```
 
-**Do NOT add `@Test` to JUnit 3 methods that are already `testXXX()`** unless you also annotate `setUp()`/`tearDown()` with `@BeforeEach`/`@AfterEach`. Otherwise the test will run twice (once via JUnit 5 discovery, once via `dynamicTestsJunit3Style`).
-
-**Clean migration rule:** Either migrate ALL methods in a class (add `@Test` + `@BeforeEach`/`@AfterEach`), or leave ALL of them as JUnit 3 style. Do not mix.
+**Whole class at once:** when you add `@Test` to the `testXXX()` methods, also annotate `setUp()`/`tearDown()` with `@BeforeEach`/`@AfterEach` (keep them `protected`, keep the `super` calls). `dynamicTestsJunit3Style()` skips `@Test` methods, so a fully annotated class runs each test exactly once; a half-annotated class loses its `setUp()` for the annotated methods.
 
 ## Step 3: Assertion Migration
 
@@ -236,19 +234,9 @@ The EL implementation depends on the parent: `org.glassfish.expressly:expressly`
 
 Versions are managed by the Lutece global POM — do not specify `<version>`.
 
-## Step 9: Run Tests (MANDATORY)
+## Step 9: No build
 
-After migrating all test files, you **MUST** run the tests to verify they pass:
-
-```bash
-mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test -q 2>&1
-```
-
-If tests fail:
-1. Read the failure output carefully — identify which test class and method failed
-2. Fix the test file (most common issues: missing `@Inject`, wrong assertion order, missing import)
-3. Re-run the tests
-4. Repeat until all tests pass or you've identified tests that fail due to production code issues (report those to the Lead)
+You never run Maven. The project does not compile until every teammate is done, and only the Verifier builds (Phase 4 of `verifier.md`). When the Verifier reports a failing test in your files, fix it (most common issues: missing `@Inject`, wrong assertion order, missing import) and mark the task for a new run. A test that fails because of production code goes back to the Lead.
 
 ## Step 10: Verification
 

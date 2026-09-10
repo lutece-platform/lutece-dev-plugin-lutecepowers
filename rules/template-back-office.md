@@ -1,5 +1,5 @@
 ---
-description: "Lutece 8 Freemarker constraints: layout macros, form components, JSP paths, i18n"
+description: "Lutece 8 Freemarker constraints: layout macros, list layout (@manageFeature / @table), form components, messages, i18n, vanilla JS"
 paths:
   - "**/templates/admin/**/*.html"
 ---
@@ -8,8 +8,11 @@ paths:
 
 ## Reference Sources — MANDATORY
 
-Before writing or modifying a template, ALWAYS consult the macros definition sources in `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/`
-and templates examples here : ~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/
+Before writing or modifying a template, ALWAYS consult:
+- macro definitions (signatures): `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/{components,elements,forms,layout,utilities}/**/*.ftl`
+- template examples: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/<feature>/*.html` (e.g. `rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and `~/.lutece-references/lutece-form-plugin-forms/webapp/WEB-INF/templates/admin/plugins/forms/*.html`
+
+Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@alert` takes `color` (not `type`); `@aButton`/`@button` take `buttonIcon` + `title` (not `iconClass`/`labelKey`); `@formGroup`/`@input` take `mandatory` (not `required`); `@select` takes `items` (a `ReferenceList`) + `default_value`; `@radioButton`/`@checkBox` take `labelKey` (not `label`); `@offcanvas` takes `position` (not `placement`); there is no `@input type='richtext'` (use `type='textarea' richtext=true`).
 
 ## Bootstrap 5 & Tabler Icons — Already Loaded
 
@@ -19,8 +22,25 @@ BS5 (CSS + JS) and Tabler Icons are globally loaded by the admin theme. Do NOT a
 
 Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`. Do NOT use `@row` / `@columns` / `@pageColumn` together. @row and @columns can be used only inside @pageColumn.
 
+## List Layout — `@manageFeature` by default, `@table` for tabular data
+
+- **Entity lists with CRUD actions** (manage pages): `@manageFeature` > `@manageFeatureItem` > `@manageFeatureItemColumn`. This is the layout of every core manage page (`rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`, 25 core templates) and of the forms manage pages (`manage_forms.html`, `manage_categories.html`, `manage_steps.html`). Items render as cards, so no `@box` around the list.
+- **Tabular data** (several data columns per row, reports, grids, child-entity tables): `@table` with `<tr>/<th>/<td>`. Forms uses it in 9 templates. Never replace an existing well-formed `@table` "systematically": switch to `@manageFeature` only when the rows are entities with edit/delete actions.
+- **Empty state**: test the list before iterating and render `@empty` otherwise.
+- **Pagination**: `@paginationAdmin paginator=paginator combo=1` after the list (server-side, `IPager`). `@paginationAjax` (JSON endpoint + `@ResponseBody`, see `/lutece-patterns` §5) is an option for large datasets; no core or forms template uses it today.
+
+## Messages — `@messages`
+
+Render model messages with the core macro, once per page, right after `@pageHeader`:
+
+```html
+<@messages infos=infos![] errors=errors![] warnings=warnings![] />
+```
+
+`![]` is required: the three variables are absent from the model until `addError()`/`addInfo()`/`addWarning()` is called. The macro handles the two value types (`errors` are `MVCMessage`/`ParamError` objects read via `.message`; `infos` and `warnings` are `Set<String>`). When writing a loop by hand instead, follow the Null Safety section below.
+
 ## i18n Format
-`#i18n{prefix.key.subkey}` — always reuse existing portal i18n utility keys instead of creating new ones whenever possible. For example: `#i18n{portal.util.labelActions}`, `#i18n{portal.util.labelModify}`, `#i18n{portal.util.labelDelete}`, `#i18n{portal.util.labelBack}`, `#i18n{portal.util.labelValidate}`, `#i18n{portal.util.labelCancel}`.
+`#i18n{prefix.key.subkey}` — always reuse existing portal i18n utility keys instead of creating new ones whenever possible. Existing keys (`lutece-core/.../portal/resources/util_messages.properties`): `portal.util.labelActions`, `labelModify`, `labelDelete`, `labelCreate`, `labelBack`, `labelValidate`, `labelCancel`, `labelClose`, `labelYes`, `labelNo`, `labelEnabled`, `labelDisabled`, `labelSearch`, `labelNoItem`. Keys that do NOT exist: `portal.util.labelActive`, `labelInactive`, `labelSave`, `labelAdd` (use `labelEnabled`/`labelDisabled`/`labelValidate`/`labelCreate`).
 
 ## Null Safety
 
@@ -30,6 +50,10 @@ Always use `${value!}` (with `!`) to handle null values in Freemarker expression
 - `<#if (errors!)?size gt 0>` NOT `<#if errors?size gt 0>`
 - `<#list (errors![]) as error>` NOT `<#list errors as error>`
 - Same for `infos` and `warnings`
+
+**Value types** (`MVCAdminJspBean.addError/addMessage`, `MVCApplication` idem):
+- `errors`: objects (`MVCMessage`, or `ParamError` from `BindingResult`) → `${error.message}`. `${error}` prints `toString()`.
+- `infos`, `warnings`: `Set<String>` → `${info}`, `${warning}`. `${info.message}` throws.
 
 # Examples :
 
@@ -41,27 +65,42 @@ Always use `${value!}` (with `!`) to handle null values in Freemarker expression
         <@pageHeader title='#i18n{myplugin.manage_tasks.pageTitle}'>
             <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=createTask' buttonIcon='plus' title='#i18n{myplugin.manage_tasks.buttonAdd}' color='primary' />
         </@pageHeader>
-        <#if task_list?size gt 0>
-            <@table>
-                <tr>
-                    <th>#i18n{myplugin.model.entity.task.attribute.title}</th>
-                    <th>#i18n{portal.util.labelActions}</th>
-                </tr>
+        <@messages infos=infos![] errors=errors![] warnings=warnings![] />
+        <#if task_list?has_content>
+            <@manageFeature>
                 <#list task_list as task>
-                <tr>
-                    <td>${task.title!}</td>
-                    <td>
+                <@manageFeatureItem>
+                    <@manageFeatureItemColumn auto=true flex=false>${task.title!}</@manageFeatureItemColumn>
+                    <@manageFeatureItemColumn align='end'>
                         <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=modifyTask&id=${task.idTask}' buttonIcon='edit' title='#i18n{portal.util.labelModify}' />
-                        <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?action=confirmRemoveTask&id=${task.idTask}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' />
-                    </td>
-                </tr>
+                        <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=confirmRemoveTask&id=${task.idTask}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' />
+                    </@manageFeatureItemColumn>
+                </@manageFeatureItem>
                 </#list>
-            </@table>
+            </@manageFeature>
+            <@paginationAdmin paginator=paginator combo=1 />
         <#else>
-            <@alert color='info'>#i18n{myplugin.manage_tasks.noData}</@alert>
+            <@empty title='#i18n{portal.util.labelNoItem}' />
         </#if>
     </@pageColumn>
 </@pageContainer>
+```
+
+Tabular variant (data grid, no per-row CRUD):
+
+```html
+<@table>
+    <tr>
+        <th>#i18n{myplugin.model.entity.task.attribute.title}</th>
+        <th>#i18n{myplugin.model.entity.task.attribute.completed}</th>
+    </tr>
+    <#list task_list as task>
+    <tr>
+        <td>${task.title!}</td>
+        <td><#if task.completed>#i18n{portal.util.labelYes}<#else>#i18n{portal.util.labelNo}</#if></td>
+    </tr>
+    </#list>
+</@table>
 ```
 
 ## Form Page Pattern
@@ -72,30 +111,39 @@ Always use `${value!}` (with `!`) to handle null values in Freemarker expression
         <@pageHeader title='#i18n{myplugin.create_task.pageTitle}'>
             <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='arrow-left' title='#i18n{portal.util.labelBack}' />
         </@pageHeader>
+        <@messages errors=errors![] />
         <@tform method='post' name='create_task' action='jsp/admin/plugins/myplugin/ManageTasks.jsp' boxed=true>
             <@input type='hidden' name='action' value='createTask' />
             <@formGroup labelFor='title' labelKey='#i18n{myplugin.model.entity.task.attribute.title}' mandatory=true rows=2>
-                <@input type='text' name='title' id='title' value='${task.title!}' />
+                <@input type='text' name='title' id='title' value='${task.title!}' mandatory=true />
             </@formGroup>
             <@formGroup labelFor='description' labelKey='#i18n{myplugin.model.entity.task.attribute.description}' rows=2>
                 <@input type='textarea' name='description' id='description'>${task.description!}</@input>
+            </@formGroup>
+            <@formGroup labelFor='id_category' labelKey='#i18n{myplugin.model.entity.task.attribute.category}' rows=2>
+                <@select name='id_category' id='id_category' items=category_list default_value='${task.idCategory!}' />
             </@formGroup>
             <@formGroup labelFor='completed' labelKey='#i18n{myplugin.model.entity.task.attribute.completed}' rows=2>
                 <@checkBox orientation='switch' labelKey='#i18n{myplugin.model.entity.task.attribute.completed}' name='completed' id='completed' value='true' checked=task.completed!false />
             </@formGroup>
             <@formGroup rows=2>
                 <@button type='submit' buttonIcon='check' title='#i18n{portal.util.labelValidate}' color='primary' />
-                <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='times' title='#i18n{portal.util.labelCancel}' />
+                <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='x' title='#i18n{portal.util.labelCancel}' />
             </@formGroup>
         </@tform>
     </@pageColumn>
 </@pageContainer>
 ```
+
+No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Controller`, the core injects it into every `<form>` at render time (see `rules/web-bean.md`). `category_list` is a `ReferenceList` put in the model by the bean.
+
 ## JavaScript — Vanilla Only, No jQuery
 
+- The admin theme does NOT load jQuery (`adminHeader.ftl` only includes it when the optional `library-theme-jquery` is present). Any `$`/`jQuery` call fails at runtime.
 - **NEVER** use jQuery (`$`, `jQuery`, `$.ajax`, `.click()`, `.on()`, etc.)
 - Use native DOM APIs: `document.querySelector`, `addEventListener`, `fetch`, `classList`, `dataset`
 - Use ES6+: `const`/`let`, arrow functions, template literals, destructuring, `async`/`await`
+- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: port it manually to a vanilla equivalent or an existing core macro, or add `library-theme-jquery` as an explicit, documented dependency.
 
 ## Third-Party Libraries — No CDN
 

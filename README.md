@@ -55,7 +55,7 @@ OpenCode loads every plugin file found in `~/.config/opencode/plugins/`. Require
 A single hook script, `hooks/session-start`, runs on every coding agent that supports session hooks. It:
 
 1. Injects the `using-lutecepowers` skill as context, with the absolute plugin root substituted for `LUTECEPOWERS_ROOT`. Fires on startup, clear and compact, not on resume, so a resumed session is not charged twice.
-2. Clones or updates 30 Lutece v8 reference repositories into `~/.lutece-references/` in the background.
+2. Clones or updates the Lutece v8 reference repositories listed in `hooks/sync-references` into `~/.lutece-references/` in the background (branch `develop`, plus the v7 branches of each repository).
 3. On Claude Code, when the current directory is a Lutece Maven project, copies the rules into `.claude/rules/` so they load automatically by path. It also exports `LUTECEPOWERS_ROOT` to the shell.
 
 The reference sync runs at most once per hour, six repositories at a time.
@@ -89,7 +89,7 @@ Coding agents without a usable session hook load the bootstrap another way: Open
 
 | Agent | Description |
 |-------|-------------|
-| `lutece-v8-reviewer` | Read-only compliance reviewer. Runs `scan-project.sh` and `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers, cache guards), then a full build with tests. Structured PASS/WARN/FAIL report. Frontmatter limited to `name` and `description` so any coding agent that reads `agents/` loads it; the `lutece-v8-review` skill drives it elsewhere. |
+| `lutece-v8-reviewer` | Read-only compliance reviewer. Runs `scan-project.sh` and `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers, cache guards), then a full build with tests read from the surefire reports. Structured PASS/WARN/FAIL report. Frontmatter limited to `name` and `description` so any coding agent that reads `agents/` loads it; the `lutece-v8-review` skill drives it elsewhere. |
 
 ## Rules
 
@@ -98,25 +98,25 @@ Short constraints applied to files matching a glob. Source of truth: `rules/*.md
 <!-- rules:start -->
 | Rule | Applies to | Constraint |
 |---|---|---|
-| `dao-patterns` | `**/business/**/*.java` | Lutece 8 DAO/Home constraints: DAOUtil lifecycle, SQL constants, Home facade, CDI lookup |
+| `dao-patterns` | `**/business/**/*.java` | Lutece 8 DAO/Home constraints: DAOUtil lifecycle, generated keys, SQL constants, Home facade, CDI lookup |
 | `dependency-convergence` | `pom.xml` | Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts each parent manages, enforcer rules from 8.0.2 |
 | `dependency-references` | always | When a task involves a dependency (Lutece or external), ensure its source/docs are available for exploration |
 | `java-conventions` | `**/*.java` | Lutece 8 global Java conventions: Jakarta EE, CDI, forbidden patterns |
-| `jsp-admin` | `**/*.jsp` | Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage |
+| `jsp-admin` | `**/*.jsp` | Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage, no init() for MVC beans |
 | `messages-properties` | always | Lutece 8 i18n constraints: no prefix in .properties, prefix in Java/templates, key naming |
-| `plugin-descriptor` | `**/plugins/*.xml` | Lutece 8 plugin.xml constraints: mandatory tags, icon-url, core-version-dependency, admin-feature declaration |
-| `service-layer` | `**/service/**/*.java` | Lutece 8 service layer constraints: CDI scopes, injection, events, configuration |
+| `plugin-descriptor` | `**/plugins/*.xml` | Lutece 8 plugin.xml constraints: structure, icon-url, core-version-dependency, admin-feature and application declaration |
+| `service-layer` | `**/service/**/*.java` | Lutece 8 service layer constraints: CDI scopes, injection, getInstance removal, events, configuration |
 | `sql-liquibase` | `**/sql/**/*.sql` | Lutece 8 SQL: every plugin .sql (create_db, init_db, init_core, upgrade) MUST carry the Liquibase formatted-sql header, otherwise the schema silently fails to deploy in v8 |
 | `sql-rename` | `**/sql/**/*.sql`, `**/WEB-INF/plugins/*.xml` | Renaming a SQL directory or a plugin: logicalFilePath goes on the changeset line (not the file header), or existing sites replay their creation scripts and lose data |
-| `template-back-office` | `**/templates/admin/**/*.html` | Lutece 8 Freemarker constraints: layout macros, form components, JSP paths, i18n |
-| `template-front-office` | `**/templates/skin/**/*.html` | Lutece 8 front-office (skin/site) templates: Bootstrap 5, vanilla JS, core modules |
+| `template-back-office` | `**/templates/admin/**/*.html` | Lutece 8 Freemarker constraints: layout macros, list layout (@manageFeature / @table), form components, messages, i18n, vanilla JS |
+| `template-front-office` | `**/templates/skin/**/*.html` | Lutece 8 front-office (skin/site) templates: FO macros (c*), Bootstrap 5, vanilla JS, messages null-safety |
 | `testing` | `**/test/**/*.java`, `pom.xml` | Lutece 8 build and test commands, JUnit 5 conventions, test base classes |
-| `web-bean` | `**/web/**/*.java` | Lutece 8 JspBean/XPage constraints: CDI annotations, CRUD lifecycle, security tokens, pagination |
+| `web-bean` | `**/web/**/*.java` | Lutece 8 JspBean/XPage constraints: CDI annotations, @Controller attributes, CRUD lifecycle, CSRF policy, Models, pagination |
 <!-- rules:end -->
 
 ## Orchestrated workflows
 
-Two skills are written as a lead that dispatches teammates described in `teammates/*.md`. On Claude Code with Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, still experimental) they run in parallel. With plain subagents (Claude Code, Codex `spawn_agent`, OpenCode `task`) each teammate is a subagent. Without any dispatch tool the lead executes the teammate files itself, in dependency order.
+Two skills are written as a lead that dispatches teammates described in `teammates/*.md`. How they run on each coding agent is described once, in the `using-lutecepowers` skill (section Subagents and teams). The lead never edits files after dispatch, only the verifier builds, and no skill ever commits.
 
 ### Migration (`lutece-migration-v8-agent-teams`)
 
@@ -127,9 +127,9 @@ Two skills are written as a lead that dispatches teammates described in `teammat
 | C — Dispatch | config-migrator, java-migrator (×1-3), template-migrator, test-migrator, verifier | lead |
 | D — Dependencies | config → java → template + test → verifier final build | lead |
 | E — Monitoring | `progress-report.sh`, blocker resolution | lead |
-| F — Final gate | 0 FAIL on `verify-migration.sh`, green build, `lutece-v8-reviewer` | verifier + lead |
+| F — Final gate | 0 FAIL on `verify-migration.sh`, compile success, 0 failures and 0 errors in the surefire reports, `lutece-v8-reviewer` | verifier + lead |
 
-Scripts (`skills/lutece-migration-v8-agent-teams/scripts/`): `scan-project.sh`, `task-splitter.sh`, `migrate-java-mechanical.sh`, `migrate-template-mechanical.sh`, `extract-context-beans.sh`, `verify-migration.sh` (70+ checks, `--json`), `verify-file.sh`, `add-liquibase-headers.sh`, `progress-report.sh`.
+Scripts (`skills/lutece-migration-v8-agent-teams/scripts/`): `scan-project.sh`, `task-splitter.sh`, `migrate-java-mechanical.sh`, `migrate-template-mechanical.sh`, `extract-context-beans.sh`, `verify-migration.sh` (78 checks, `--json`), `verify-file.sh`, `add-liquibase-headers.sh`, `progress-report.sh`.
 
 ### Scalability (`lutece-scalability-v8`)
 

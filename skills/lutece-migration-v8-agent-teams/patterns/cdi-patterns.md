@@ -41,6 +41,7 @@ Lutece's `Plugin.java` instantiates classes listed in plugin descriptor XML (`we
 | `<listener-class>` | `HttpSessionListener` |
 | `<page-include-service-class>` | `PageInclude` |
 | `<dashboard-component-class>` | `DashboardComponent` |
+| `<daemon-class>` | `Daemon` (`DaemonEntry.loadDaemon` → `Class.forName`) |
 
 **Exception:** `<application-class>` (XPages) — these tags are **removed** by the Config Migrator (v8 auto-discovers XPages via CDI), so the Java class DOES get `@SessionScoped`/`@RequestScoped` + `@Named`.
 
@@ -59,28 +60,27 @@ public class MyDAO implements IMyDAO { ... }
 public class MyService { ... }
 ```
 
-- If adding a CDI scope annotation (`@ApplicationScoped`, `@SessionScoped`, etc.), remove `final` keyword from class (CDI cannot proxy final classes). Do NOT remove `final` from classes that are not CDI-managed
+- `final` stays when the bean is resolved only through its interface (core and forms DAOs are `@ApplicationScoped public final class`). Remove `final` and add a non-private no-arg constructor only when the concrete class is injected or looked up (`@Inject MyService`, `select(MyService.class)`)
 - Remove private constructors used for singleton enforcement
 - Remove static `_instance` / `_singleton` fields
-- `getInstance()` methods are `@Deprecated(since = "8.0", forRemoval = true)` in lutece-core. **Ask the user** whether to remove each `getInstance()` or keep it temporarily:
-  - **Remove** (preferred): delete the method, update all callers to use `@Inject` (CDI-managed beans) or `CDI.current().select()` (static contexts like Home classes)
-  - **Keep temporarily**: if external non-CDI callers depend on it, mark it `@Deprecated(since = "8.0", forRemoval = true)` and convert the body to `return CDI.current().select(MyService.class).get();`
+- Delete `getInstance()` and migrate every caller — no `@Deprecated` bridge (`rules/service-layer.md`)
 
 ### JspBean classes (scope selection rules)
 
 Inspect the JspBean's **instance fields**. If it stores per-user state across requests, use `@SessionScoped`. Otherwise, use `@RequestScoped`.
 
-**`@SessionScoped`** -- bean has session state fields (pagination, working objects, filters, multi-step context, breadcrumb):
+**`@SessionScoped`** -- bean has session state fields (working objects, filters, multi-step context, breadcrumb):
 ```java
 @SessionScoped
 @Named
 @Controller(controllerJsp = "ManageMyPlugin.jsp", ...)
 public class MyPluginJspBean extends MVCAdminJspBean {
-    private int _nItemsPerPage;
-    private String _strCurrentPageIndex;
     private MyEntity _entity;
+    private MyFilter _filter;
 }
 ```
+
+Pagination fields (`_nItemsPerPage`, `_strCurrentPageIndex`) are not session state any more: they are replaced by `@Inject @Pager IPager` (§20), which is what lets a list bean become `@RequestScoped`.
 
 **`@RequestScoped`** -- bean is stateless (no session instance fields):
 ```java
@@ -106,15 +106,13 @@ public class MyXPage extends MVCApplication {
 // AFTER (v8)
 @SessionScoped
 @Named( "myplugin.xpage.myXPage" )
-@Controller( xpageName = "myXPage", pageTitleI18nKey = "...", pagePathI18nKey = "...", securityTokenEnabled=false )
+@Controller( xpageName = "myXPage", pageTitleI18nKey = "...", pagePathI18nKey = "...", securityTokenEnabled = true )
 public class MyXPage extends MVCApplication {
     @Inject
     private MyService _service;
     @Inject
     @Named(BeanUtils.BEAN_CAPTCHA_SERVICE)
     private Instance<ICaptchaService> _captchaService;
-    @Inject
-    private SecurityTokenService _securityTokenService;
 }
 ```
 
@@ -130,7 +128,7 @@ Key XPage migration rules:
 1. Add `@SessionScoped` or `@RequestScoped` (choose based on whether the XPage maintains state)
 2. Add `@Named("pluginName.xpage.xpageName")` to identify the bean
 3. Replace all `SpringContextService.getBean()` with `@Inject`
-4. Replace `SecurityTokenService.getInstance()` with `@Inject private SecurityTokenService`
+4. Remove `SecurityTokenService` usage: `securityTokenEnabled = true` on `@Controller` handles CSRF (`rules/web-bean.md`)
 5. Replace `WorkflowService.getInstance()` with `@Inject private WorkflowService`
 6. Replace `new CaptchaSecurityService()` with `@Inject @Named(BeanUtils.BEAN_CAPTCHA_SERVICE) Instance<ICaptchaService>`
 7. Replace static upload handler access with `@Inject`
@@ -188,7 +186,7 @@ public class MyBean { ... }
 
 ## 4. Static DAO in Home Classes
 
-If the Home class becomes CDI-managed (annotated with a CDI scope), remove `final` keyword (CDI cannot proxy final classes). Do NOT remove `final` from Home classes that remain plain utility classes without CDI annotations.
+A Home stays a plain static facade (never a CDI bean, keep `final`). The DAO is resolved once in the static field initializer — the idiom of every core and forms Home (`RoleHome.java:58`, `FormHome.java:52`).
 
 ```java
 // BEFORE
@@ -197,7 +195,7 @@ public final class MyHome {
 }
 
 // AFTER
-public class MyHome {
+public final class MyHome {
     private static IMyDAO _dao = CDI.current().select(IMyDAO.class).get();
 }
 ```
@@ -489,47 +487,16 @@ public final class MyService {
     public static synchronized MyService getInstance() { ... }
 }
 
-// v8 -- PREFERRED: remove getInstance() entirely, use @Inject or CDI.current().select()
+// v8 -- remove getInstance() entirely, no @Deprecated bridge (rules/service-layer.md)
 @ApplicationScoped
 public class MyService {
     // No getInstance() -- callers use @Inject (CDI beans) or CDI.current().select(MyService.class).get() (static contexts)
-}
-
-// v8 -- TEMPORARY: keep getInstance() only if external callers depend on it
-@ApplicationScoped
-public class MyService {
-    @Deprecated(since = "8.0", forRemoval = true)
-    public static MyService getInstance() {
-        return CDI.current().select(MyService.class).get();
-    }
 }
 ```
 
 ### Deprecated `getInstance()` methods in lutece-core
 
-These methods are `@Deprecated(since = "8.0", forRemoval = true)`. Replace with `@Inject` in CDI-managed classes or `CDI.current().select()` in static contexts.
-
-| Class | Deprecated Method | @Inject Type |
-|-------|-------------------|-------------|
-| `SecurityTokenService` | `getInstance()` | `ISecurityTokenService` |
-| `FileService` | `getInstance()` | `FileService` |
-| `FileImageService` | `getInstance()` | `FileImageService` |
-| `FileImagePublicService` | `getInstance()` | `FileImagePublicService` |
-| `WorkflowService` | `getInstance()` | `WorkflowService` |
-| `AccessControlService` | `getInstance()` | `AccessControlService` |
-| `AttributeService` | `getInstance()` | `AttributeService` |
-| `AttributeFieldService` | `getInstance()` | `AttributeFieldService` |
-| `AttributeTypeService` | `getInstance()` | `AttributeTypeService` |
-| `PortletService` | `getInstance()` | `PortletService` |
-| `AccessLogService` | `getInstance()` | `AccessLogService` |
-| `RegularExpressionService` | `getInstance()` | `RegularExpressionService` |
-| `EditorBbcodeService` | `getInstance()` | `IEditorBbcodeService` |
-| `ProgressManagerService` | `getInstance()` | `ProgressManagerService` |
-| `DashboardService` | `getInstance()` | `DashboardService` |
-| `AdminDashboardService` | `getInstance()` | `AdminDashboardService` |
-| `FilterService` | `getInstance()` | `FilterService` |
-| `ServletService` | `getInstance()` | `ServletService` |
-| `LuteceUserCacheService` | `getInstance()` | `LuteceUserCacheService` |
+lutece-core marks 23 of its own `getInstance()` methods `@Deprecated(since = "8.0", forRemoval = true)`. The single maintained list is the `DP01` check in `scripts/verify-migration.sh`; do not copy it here. Replace each call with `@Inject` in CDI-managed classes or `CDI.current().select()` in static contexts. `SecurityService.getInstance()` and `AdminAuthenticationService.getInstance()` are not deprecated and stay as they are.
 
 Rules for replacement:
 - Use the **interface type** when one exists (e.g., `ISecurityTokenService`, `IEditorBbcodeService`)
@@ -669,20 +636,20 @@ Map<String, Object> model = getModel( );
 model.put( MARK_ITEM, item );
 model.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION ) );
 XPage page = getXPage( TEMPLATE, locale, model );
+// the manual token line disappears too: securityTokenEnabled = true on @Controller (rules/web-bean.md)
 ```
 
 **After — Option A: Method parameter injection (PREFERRED for @View/@Action methods):**
 ```java
 @View( value = VIEW_MANAGE )
-public String getManage( Models model, HttpServletRequest request )
+public String getManage( Models model )
 {
     model.put( MARK_LIST, list );
-    model.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION ) );
-    return getPage( PROPERTY_PAGE_TITLE, TEMPLATE );
+    return getPage( PROPERTY_PAGE_TITLE, TEMPLATE, model );
 }
 ```
 
-Reference: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
+Reference: `~/.lutece-references/lutece-cms-plugin-xmltransformer/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
 
 **After — Option B: Field injection (for methods outside @View/@Action, or shared model population):**
 ```java
@@ -691,7 +658,6 @@ private Models _models;
 
 // In view method:
 _models.put( MARK_ITEM, item );
-_models.put( SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken( request, ACTION ) );
 XPage page = getXPage( TEMPLATE, locale );
 ```
 
@@ -707,10 +673,7 @@ XPage page = getXPage( TEMPLATE, locale );
 - NEVER pass `_models.asMap()` to a method that writes into the map
 - If a helper method needs to add entries to the model, change its signature to accept `Models` (not `Map<String, Object>`)
 
-**Per-action token vs CSRF auto-token:**
-- The 2-arg `getXPage(template, locale)` / `getPage(titleProperty, template)` automatically includes a **global CSRF token** (`SecurityTokenHandler.MARK_CSRF_TOKEN`) — this is a generic anti-CSRF measure
-- **Per-action tokens** (`SecurityTokenService.MARK_TOKEN`) are **different** — they are tied to a specific action and must still be added manually: `_models.put(SecurityTokenService.MARK_TOKEN, _securityTokenService.getToken(request, ACTION))`
-- Both tokens can coexist in the model; they serve different purposes
+**CSRF:** with `securityTokenEnabled = true` on `@Controller`, the core generates the token for each view (`@View.securityTokenAction` or the view name), injects it into every `<form>` of the rendered page and validates every `@Action` POST. Remove `SecurityTokenService.MARK_TOKEN` puts and manual `validate()` calls (single source: `rules/web-bean.md`).
 
 **Helper method signatures — MUST be updated:**
 Every method in the class hierarchy that receives the model as `Map<String, Object>` and calls `put()` on it **must** be changed to accept `Models`. This includes abstract methods in base classes and their implementations in subclasses.
@@ -753,11 +716,7 @@ private String _myProperty;
 
 ### @ConfigProperty (MicroProfile Config) — Priority Hierarchy
 
-Config sources (descending priority):
-1. (400) System properties
-2. (300) Environment variables
-3. (200) Lutece config files (AppPropertiesService)
-4. (100) META-INF/microprofile-config.properties
+Ordinal table (system 400 > env 300 > `override/` 250 > `WEB-INF/conf` 150 > `microprofile-config.properties` 100): `rules/service-layer.md` § Configuration.
 
 Usage:
 ```java
@@ -820,26 +779,9 @@ Use case: pass data from an @Action (POST) to the redirect target @View (GET).
 
 ## 20. Pager Injection
 
-Replaces `AbstractPaginatorJspBean` and manual pagination. Allows `@RequestScoped` instead of `@SessionScoped`.
+Replaces `AbstractPaginatorJspBean` and manual pagination (`_nItemsPerPage`, `_strCurrentPageIndex`, `new LocalizedPaginator`). Allows `@RequestScoped` instead of `@SessionScoped`.
 
-```java
-@Inject
-@Pager( listBookmark = MARK_ITEMS, defaultItemsPerPage = PROPERTY_DEFAULT_LIST_ITEM_PER_PAGE )
-private IPager<Integer, MyItem> _pager;
-```
-
-### Lazy loading (IDs first, load page on demand)
-```java
-_pager.setIdList( listItemIds );
-model = _pager.getPaginatedListModel( request, (ids) -> loadItemsByIds(ids), getLocale() );
-```
-
-### Explicit loading (full list)
-```java
-_pager.withBaseUrl( getHomeUrl( request ) )
-      .withListItem( fullItemList )
-      .populateModels( request, _models, getLocale() );
-```
+`IPager` API (core `web/util/IPager.java`): `withBaseUrl`, `withItemsPerPage`, `withIdList`, `withListItem`, `populateModels( request, models, locale )`, `populateModels( request, models, delegate, locale )`, `getPaginator()`. Full JspBean + template example: `lutece-patterns` skill §5.
 
 ## 21. @LutecePriority for CDI Alternatives
 
@@ -848,11 +790,11 @@ When multiple implementations of an interface exist, use @Alternative + @LuteceP
 ```java
 @ApplicationScoped
 @Alternative
-@LutecePriority(configKey = "myplugin.impl.priority")
+@LutecePriority( "myplugin.impl.priority" )
 public class MyImplA implements IMyService { }
 ```
 
-Priority value comes from configuration file, not hardcoded. Higher value wins.
+The positional value is the configuration key holding the priority (core usage: `@LutecePriority( "multipart.handler.TemporaryFileMultipartHandler" )` in `TemporaryFileMultipartHandler.java`). Higher value wins.
 
 ## 22. Eager CDI Bean Initialization (Constructor Self-Registration)
 
@@ -870,7 +812,7 @@ public class MySearchIndexer implements SearchIndexer {
 }
 ```
 
-**Fix:** Move self-registration to a CDI startup observer:
+**Fix (only when the class is NOT declared in plugin.xml):** if the indexer is still listed under `<search-indexer-class>`, `Plugin.registerSearchIndexers` already instantiates and registers it by reflection (§2) — do not add a scope. Otherwise move self-registration to a CDI startup observer:
 
 ```java
 @ApplicationScoped

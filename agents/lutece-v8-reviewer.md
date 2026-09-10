@@ -9,7 +9,7 @@ You are a Lutece 8 compliance reviewer. You audit a Lutece plugin/module/library
 
 ## Reference
 
-- **v7 versions**: To see how a pattern was migrated, compare with the v7 version of the same reference in `~/.lutece-references/`: the v7 code is on a `*_core7` branch (`develop_core7`, `master_core7`; lutece-core uses `develop7.x`), listed by `git branch -r`. Repositories born in v8 have none. Consult when something looks strange to compare against a known-good migration.
+- **v7 versions**: each reference also carries its v7 branches (see `using-lutecepowers`, Mandatory reads). Compare when something looks strange against a known-good migration.
 - **Lutece Core v8** reference source: `~/.lutece-references/lutece-core/`. Use to verify CDI scopes, base classes, service APIs, and core conventions.
 - **Forms plugin v8** reference source: `~/.lutece-references/lutece-form-plugin-forms/`. Use as a complete example of a v8-compliant plugin (DAO, Service, XPage, CDI annotations, cache, events).
 - **Appointment plugin v8** reference source: `~/.lutece-references/gru-plugin-appointment/`. Reference for CDI event firing (`fireAsync`), `Instance<ICaptchaService>` pattern, `@Inject @Pager IPager` pagination, and listener-to-CDI migration.
@@ -70,7 +70,8 @@ Create a task list for the semantic checks only:
 11. Verify template message patterns (MVCMessage .message)
 12. Verify ConfigProperty vs AppPropertiesService usage
 13. Check jQuery → Vanilla JS ES6 conversion
-14. Compile final report
+14. Check the CSRF policy (`securityTokenEnabled`)
+15. Compile final report
 ```
 
 These checks require reading code, understanding context, and comparing against references. The script cannot do them.
@@ -107,7 +108,8 @@ Lutece's `Plugin.java` instantiates many classes via **reflection** (`Class.forN
 | `<listener-class>` | `HttpSessionListener` |
 | `<page-include-service-class>` | `PageInclude` |
 | `<dashboard-component-class>` | `DashboardComponent` |
-| `<application-class>` | `XPageApplication` |
+| `<application-class>` | `XPageApplication` (legacy; a v8 XPage is a CDI `MVCApplication` bean named `<plugin>.xpage.<id>` and the tag must be absent) |
+| `<daemon-class>` | `Daemon` |
 
 Reference: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/service/plugin/Plugin.java`
 
@@ -137,14 +139,15 @@ Reference: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/ser
 | `@SessionScoped` but no session-state instance fields | WARN: should be `@RequestScoped` |
 | `@RequestScoped` but has session-state instance fields | WARN: should be `@SessionScoped` |
 
-Session-state fields: pagination (`_strCurrentPageIndex`, `_nItemsPerPage`), working objects, filters, multi-step context. `static` fields and `static final` constants do NOT count.
+Session-state fields: working objects, filters, multi-step context. Pagination fields (`_strCurrentPageIndex`, `_nItemsPerPage`) are replaced by `@Inject @Pager IPager` and do not justify `@SessionScoped`. `static` fields and `static final` constants do NOT count. A `private static X _dao = CDI.current().select(...).get()` initializer in a Home class is the idiom: PASS.
 
 ### S2. Singleton patterns (`getInstance()` methods)
 
 | Body pattern | Severity | Action |
 |-------------|----------|--------|
-| `return CDI.current().select(...).get()` | WARN | Deprecated wrapper — remove if all callers internal, keep with `@Deprecated` if external |
+| `return CDI.current().select(...).get()` | FAIL | Bridge wrapper — remove it and inject the bean; `getInstance()` is never kept, not even `@Deprecated` (rules/service-layer.md) |
 | Old singleton (static field, `new`, double-checked locking) | FAIL | Must migrate to `@ApplicationScoped` + `CDI.current().select()` or `@Inject` |
+| Core `getInstance()` still called: the 23 `@Deprecated(since="8.0", forRemoval=true)` services (list = DP01 in `verify-migration.sh`) | FAIL | Inject or `CDI.current().select()` the service. `SecurityService.getInstance()` and `AdminAuthenticationService.getInstance()` are not deprecated: PASS |
 
 ### S3. CDI injection vs static lookup
 
@@ -160,7 +163,8 @@ Session-state fields: pagination (`_strCurrentPageIndex`, `_nItemsPerPage`), wor
 | Check | Severity |
 |-------|----------|
 | Produces a class from `src/` that could be `@ApplicationScoped` directly | WARN: unnecessary producer |
-| `@Inject @Named("literal")` hardcoded in producer | WARN: use `@ConfigProperty` + `CdiHelper.getReference()` |
+| `@Inject @Named("literal")` in a producer of a **pluggable** implementation (`IFileStoreService`, `IFileDownloadUrlService`, `IFileRBACService`) | WARN: resolve the name from `@ConfigProperty` like core `DefaultFileStoreServiceProviderProducer` |
+| `@Inject @Named("literal")` for a module-internal bean (workflow `ITaskConfigDAO`, `ITaskType`) | PASS: this is the reference workflow pattern |
 | `FileService.getFileStoreServiceProvider("name")` runtime lookup | WARN: use `@Inject @Named` |
 
 ### S5. Cache service defensive overrides
@@ -227,7 +231,7 @@ In Lutece 8, the deprecated `getModel()` method (returns `Map<String, Object>`) 
    @Inject Models model;
    ```
 
-Reference: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
+Reference: `~/.lutece-references/lutece-cms-plugin-xmltransformer/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
 
 | Check | Severity |
 |-------|----------|
@@ -331,7 +335,7 @@ _pager.withIdList(listIds)
 References:
 - IPager: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/web/util/IPager.java`
 - SimplePager: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/web/util/SimplePager.java`
-- Usage: `~/.lutece-references/lutece-core/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
+- Usage: `~/.lutece-references/lutece-cms-plugin-xmltransformer/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java`
 - Delegate usage: `~/.lutece-references/gru-plugin-appointment/src/java/fr/paris/lutece/plugins/appointment/web/AppointmentJspBean.java`
 
 | Check | Severity |
@@ -393,16 +397,28 @@ jQuery code **without external plugin dependencies** should be converted to vani
 - `$.each()` → `Array.from().forEach()` or `for...of`
 - `$(el).on('click', ...)` → `el.addEventListener('click', ...)`
 
-**Do NOT convert** jQuery code that depends on jQuery plugins (DataTables, Select2, jQuery UI, etc.) — those still require jQuery.
+The v8 theme does not load jQuery (no `webapp/js/jquery` in the core; `page_frameset` loads it only when the project ships its own `commons_theme_jquery.html`). jQuery code that depends on jQuery plugins (DataTables, Select2, jQuery UI) is therefore broken at runtime unless the project ships jQuery itself: it needs a manual port or an explicit jQuery inclusion, never a silent PASS.
 
 | Check | Severity |
 |-------|----------|
 | jQuery usage with no external plugin dependency | WARN: convert to vanilla JS ES6 |
-| jQuery usage required by jQuery plugin (DataTables, Select2, etc.) | PASS |
+| jQuery usage required by jQuery plugin (DataTables, Select2, etc.) | WARN: port to a vanilla library or ship jQuery explicitly; jQuery is not loaded by the theme |
 | Already vanilla JS | PASS |
 | No JavaScript in project | N/A |
 
 ---
+
+### S14. CSRF policy (`securityTokenEnabled`)
+
+Policy: `rules/web-bean.md` § CSRF Policy. With `securityTokenEnabled = true` on `@Controller`, the core generates the token per view (`SecurityTokenHandler`), injects it into every `<form>` of the rendered page (`AppTemplateService`) and validates every `@Action` POST (`SecurityTokenFilterAdmin` / `SecurityTokenFilterSite`). Script check MV03 flags the manual pattern; confirm here.
+
+| Check | Severity |
+|-------|----------|
+| `@Controller` without `securityTokenEnabled = true`, or with `= false` | WARN: enable it |
+| `SecurityTokenService.MARK_TOKEN`, `getToken()`, `validate()` or `@Inject SecurityTokenService` inside a `@Controller` bean | WARN: redundant with `securityTokenEnabled`, remove |
+| Confirmation view without `securityTokenAction` for the action it confirms | WARN |
+| Manual token in a non-MVC bean (portlet JspBean, no `@Controller`) | PASS |
+| `SecurityTokenService.getInstance()` | FAIL (DP01) |
 
 ## Phase C — Build & Tests
 
@@ -412,8 +428,15 @@ After completing semantic analysis, run the full build with tests:
 mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test -q 2>&1
 ```
 
+The parent POM sets `testFailureIgnore=true`, so `BUILD SUCCESS` does not prove the tests pass. Read the reports:
+
+```bash
+grep -h "Tests run" target/surefire-reports/*.txt | awk -F'[:,]' '{t+=$2; f+=$4; e+=$6} END {print "tests=" t " failures=" f " errors=" e}'
+```
+
 Record the result:
-- **BUILD SUCCESS** + all tests pass → `Build: PASS`
+- **BUILD SUCCESS** and `failures=0 errors=0` in the surefire reports → `Build: PASS`
+- **BUILD SUCCESS** with failures or errors in the surefire reports → `Build: FAIL (tests)` — list the failing test classes
 - **BUILD FAILURE** (compilation) → `Build: FAIL (compile)` — extract the first error message, file, and line
 - **Tests fail** → `Build: FAIL (tests)` — extract failing test class, method, and error message
 
@@ -451,6 +474,7 @@ Output the report using this exact structure:
 | S11 | Template Message Patterns | PASS/FAIL/N/A | 0 |
 | S12 | ConfigProperty Usage | PASS/WARN | 0 |
 | S13 | jQuery → Vanilla JS | PASS/WARN/N/A | 0 |
+| S14 | CSRF policy | PASS/WARN/FAIL | 0 |
 | | **Total semantic** | | **X** |
 
 ## Build & Tests
@@ -476,14 +500,9 @@ Skip categories with 0 findings.
 
 ---
 
-## Post-report — Fix proposal
+## Post-report
 
-After producing the report, if there are WARN or FAIL items with clear fixes, use `AskUserQuestion`:
-
-- Question: "Do you want me to fix the <N> issues found in the review?"
-- Options: "Yes, fix all" / "No, report only"
-
-If the user chooses to fix, return the report with a clear list of proposed fixes (file, line, before → after) so the calling agent can apply them. Do NOT modify files yourself.
+Return the report as is. The caller (the `lutece-v8-review` skill or the migration lead) decides with the user whether fixes are applied. Do NOT modify files yourself.
 
 ---
 

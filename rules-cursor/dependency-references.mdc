@@ -15,22 +15,15 @@ When a user's request (feature, bug, question) involves — explicitly or implic
    curl -s "https://api.github.com/search/repositories?q=org:lutece-platform+{keyword}+in:name&per_page=5" | jq -r '.items[] | .name'
    curl -s "https://api.github.com/search/repositories?q=org:lutece-secteur-public+{keyword}+in:name&per_page=5" | jq -r '.items[] | .name'
    ```
-4. **Find the v8 branch** — Check branches in priority order: `develop_core8` > `develop8` > `develop8.x` > `develop`
+4. **Verify v8 compatibility** — v8 code lives on the `develop` branch (v7 stays on `develop_core7` / `master_core7`). Fetch its pom.xml and check `<parent><version>` starts with `8.`
    ```bash
-   curl -s "https://api.github.com/repos/{org}/{repo}/branches?per_page=100" | jq -r '.[].name'
+   curl -s "https://raw.githubusercontent.com/{org}/{repo}/develop/pom.xml" | grep -A3 '<parent>' | grep '<version>'
    ```
-5. **Verify v8 compatibility** — Fetch the remote pom.xml and check `<parent><version>` starts with `8.` (e.g. `8.0.0`, `8.0.0-SNAPSHOT`, `8.1.0`)
-   ```bash
-   curl -s "https://raw.githubusercontent.com/{org}/{repo}/{branch}/pom.xml" | grep -A1 '<parent>' | grep '<version>'
-   ```
-6. **Clone into references** — Use the same pattern as the SessionStart hook
-   ```bash
-   git clone -q --branch {branch} --single-branch https://github.com/{org}/{repo}.git ~/.lutece-references/{repo}
-   ```
+5. **Clone into references** — add `{repo}` (or `{org}/{repo}` outside `lutece-platform`) to the `REPOS` array of `${LUTECEPOWERS_ROOT}/hooks/sync-references` and run that hook: it clones `develop` and fetches the v7 branches (see `using-lutecepowers`, Mandatory reads)
 
 ## When It Fails
 
-- **No v8 branch found** (parent version is 7.x or no develop_core8/develop8 branch) → Warn the user: this dependency has no Lutece 8 version yet and needs to be migrated first
+- **No v8 version** (the `develop` pom parent is still 7.x) → Warn the user: this dependency has no Lutece 8 version yet and needs to be migrated first
 - **Repo not found on GitHub** → Ask the user to clone the repo manually and provide the local path for exploration
 
 ## External Dependencies (non-Lutece)
@@ -39,6 +32,5 @@ For external libraries (e.g. Apache Commons, Jackson, third-party APIs):
 
 1. **Check if Context7 MCP is available** — Look for the `context7` tool in your available tools
 2. **If Context7 is available** → Use it to fetch up-to-date documentation and source references for the library
-3. **If Context7 is NOT available** → Inform the user:
-   > The Context7 plugin can provide up-to-date documentation for external libraries. To install it, run `/plugin` and install the `context7` plugin, then restart the session with `claude -c`
+3. **If Context7 is NOT available** → tell the user that the Context7 MCP server provides up-to-date documentation for external libraries and can be added to the harness configuration
 4. **Fallback** — Use WebSearch/WebFetch to find official documentation, or ask the user for a local path to the library sources

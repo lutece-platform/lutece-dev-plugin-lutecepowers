@@ -1,6 +1,6 @@
 # Cache Migration Patterns (v7 → v8)
 
-Single source of truth for all cache migration patterns (EhCache 2.x → JCache/JSR-107).
+v7 → v8 cache migration (EhCache 2.x → JCache/JSR-107). This file holds the before/after transformations only; the target shape (guards, key builders, CDI access, invalidation) is described once in the `lutece-cache` skill.
 
 > **Reference-First Principle:** Before writing any cache service, **search `~/.lutece-references/` for existing `AbstractCacheableService` implementations** (e.g., `Grep AbstractCacheableService ~/.lutece-references/`). Reproduce the reference structure exactly.
 
@@ -38,58 +38,20 @@ public class MyCacheService extends AbstractCacheableService implements EventRes
 
 **After (v8):**
 ```java
-import javax.cache.CacheException;
-
 @ApplicationScoped
 public class MyCacheService extends AbstractCacheableService<String, Object> {
     @PostConstruct
-    public void initCache() {
+    public void init() {
         initCache(CACHE_NAME, String.class, Object.class);
     }
 
-    // MANDATORY: override put/get/remove with defensive guards.
-    // AbstractCacheableService delegates directly to _cache without null/closed checks.
-    // If the cache is disabled in the datastore (default state), _cache is null → NPE.
-
-    @Override
-    public void put(String key, Object value) {
-        if (isCacheEnable() && isCacheAvailable()) {
-            try { super.put(key, value); }
-            catch (CacheException | IllegalStateException e) {
-                AppLogService.error("Cache put error for key {}", key, e);
-            }
-        }
-    }
-    @Override
-    public Object get(String key) {
-        if (isCacheEnable() && isCacheAvailable()) {
-            try { return super.get(key); }
-            catch (CacheException | IllegalStateException e) {
-                AppLogService.error("Cache get error for key {}", key, e);
-            }
-        }
-        return null;
-    }
-    @Override
-    public boolean remove(String key) {
-        if (isCacheEnable() && isCacheAvailable()) {
-            try { return super.remove(key); }
-            catch (CacheException | IllegalStateException e) {
-                AppLogService.error("Cache remove error for key {}", key, e);
-            }
-        }
-        return false;
-    }
-    private boolean isCacheAvailable() {
-        return _cache != null && !_cache.isClosed();
-    }
-
-    // CDI observer replaces EventRessourceListener
     public void processEvent(@Observes MyEvent event) {
         if (isCacheEnable()) { resetCache(); }
     }
 }
 ```
+
+Then apply the target shape from `lutece-cache` Step 1: override `put`/`get`/`remove` with `isCacheEnable() && isCacheAvailable()` guards (the inherited methods dereference `_cache`, which is `null` while the cache is disabled).
 
 ## 4. Cache Method Renames
 
@@ -101,30 +63,14 @@ public class MyCacheService extends AbstractCacheableService<String, Object> {
 
 ## 5. Cache Service Access
 
-**NEVER add a `getInstance()` method** on the cache service — it is `@Deprecated(since = "8.0", forRemoval = true)`.
-
-| Caller context | Pattern |
-|---|---|
-| CDI-managed bean (`@ApplicationScoped` service) | `@Inject private MyCacheService _cacheService;` |
-| Static Home class | Direct field init: `CDI.current().select(MyCacheService.class).get()` |
-
-```java
-// Home class — static context, direct field initialization (no lazy-init getter)
-public class EntityHome
-{
-    private static IEntityDAO _dao = CDI.current( ).select( IEntityDAO.class ).get( );
-    private static MyCacheService _cacheService = CDI.current( ).select( MyCacheService.class ).get( );
-    private static final Plugin _plugin = PluginService.getPlugin( "pluginname" );
-}
-```
+Delete any `getInstance()` on the cache service (`rules/service-layer.md`). Access patterns (`@Inject` in CDI beans, static field init in Home classes): `lutece-cache` Step 3.
 
 ## 6. AbstractCacheableService Type Parameters
 
 Raw type `AbstractCacheableService` must be parameterized. The typed `initCache(String, Class<K>, Class<V>)` replaces the no-arg `initCache()`. Use `<String, Object>` as default when the cache stores heterogeneous values.
 
-**Before:**
 ```java
-@ApplicationScoped
+// BEFORE
 public class MyCacheService extends AbstractCacheableService
 {
     @PostConstruct
@@ -133,10 +79,8 @@ public class MyCacheService extends AbstractCacheableService
         initCache( );
     }
 }
-```
 
-**After:**
-```java
+// AFTER
 @ApplicationScoped
 public class MyCacheService extends AbstractCacheableService<String, Object>
 {
@@ -147,7 +91,3 @@ public class MyCacheService extends AbstractCacheableService<String, Object>
     }
 }
 ```
-
-## 7. No getInstance() on Cache Services
-
-`getInstance()` is `@Deprecated(since = "8.0", forRemoval = true)` in lutece-core. Use `@Inject` or `CDI.current().select()` instead. See section 5 for the access patterns.

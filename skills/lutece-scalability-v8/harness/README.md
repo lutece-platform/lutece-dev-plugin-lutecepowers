@@ -14,6 +14,10 @@ dependency into `pom.xml.tpl` and enables it in `plugins.dat.tpl`, fetches Hazel
    shared volume: /opt/lutece/shared (Lucene index, filestore)
 ```
 
+## Parent and BOM versions
+- Parent `lutece-site-pom` **8.0.1**: the latest release in `fr/paris/lutece/tools/lutece-site-pom/maven-metadata.xml` on `dev.lutece.paris.fr/maven_repository`. Never a SNAPSHOT parent.
+- `fr.paris.lutece.starters:lutece-bom` **8.0.0-SNAPSHOT**: the only release is `8.0.0-RC-01` (same metadata file under `starters/lutece-bom`), so the snapshot repository stays declared and the import keeps the SNAPSHOT until a final BOM is released. Re-check the metadata before changing it.
+
 ## How it works (and the gotchas it bakes in)
 - **Build**: Lutece `lutece-site` packaging; assembled with `mvn -Pdev clean package lutece:site-assembly`, then the exploded webapp is `jar`-ed into `lutece.war`. The `lutece-maven-plugin` assembly lifecycle is only active under an env profile (`-Pdev`).
 - **DB / schema**: empty MariaDB + **plugin-liquibase** (`LIQUIBASE_ENABLED_AT_STARTUP`) builds the schema on first boot. **Migrator pattern**: only `app1` has Liquibase enabled + a healthcheck; `app2`/`app3` start once `app1` is healthy (Liquibase disabled) → no concurrent first-run race.
@@ -78,5 +82,5 @@ LOCK_TABLE=<plugin>_lock bash ../scripts/cluster-verify.sh e2e/.scalability-test
 ( cd e2e/.scalability-test && docker compose down -v )
 ```
 
-> Disposable: the generated `e2e/.scalability-test/` can be deleted after the run.
+> Kept on disk after the run: the generated `e2e/.scalability-test/` is part of the deliverable (see the artifact retention rule in `SKILL.md`); only the containers are torn down.
 > Image base: `icr.io/appcafe/open-liberty:full-java21-openj9-ubi-minimal`.

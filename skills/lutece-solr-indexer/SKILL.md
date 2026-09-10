@@ -40,25 +40,31 @@ CDI.current( ).select( SolrIndexer.class ).stream( ).toList( );
 
 ```xml
 <parent>
-    <groupId>fr.paris.lutece.plugins</groupId>
-    <artifactId>lutece-search-module-myentity-solr</artifactId>
+    <groupId>fr.paris.lutece.tools</groupId>
+    <artifactId>lutece-global-pom</artifactId>
+    <version>LATEST_RELEASED_8_X</version>
 </parent>
+
+<artifactId>module-myentity-solr</artifactId>
+<packaging>lutece-plugin</packaging>
 
 <dependencies>
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-solr</artifactId>
-        <version>[5.0.0-SNAPSHOT,)</version>
+        <version>[5.0.0,)</version>
         <type>lutece-plugin</type>
     </dependency>
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-myentity</artifactId>
-        <version>[X.0.0-SNAPSHOT,)</version>
+        <version>[X.0.0,)</version>
         <type>lutece-plugin</type>
     </dependency>
 </dependencies>
 ```
+
+Replace `LATEST_RELEASED_8_X` with the latest released `lutece-global-pom` 8.x (check the Lutece Maven repository, never hardcode a guess). The module is never its own parent (reference: `lutece-search-module-forms-solr/pom.xml`).
 
 ## Step 2 — SolrIndexer Implementation
 
@@ -249,7 +255,7 @@ The plugin-solr framework already has `SolrEventRessourceListener` that observes
 Fire `ResourceEvent` from your Service when entities are created/updated/deleted. The `SolrEventRessourceListener` uses `@Observes @Type(EventAction.X)`, so you must select the qualifier before firing synchronously:
 
 ```java
-import fr.paris.lutece.portal.service.event.ResourceEvent;
+import fr.paris.lutece.portal.business.event.ResourceEvent;
 import fr.paris.lutece.portal.service.event.EventAction;
 import fr.paris.lutece.portal.service.event.Type.TypeQualifier;
 
@@ -407,7 +413,7 @@ No daemon, no DAO, no SQL table needed — plugin-solr provides all infrastructu
 | SolrIndexer interface (9 methods) | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/indexer/SolrIndexer.java` |
 | SolrItem API (dynamic fields) | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/indexer/SolrItem.java` |
 | SolrIndexerService (write, commit) | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/service/SolrIndexerService.java` |
-| CDI event listener (plugin-solr) | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/service/SolrEventRessourceListener.java` |
+| CDI event listener (plugin-solr) | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/indexer/SolrEventRessourceListener.java` |
 | Complete indexer (forms-solr) | `~/.lutece-references/lutece-search-module-forms-solr/src/java/**/SolrFormsIndexer.java` |
 | Plugin init (forms-solr) | `~/.lutece-references/lutece-search-module-forms-solr/src/java/**/FormsSolrPlugin.java` |
 | External field provider | `~/.lutece-references/lutece-search-plugin-solr/src/java/**/indexer/ISolrItemExternalFieldProvider.java` |

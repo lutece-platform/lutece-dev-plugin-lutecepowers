@@ -1,6 +1,6 @@
 # Teammate — Verifier (build + cluster test)
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root). `${SKILL}` = `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8`; export both before running any script.
 
 ## Role
 The only teammate that builds. Validates that the consolidated plugin compiles, then **proves scalability empirically** by turning the **UI-driven e2e that already went RED in Phase A.4.2 GREEN** on the 3-instance cluster.

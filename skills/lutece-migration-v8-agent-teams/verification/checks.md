@@ -150,13 +150,14 @@
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
 | TM06 | FAIL | @addRequiredJsFiles (not BO) | (custom check) | admin/*.html |
+| TM07 | FAIL | MVCMessage `${error}` without `.message` | `${error}` not followed by `.` or `!` | *.html |
 
 ## Logging (LG)
 
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | LG01 | FAIL | String concat in logging | `AppLogService\..*+ ` | *.java |
-| LG02 | FAIL | Unnecessary isDebugEnabled | `isDebugEnabled\|isInfoEnabled` | *.java |
+| LG02 | WARN | Unnecessary isDebugEnabled | `isDebugEnabled\|isInfoEnabled` | *.java |
 
 ## Tests (TS)
 
@@ -177,9 +178,11 @@
 
 | Severity | Count |
 |----------|-------|
-| FAIL | ~56 |
-| WARN | ~18 |
-| **Total** | **~74** |
+| FAIL | 58 |
+| WARN | 20 |
+| **Total** | **78** |
+
+Counts taken from a `verify-migration.sh --json` run (`.migration/verify-latest.json`, field `total`).
 
 ## verify-file.sh Check Mapping
 

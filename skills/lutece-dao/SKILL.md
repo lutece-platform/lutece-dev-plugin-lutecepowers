@@ -11,24 +11,23 @@ description: "Use when creating, modifying or reviewing a Lutece 8 DAO, Home or 
 
 ```java
 @ApplicationScoped
-@Named( "myplugin.entityDAO" )
-public class EntityDAO implements IEntityDAO
+public final class EntityDAO implements IEntityDAO
 {
-    private static final String SQL_QUERY_NEWPK = "SELECT max( id_entity ) FROM myplugin_entity";
     private static final String SQL_QUERY_SELECT = "SELECT id_entity, title, description FROM myplugin_entity WHERE id_entity = ?";
-    private static final String SQL_QUERY_INSERT = "INSERT INTO myplugin_entity ( id_entity, title, description ) VALUES ( ?, ?, ? )";
+    private static final String SQL_QUERY_INSERT = "INSERT INTO myplugin_entity ( title, description ) VALUES ( ?, ? )";
     private static final String SQL_QUERY_UPDATE = "UPDATE myplugin_entity SET title = ?, description = ? WHERE id_entity = ?";
     private static final String SQL_QUERY_DELETE = "DELETE FROM myplugin_entity WHERE id_entity = ?";
     private static final String SQL_QUERY_SELECTALL = "SELECT id_entity, title, description FROM myplugin_entity";
-    // ...
 }
 ```
+
+- The bean is resolved through `IEntityDAO`, so `final` is fine (core and forms DAOs are `final`). Drop `final` only if something injects the concrete class.
+- No `@Named`: none of the core or forms DAOs carry one. Add `@Named( "myplugin.entityDAO" )` only when a producer resolves the DAO by name (workflow `ITaskConfigDAO`).
 
 ## SQL Constant Naming
 
 | Constant | Usage |
 |----------|-------|
-| `SQL_QUERY_NEWPK` | `SELECT max(id_xxx) FROM table` |
 | `SQL_QUERY_SELECT` | Single row by PK |
 | `SQL_QUERY_INSERT` | Insert row |
 | `SQL_QUERY_UPDATE` | Update row by PK |
@@ -37,20 +36,43 @@ public class EntityDAO implements IEntityDAO
 | `SQL_QUERY_SELECT_BY_*` | Custom finders |
 | `SQL_QUERY_COUNT_*` | Count queries |
 
+No `SQL_QUERY_NEWPK` / `SELECT max( id )`: the primary key is an `AUTO_INCREMENT` column read back with generated keys (below).
+
 ## DAOUtil Lifecycle
 
 Always use **try-with-resources** (auto-closes):
 
-### INSERT / UPDATE / DELETE
+### INSERT (generated key)
 ```java
+import java.sql.Statement;
+
 public void insert( Entity entity, Plugin plugin )
 {
-    try ( DAOUtil daoUtil = new DAOUtil( SQL_QUERY_INSERT, plugin ) )
+    try ( DAOUtil daoUtil = new DAOUtil( SQL_QUERY_INSERT, Statement.RETURN_GENERATED_KEYS, plugin ) )
     {
         int nIndex = 1;
-        daoUtil.setInt( nIndex++, entity.getId( ) );
         daoUtil.setString( nIndex++, entity.getTitle( ) );
         daoUtil.setString( nIndex++, entity.getDescription( ) );
+        daoUtil.executeUpdate( );
+
+        if ( daoUtil.nextGeneratedKey( ) )
+        {
+            entity.setId( daoUtil.getGeneratedKeyInt( 1 ) );
+        }
+    }
+}
+```
+
+### UPDATE / DELETE
+```java
+public void store( Entity entity, Plugin plugin )
+{
+    try ( DAOUtil daoUtil = new DAOUtil( SQL_QUERY_UPDATE, plugin ) )
+    {
+        int nIndex = 1;
+        daoUtil.setString( nIndex++, entity.getTitle( ) );
+        daoUtil.setString( nIndex++, entity.getDescription( ) );
+        daoUtil.setInt( nIndex, entity.getId( ) );
         daoUtil.executeUpdate( );
     }
 }
@@ -127,9 +149,10 @@ public interface IEntityDAO
     void store( Entity entity, Plugin plugin );
     void delete( int nKey, Plugin plugin );
     List<Entity> selectAll( Plugin plugin );
-    ReferenceList selectReferenceList( Plugin plugin );
 }
 ```
+
+Add finders per need. A `ReferenceList selectEntitiesReferenceList( Plugin plugin )` exists only when a `<select>` consumes it (forms: `selectFormsReferenceList`); it is not part of the base contract.
 
 ## Home — Static Facade
 
@@ -167,13 +190,10 @@ public final class EntityHome
     {
         return _dao.selectAll( _plugin );
     }
-
-    public static ReferenceList findReferenceList( )
-    {
-        return _dao.selectReferenceList( _plugin );
-    }
 }
 ```
+
+The `_dao` static field initializer is the idiom of every core and forms Home (`RoleHome`, `FormHome`): the CDI container is up before plugin classes load.
 
 ## Collection Types
 

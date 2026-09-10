@@ -3,7 +3,7 @@
 > Ref: core LUT‑32717 (base/override), LUT‑31768 (ordinal 150), LUT‑31799 (datasource property), LUT‑31803 (library props), LUT‑32524 (streams), LUT‑31201 (thread-local), LUT‑32531 (determinism), plugin-health (probes).
 
 ## Externalized config (12-factor)
-MicroProfile ordinal hierarchy (highest wins): **system props 400 > env 300 > override/ 250 > base WEB-INF/conf 150 > META-INF/microprofile-config.properties 100**.
+MicroProfile ordinal hierarchy (highest wins): **system props 400 > env 300 > override/ 250 > base WEB-INF/conf 150 > META-INF/microprofile-config.properties 100** (canonical table: `rules/service-layer.md`).
 
 - DO: put plugin defaults in `src/main/resources/META-INF/microprofile-config.properties`; read via `@ConfigProperty` / `AppPropertiesService` (MicroProfile-backed → overridable by env/`-D`); expose every infra value (URL, host, path, datasource, timeout) as a **per-instance overridable property**.
 - DON'T: hardcode a path (`new File("/var/...")`), a URL (`"http://..."`), a datasource name, a timeout; put a library's defaults in the core WAR; put an index/file under `java.io.tmpdir` (JVM-local) — use a **shared volume** in a cluster.

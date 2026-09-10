@@ -265,7 +265,7 @@ echo ""
 
 # ─── Deprecated API ──────────────────────────────────────
 echo "CATEGORY: Deprecated API"
-check_grep "DP01" 'SecurityTokenService\.getInstance\|FileService\.getInstance\|WorkflowService\.getInstance\|FileImageService\.getInstance\|FileImagePublicService\.getInstance\|AccessControlService\.getInstance\|AttributeService\.getInstance\|AttributeFieldService\.getInstance\|AttributeTypeService\.getInstance\|PortletService\.getInstance\|AccessLogService\.getInstance\|RegularExpressionService\.getInstance\|EditorBbcodeService\.getInstance\|ProgressManagerService\.getInstance\|DashboardService\.getInstance\|AdminDashboardService\.getInstance\|FilterService\.getInstance\|ServletService\.getInstance\|LuteceUserCacheService\.getInstance' "src/" "FAIL" "Deprecated getInstance() calls"
+check_grep "DP01" 'AccessControlService\.getInstance\|AccessLogService\.getInstance\|AdminDashboardService\.getInstance\|AttributeFieldService\.getInstance\|AttributeService\.getInstance\|AttributeTypeService\.getInstance\|DashboardService\.getInstance\|EditorBbcodeService\.getInstance\|ExtendableResourceActionHit\.getInstance\|FileImagePublicService\.getInstance\|FileImageService\.getInstance\|FileService\.getInstance\|FilterService\.getInstance\|LuteceUserCacheService\.getInstance\|PortalMenuService\.getInstance\|PortletService\.getInstance\|ProgressManagerService\.getInstance\|QueryListenersService\.getInstance\|RegularExpressionService\.getInstance\|RSAKeyPairUtil\.getInstance\|SecurityTokenService\.getInstance\|ServletService\.getInstance\|WorkflowService\.getInstance' "src/" "FAIL" "Deprecated core getInstance() calls (23 @Deprecated(since=8.0) in lutece-core; SecurityService/AdminAuthenticationService are not deprecated)"
 check_grep "DP02" 'FileImagePublicService\.init\|FileImageService\.init' "src/" "FAIL" "Deprecated init() calls (auto-registered in v8)"
 check_grep "DP03" '\(^\|[^.A-Za-z0-9_]\)getModel( )' "src/" "FAIL" "MANDATORY: getModel() -> @Inject Models (excludes DTO getters like request.getModel())"
 echo ""
@@ -327,7 +327,7 @@ if [ "$COUNT" -eq 0 ]; then emit "MV01" "PASS" "new HashMap in JspBean/XPage (us
 else emit "MV01" "FAIL" "new HashMap in JspBean/XPage (use @Inject Models)" "$COUNT" "$MV01_MATCHES"; fi
 
 check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "WARN" "AbstractPaginatorJspBean -> @Pager IPager"
-check_grep "MV03" 'SecurityTokenService\.MARK_TOKEN\|getSecurityTokenService( )\.\(getToken\|validate\)\|_securityTokenService\.\(getToken\|validate\)' "src/" "WARN" "Explicit CSRF token (consider auto-filter: securityTokenAction on @Action)"
+check_grep "MV03" 'SecurityTokenService\.MARK_TOKEN\|getSecurityTokenService( )\.\(getToken\|validate\)\|_securityTokenService\.\(getToken\|validate\)\|securityTokenEnabled\s*=\s*false' "src/" "WARN" "Manual CSRF token or securityTokenEnabled=false (policy: @Controller securityTokenEnabled = true, no MARK_TOKEN/getToken/validate; manual token only in non-MVC beans)"
 
 # MV04: FileItem still used (not MultipartItem). Excludes MemoryFileItem from library-httpaccess (v8 in-memory helper).
 check_grep "MV04" 'import\s\+org\.apache\.commons\.fileupload[0-9]*\(\.core\)\?\.FileItem' "src/" "FAIL" "FileItem -> MultipartItem (use MemoryFileItem from library-httpaccess for in-memory cases)" "--include=*.java"

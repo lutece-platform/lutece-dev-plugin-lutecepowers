@@ -1,17 +1,16 @@
 # Verifier & Builder — Teammate Instructions
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root); export it before running any script.
 
-You are the **Verifier** teammate. You run continuous verification, the final build, and the compliance review.
+You are the **Verifier** teammate. You run continuous verification and the final build.
 
 ## Your Scope
 
 - Run `verify-migration.sh` periodically during migration
 - Run the final full verification sweep
-- Execute Maven builds (compile, then with tests)
-- Final cleanup (when Lead gives the green light)
+- Execute Maven builds (compile, then with tests) and read the test reports
 
-**CRITICAL: You NEVER modify source files.** You only verify, report, and build. If something needs fixing, report it to the Lead who will reassign to the appropriate teammate.
+**CRITICAL: you are strictly read-only.** You never create, edit or delete any file of the project (`.migration/` and the Maven `target/` directory excepted). If something needs fixing or removing, report it to the Lead who reassigns it to the owning teammate.
 
 ---
 
@@ -94,40 +93,40 @@ Once compile succeeds:
 mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test -q
 ```
 
+### Read the surefire reports, not the build status
+
+The global-pom surefire configuration sets `testFailureIgnore=true`: **BUILD SUCCESS does not mean the tests pass.** The verdict comes from `target/surefire-reports/*.txt`:
+
+```bash
+cat target/surefire-reports/*.txt | grep -h '^Tests run:' \
+  | awk -F'[:,]' '{r+=$2; f+=$4; e+=$6; s+=$8} END {printf "Tests run: %d, Failures: %d, Errors: %d, Skipped: %d\n", r, f, e, s}'
+```
+
+Tests PASS only when Failures = 0 and Errors = 0. Report these four numbers to the Lead; a build with no `target/surefire-reports/` means no test ran and is not a PASS.
+
 ### Test failure handling
 
-If tests fail:
-1. Identify failing test class and method
+If a report shows Failures or Errors:
+1. Identify failing test class and method (the `.txt` report names them)
 2. Report to Lead — typically belongs to Test Migrator
 3. Common test failures:
    - `@Inject` field is null → bean not properly annotated in production code
    - `ClassCastException` → javax/jakarta mismatch in test
    - `NullPointerException` in `getModel()` → must use `@Inject Models`
 
-## Phase 5: Final Cleanup
+## Phase 5: Final Sweep
 
-**Wait for the Lead to authorize cleanup.** After BUILD SUCCESS, the Lead runs additional checks before giving the green light. Do NOT start cleanup on your own.
+**Wait for the Lead's green light.** The Lead first has the Config Migrator delete the remaining `*_context.xml` files (Step 9 of `config-migrator.md`), then asks you for the final sweep.
 
-Once the Lead tells you to proceed:
-
-1. **Delete context XML files** (if any remain):
-   ```
-   Check for *_context.xml files in webapp/ and delete them
-   ```
-
-2. **Clean up .migration/ directory**:
-   ```
-   Remove .migration/ directory (scan.json, tasks-*.json, context-beans.json, verify-latest.json)
-   ```
-
-3. **Final verification sweep**:
+1. Check that no `*_context.xml` remains under `webapp/`; if one does, report it to the Lead (you do not delete it)
+2. Final verification:
    ```bash
    bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh .
    ```
-
+3. Remove your own working directory `.migration/` (scan.json, tasks-*.json, context-beans.json, verify-latest.json)
 4. Report final status to Lead:
    - Total checks: X PASS, 0 FAIL, Y WARN
-   - Build: SUCCESS (compile + tests)
+   - Build: compile SUCCESS; tests run / failures / errors / skipped from the surefire reports
    - Migration: COMPLETE
 
-Mark your final task as **completed**. The Lead will create the commit.
+Mark your final task as **completed**.

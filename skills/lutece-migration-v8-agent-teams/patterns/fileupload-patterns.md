@@ -94,14 +94,22 @@ For asynchronous file upload, use the `UploadServlet` with `MultipartAsyncUpload
 private IAsyncUploadHandler _uploadHandler;
 ```
 
-## Template (Back-Office)
+## Template (Back-Office) — plugin-asynchronousupload
+
+The `addFileBOInput` / `addBOUploadedFilesBox` macros are NOT in the core: they come from `plugin-asynchronousupload` (`webapp/WEB-INF/templates/admin/plugins/asynchronousupload/upload_commons.html`), which must be a dependency of the plugin.
 
 ```html
+<#include "/admin/plugins/asynchronousupload/upload_commons.html" />
+<@addRequiredBOJsFiles />
 <@tform action="..." method="post" enctype="multipart/form-data">
-    <@addFileBOInput name="file_upload" labelKey="#i18n{myplugin.label.file}" />
-    <@addBOUploadedFilesBox name="file_upload" />
-    <@button type="submit" color="primary" labelKey="#i18n{portal.util.labelValidate}" />
+    <@formGroup labelFor="file_upload" labelKey="#i18n{myplugin.label.file}">
+        <@addFileBOInput fieldName="file_upload" handler=uploadHandler cssClass="" multiple=false />
+        <@addBOUploadedFilesBox fieldName="file_upload" handler=uploadHandler listFiles=listFiles />
+    </@formGroup>
+    <@button type="submit" color="primary" buttonIcon="check" title="#i18n{portal.util.labelValidate}" />
 </@tform>
 ```
+
+Signatures: `addFileBOInput fieldName handler cssClass multiple=false submitBtnName hasError=false required=false`, `addBOUploadedFilesBox fieldName handler listFiles submitBtnName noJs=false`. `handler` is the injected `IAsyncUploadHandler` put in the model, `listFiles` the files already uploaded for the field. Reference: forms `forms_commons.html:304-324`. Without the plugin, use the core `@inputDropFiles name handler ...` (`forms/upload/inputDropFiles.ftl`).
 
 Note: `enctype="multipart/form-data"` is required on the form.

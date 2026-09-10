@@ -19,6 +19,7 @@ paths:
 - Use `@ApplicationScoped`, `@RequestScoped`, `@SessionScoped` from `jakarta.enterprise.context`
 - Use `@Inject` from `jakarta.inject`
 - Use `@Named` from `jakarta.inject` for beans referenced by name (JSP EL, producers)
+- `final` on a CDI bean is fine when the bean is only resolved through its interface; drop `final` and add a non-private no-arg constructor only when the concrete class is injected or looked up
 
 ## Forbidden Libraries
 

@@ -1,5 +1,5 @@
 ---
-description: "Lutece 8 service layer constraints: CDI scopes, injection, events, configuration"
+description: "Lutece 8 service layer constraints: CDI scopes, injection, getInstance removal, events, configuration"
 paths:
   - "**/service/**/*.java"
 ---
@@ -10,8 +10,15 @@ paths:
 
 - Singleton service: `@ApplicationScoped`
 - Per-request service: `@RequestScoped`
-- NEVER use static `getInstance()` in new code — use `@Inject` or `CDI.current().select()`
-- `getInstance()` wrapping `CDI.current().select()` is `@Deprecated(since = "8.0", forRemoval = true)` in lutece-core — remove when all callers are internal, keep temporarily with `@Deprecated` only if external callers depend on it
+
+## getInstance() — removed, never deprecated
+
+Canonical statement of the rule; other files link here instead of repeating it.
+
+- A plugin's own `getInstance()` is **deleted**, not bridged: no `@Deprecated` method returning `CDI.current().select( X.class ).get()`.
+- Migrate every caller: `@Inject` in CDI beans, `CDI.current().select( X.class ).get()` in non-CDI contexts (Home facades, reflection-instantiated classes, objects created with `new`).
+- lutece-core keeps `@Deprecated( since = "8.0", forRemoval = true )` on 23 of its own `getInstance()` methods (`WorkflowService`, `SecurityTokenService`, `FileService`, `PortalMenuService`, `QueryListenersService`, `RSAKeyPairUtil`, `ExtendableResourceActionHit`…). Callers replace them with `@Inject` / `CDI.current().select()`. The complete list lives in one place: check `DP01` in `skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh`.
+- `SecurityService.getInstance()` and `AdminAuthenticationService.getInstance()` are **not** deprecated in core: calling them is fine.
 
 ## Injection
 
@@ -28,7 +35,7 @@ When migrating a class away from `getInstance()`, pick the pattern by class shap
 | Stateless service, no-arg constructor | ✅ `@ApplicationScoped` | `@Inject` (callers must be CDI) or `CDI.current().select(X.class).get()` |
 | Stateful per-request object (constructor args, e.g. `executionId`, `nodeId`) | ❌ Impossible (no fixed identity) | `new XxxObject(...)` + dependencies via `private final X _x = CDI.current().select(X.class).get();` cached in field |
 | Static utility / facade (all methods `static`) | ❌ No instance | `private static final X _x = CDI.current().select(X.class).get();` (matches Home pattern) |
-| Daemon (`extends Daemon`) | ❌ Instantiated by Lutece daemon framework | Inline `CDI.current().select(X.class).get()` or cached field |
+| Daemon (`extends Daemon`, `<daemon-class>` in plugin.xml) | ❌ Instantiated by `Class.forName` in `DaemonEntry.loadDaemon` | Inline `CDI.current().select(X.class).get()` or cached field |
 | Pipeline node / `@PipelineNodeType` | ❌ Instantiated via reflection by engine | Cached instance field with `CDI.current().select(...)` |
 | Reflection / SPI loaded class | ❌ No CDI hook | Cached instance field |
 | Tool / object with dynamic per-call args (`new GrepTool(datasets)`) | ❌ State varies per instance | Inline or cached `CDI.current().select(...)` |
@@ -36,6 +43,8 @@ When migrating a class away from `getInstance()`, pick the pattern by class shap
 **Rule of thumb:** if the class CAN be a CDI bean, it MUST be one. Programmatic lookup (`CDI.current()`) is reserved for classes that genuinely cannot be CDI-managed.
 
 **Caching the lookup:** when calling `CDI.current().select(X.class).get()` more than once per instance, cache it in a `private final` (or `private static final`) field — repeated lookups walk the BeanManager. The cached reference is safe for `@ApplicationScoped` dependencies (singleton anyway).
+
+**`final` and proxies:** a normal-scoped bean must be non-`final` with a non-private no-arg constructor only when it is resolved by its **concrete class** (`@Inject FooService`, `select( FooService.class )`). A bean resolved only through an interface may stay `final` (core and forms DAOs are `@ApplicationScoped public final class`).
 
 ## CDI Qualifiers (custom)
 
@@ -66,12 +75,25 @@ Usage: `CDI.current().select( SomeService.class, MyQualifier.Literal.INSTANCE ).
 - Observe sync: `public void onEvent(@Observes MyEvent event) { }`
 - Observe async: `public void onEvent(@ObservesAsync MyEvent event) { }`
 - NEVER use deprecated `ResourceEventManager` or Spring event patterns
+- `ResourceEvent` lives in `fr.paris.lutece.portal.business.event`; its accessors are `getIdResource()` and `getTypeResource()`
 
 ## Configuration
 
-- Static properties: `AppPropertiesService.getProperty("key", "default")`
-- Runtime overrides: `DatastoreService.getInstanceDataValue("key", "default")`
-- Injected config: `@Inject @ConfigProperty(name = "key", defaultValue = "x")`
+Canonical ordinal table; other files link here.
+
+MicroProfile Config is the single read path: `AppPropertiesService` reads `ConfigProvider.getConfig()`. Highest ordinal wins:
+
+| Ordinal | Source |
+|---|---|
+| 400 | System properties (`-D`) |
+| 300 | Environment variables |
+| 250 | `LuteceOverrideConfigSource` — `WEB-INF/conf/override/**/*.properties` |
+| 150 | `LuteceConfigSource` — every other `WEB-INF/conf/**/*.properties` |
+| 100 | `META-INF/microprofile-config.properties` (plugin defaults) |
+
+- Static read: `AppPropertiesService.getProperty("key", "default")`
+- Injected: `@Inject @ConfigProperty(name = "key", defaultValue = "x")`
+- Datastore: `DatastoreService.getInstanceDataValue("key", "default")` is a database key-value store read explicitly by the caller. It is **not** a ConfigSource and does not override properties.
 
 ## Cache Integration
 

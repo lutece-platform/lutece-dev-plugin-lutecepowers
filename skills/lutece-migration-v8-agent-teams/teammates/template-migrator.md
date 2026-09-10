@@ -11,15 +11,15 @@ You are the **Template & UI** teammate. You handle JSP files, admin templates, s
 - JSP files (`webapp/**/*.jsp`)
 - JavaScript files referenced in templates
 
-**You do NOT touch:** Java source files, pom.xml, configuration files, test files.
+**You do NOT touch:** Java source files, pom.xml, configuration files (including `web.xml`, owned by the Config Migrator), test files.
 
 ## Dependencies
 
-**Wait for Java Migrators to complete** before starting JSP migration — you need to know the `@Named` bean names they assigned to JspBeans and XPages.
+**Wait for Java Migrators to complete** before starting JSP migration — you need to know the `@Named` bean names they assigned to JspBeans and XPages, and whether each bean is a `@Controller` MVC bean.
 
 ## Reference-First Rule
 
-**Always consult** `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/` for macro definitions and usage examples.
+Canonical rules: `rules/jsp-admin.md`, `rules/template-back-office.md`, `rules/template-front-office.md`. Macro signatures: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md`, and always the `.ftl` sources under `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/` (BO) and `skin/themes/macros/` (FO).
 
 ## Your Task Input
 
@@ -29,148 +29,99 @@ Read `.migration/tasks-template.json` for your file lists.
 
 ## Step 1: Mechanical Script
 
-Run template mechanical migrations first:
+Run template mechanical migrations first, without touching `web.xml`:
 
 ```bash
-bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh --no-webxml .
 ```
 
-This handles: BO macro renames, null-safety for errors/infos/warnings, web.xml namespace.
+This handles: BO upload macro renames, null-safety for errors/infos/warnings, `${error}` → `${error.message}` inside `<#list errors as error>` blocks.
 
 ## Step 2: JSP Migration
 
-For each JSP file, apply one of 4 patterns:
+Follow `rules/jsp-admin.md`. Two cases:
 
-### Pattern A: View JSP (most common)
+### Pattern A: `@Controller` MVC bean (views and actions)
+One JSP per bean. Every former `ManageX.jsp`, `CreateX.jsp`, `DoCreateX.jsp`… collapses into the controller JSP; links become `ManageX.jsp?view=createX` / forms post `action=createX`.
+
 ```jsp
 <%-- Before --%>
 <jsp:useBean id="myJspBean" scope="session" class="...MyJspBean" />
 <%= myJspBean.getManageItems(request) %>
 
-<%-- After --%>
+<%-- After: webapp/jsp/admin/plugins/myplugin/ManageItems.jsp --%>
 <%@ page errorPage="../../ErrorPage.jsp" %>
-${myJspBean.init(pageContext.request, myJspBean.RIGHT_MANAGE_ITEMS)}
-${myJspBean.processController(pageContext.request, pageContext.response)}
+
+${ pageContext.setAttribute( 'strContent', myJspBean.processController( pageContext.request , pageContext.response ) ) }
+
+<jsp:include page="../../AdminHeader.jsp" />
+
+${ pageContext.getAttribute( 'strContent' ) }
+
+<%@ include file="../../AdminFooter.jsp" %>
 ```
 
-### Pattern B: Action/Do JSP
-```jsp
-<%-- After --%>
-${myJspBean.init(pageContext.request, myJspBean.RIGHT_MANAGE_ITEMS)}
-${myJspBean.processController(pageContext.request, pageContext.response)}
-```
+Reference: core `jsp/admin/templates/ManageThemes.jsp`, forms `jsp/admin/plugins/forms/ManageForms.jsp`.
 
-### Pattern C: ProcessController JSP (MVC)
-```jsp
-${myJspBean.init(pageContext.request, myJspBean.RIGHT_MANAGE_ITEMS)}
-${myJspBean.processController(pageContext.request, pageContext.response)}
-```
+### Pattern B: Download in an MVC bean
+No dedicated JSP. The download is an `@Action` of the controller bean that calls the inherited `download( data, fileName, contentType )` (`MVCAdminJspBean.java:740`, `:768`) and returns `null`; the link is `ManageItems.jsp?action=downloadItem&id=…`. Delete the former `DownloadX.jsp`.
 
-### Pattern D: Download JSP
+### Pattern C: non-MVC bean (portlet JspBean, no `@Controller`)
+Only here does the JSP call `init()`, with the right constant taken from the class (EL cannot read a static constant through an instance):
 ```jsp
-${myJspBean.init(pageContext.request, myJspBean.RIGHT_MANAGE_ITEMS)}
-${myJspBean.download(pageContext.request, pageContext.response)}
+<%@ page errorPage="../../ErrorPage.jsp" %>
+<%@ page import="fr.paris.lutece.plugins.myplugin.web.MyPortletJspBean" %>
+${ myPortletJspBean.init( pageContext.request, MyPortletJspBean.RIGHT_MANAGE_ITEMS ) }
+${ pageContext.setAttribute( 'strContent', myPortletJspBean.getManageItems( pageContext.request ) ) }
+<jsp:include page="../../AdminHeader.jsp" />
+${ pageContext.getAttribute( 'strContent' ) }
+<%@ include file="../../AdminFooter.jsp" %>
 ```
 
 **Key rules:**
-1. **Remove** all `<jsp:useBean>` tags
-2. **Replace** `request` with `pageContext.request` in EL expressions
-3. **Replace** scriptlets `<%= %>` and `<% %>` with `${}` EL expressions
-4. The bean name in EL must match the `@Named` value from the Java class (camelCase class name by default)
-5. Add `<%@ page import="..." %>` if needed for constants like `RIGHT_MANAGE_ITEMS`
+1. **Remove** all `<jsp:useBean>` tags and scriptlets (`<% %>`, `<%= %>`)
+2. **Never** call `init()` for a `@Controller` bean: `processController()` does it with `@Controller.right`
+3. The bean name in EL must match the `@Named` value from the Java class (camelCase class name by default)
+4. Delete the former per-action JSPs once their views/actions exist in the controller bean; update `<feature-url>` in plugin.xml if the JSP name changed (Config Migrator)
 
 ## Step 3: Admin Template Rewrite
 
-**Every admin template MUST use v8 Freemarker macros.** This is the most significant UI change.
-
-Load quick reference: Read `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md`
-
-### List page pattern
-```html
-<@pageContainer>
-    <@pageColumn>
-        <@pageHeader title="#i18n{myplugin.manage.pageTitle}" description="" />
-
-        <#if (errors!)?has_content>
-            <@alert type="danger"><#list (errors![]) as error>${error.message}</#list></@alert>
-        </#if>
-        <#if (infos!)?has_content>
-            <@alert type="info"><#list (infos![]) as info>${info}</#list></@alert>
-        </#if>
-
-        <@aButton href="..." color="success" iconClass="ti ti-plus" labelKey="#i18n{myplugin.action.create}" />
-
-        <@table>
-            <tr>
-                <th>#i18n{myplugin.column.name}</th>
-                <th>#i18n{portal.util.labelActions}</th>
-            </tr>
-            <#list items_list as item>
-            <tr>
-                <td>${item.name!}</td>
-                <td>
-                    <@aButton href="...?view=modifyItem&id=${item.id}" title="#i18n{portal.util.labelModify}" color="primary" size="sm" iconClass="ti ti-pencil" />
-                    <@aButton href="...?action=confirmRemoveItem&id=${item.id}" title="#i18n{portal.util.labelDelete}" color="danger" size="sm" iconClass="ti ti-trash" />
-                </td>
-            </tr>
-            </#list>
-        </@table>
-    </@pageColumn>
-</@pageContainer>
-```
-
-### Form page pattern
-```html
-<@pageContainer>
-    <@pageColumn>
-        <@pageHeader title="#i18n{myplugin.create.pageTitle}" />
-
-        <@tform action="jsp/admin/plugins/myplugin/ManageItems.jsp" method="post">
-            <input type="hidden" name="action" value="createItem" />
-
-            <@formGroup labelKey="#i18n{myplugin.label.name}" required=true>
-                <@input type="text" name="name" id="name" value="${item.name!}" required=true />
-            </@formGroup>
-
-            <@button type="submit" color="primary" labelKey="#i18n{portal.util.labelValidate}" />
-            <@aButton href="..." color="default" labelKey="#i18n{portal.util.labelCancel}" />
-        </@tform>
-    </@pageColumn>
-</@pageContainer>
-```
+**Every admin template MUST use v8 Freemarker macros.** Layout, list layout choice (`@manageFeature` vs `@table`), `@messages`, null-safety and i18n keys: `rules/template-back-office.md` (its List Page and Form Page patterns are the templates to copy). Macro signatures: `template-macros.md`.
 
 ### Key transformation rules
-- `<div class="panel">` → `<@pageContainer>` + `<@pageColumn>`
-- `<form>` → `<@tform>`
-- `<div class="form-group">` → `<@formGroup>`
-- `<input>` → `<@input>`
-- `<select>` → `<@select>`
-- `<button>` → `<@button>` or `<@aButton>`
-- `<table>` → `<@table>`
+- `<div class="panel">` → `<@pageContainer>` + `<@pageColumn>` + `<@pageHeader>`
+- `<form>` → `<@tform>`; remove `<input type="hidden" name="token">` (core injects `_csrftoken`)
+- `<div class="form-group">` → `<@formGroup labelKey= labelFor= mandatory=>`
+- `<input>` → `<@input>`; `<textarea>` → `<@input type='textarea'>`
+- `<select>` → `<@select items=>` (ReferenceList) or nested `<@option>`
+- `<button>` / `<a class="btn">` → `<@button>` / `<@aButton buttonIcon= title=>`
+- entity list `<table>` with edit/delete buttons → `<@manageFeature>`; data grid `<table>` → `<@table>`
+- error/info blocks → `<@messages errors=errors![] infos=infos![] warnings=warnings![] />`
 - Bootstrap 3 classes → Bootstrap 5 (BS5 is loaded by core)
-- `glyphicon glyphicon-*` → `ti ti-*` (Tabler icons)
+- `glyphicon glyphicon-*` → `buttonIcon='<name>'` / `ti ti-*` (Tabler icons)
+- BO upload macros need `<#include "/admin/plugins/asynchronousupload/upload_commons.html" />` + `<@addRequiredBOJsFiles />` (see `fileupload-patterns.md`)
 
 ## Step 4: Skin Template Wrapping
 
-Wrap front-office templates with `<@cTpl>`:
+Follow `rules/template-front-office.md`. Wrap front-office templates with `<@cTpl>`:
 
 ```html
 <@cTpl>
     <@cContainer>
-        <h1>#i18n{myplugin.xpage.title}</h1>
+        <@cTitle level=1>#i18n{myplugin.xpage.title}</@cTitle>
         <!-- content -->
     </@cContainer>
 </@cTpl>
 ```
 
-- Use Bootstrap 5 utilities (already loaded by core)
+- Use FO macros (`cAlert`, `cBtn`, `cForm`, `cField`, `cInput`, `cCard`, `cTable`, `cFooter`…) and Bootstrap 5 utilities (already loaded by core)
+- Messages: `<#list (errors![]) as error>` with `${error.message}`; `${info}` / `${warning}` are strings
 - No jQuery — use vanilla JavaScript
 - No CDN links — use local assets only
-- Tabler icons: `ti ti-*`
 
 ## Step 5: JavaScript Migration
 
-Replace jQuery with vanilla ES6 JS. See `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md` **§ JavaScript Migration** for the full conversion table.
+Replace jQuery with vanilla ES6 JS. Conversion table: `${LUTECEPOWERS_ROOT}/skills/lutece-update-template-fo/SKILL.md` § jQuery → Vanilla JS. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: report it as WARN with a manual port proposal, never leave it as-is (jQuery is not loaded by the theme).
 
 ## Step 6: SuggestPOI Migration (conditional)
 
@@ -180,7 +131,7 @@ Replace jQuery autocomplete with LuteceAutoComplete:
 - `autocomplete-js.jsp` → `@setupSuggestPOI` macro
 - `createAutocomplete()` → `@suggestPOIInput` macro + `new SuggestPOI()` JS class
 
-Search `~/.lutece-references/module-address-autocomplete/` for the v8 implementation.
+Search `~/.lutece-references/lutece-tech-module-address-autocomplete/` for the v8 implementation.
 
 ## Step 7: Per-File Verification
 

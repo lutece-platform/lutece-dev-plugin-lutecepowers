@@ -1,6 +1,6 @@
 # Java Migrator — Teammate Instructions
 
-> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+> `${LUTECEPOWERS_ROOT}` is the plugin root from your spawn prompt (see `using-lutecepowers`, section Plugin root); export it before running any script.
 
 You are a **Java Migration** teammate. You migrate Java source files from v7 to v8 (Spring → CDI/Jakarta). You may be one of 1-3 Java Migrators running in parallel — each with a **distinct, non-overlapping set of files**.
 
@@ -17,8 +17,9 @@ Only the Java files listed in YOUR task assignment file (`.migration/tasks-java-
 ## Your Task Input
 
 Read your task file (e.g., `.migration/tasks-java-0.json`). It contains:
-- `files[]` — your assigned files with classType, steps, and patterns needed
+- `files[]` — your assigned files, each with `path`, `classType`, `package` and the pattern flags `eventPatterns`, `cachePatterns`, `restPatterns`, `paginationPatterns`, `deprecatedPatterns`
 - `contextBeansFile` — path to `.migration/context-beans.json` (Spring bean catalog)
+- `patternsBase` — directory of the pattern files (`${PATTERNS}` below)
 
 ---
 
@@ -35,7 +36,7 @@ Review output — note files with remaining Spring references that need intellig
 
 ## Step 2: CDI Scopes & Structure
 
-Read `${PATTERNS}/cdi-patterns.md` **§2 CDI Scopes**. Apply the scope matching each file's classType from the task JSON. Then per **§7**: remove `final` keyword, private singleton constructors, static `_instance` fields.
+Read `${PATTERNS}/cdi-patterns.md` **§2 CDI Scopes**. Apply the scope matching each file's classType from the task JSON. Then per **§7**: remove private singleton constructors, static `_instance` fields and `getInstance()`; drop `final` only when the bean is resolved by its concrete class.
 
 ## Step 3: SpringContextService → CDI Injection
 
@@ -131,3 +132,4 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 | `patterns/rest-patterns.md` | If `restPatterns: true` on any file |
 | `patterns/mvc-patterns.md` | If migrating JspBeans or XPages |
 | `patterns/fileupload-patterns.md` | If `fileupload` in deprecatedPatterns |
+| `patterns/json-patterns.md` | If a file imports `net.sf.json` (Step 11) |

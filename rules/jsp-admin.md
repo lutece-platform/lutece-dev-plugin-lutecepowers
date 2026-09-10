@@ -1,5 +1,5 @@
 ---
-description: "Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage"
+description: "Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage, no init() for MVC beans"
 paths:
   - "**/*.jsp"
 ---
@@ -21,6 +21,16 @@ ${ pageContext.getAttribute( 'strContent' ) }
 
 <%@ include file="../../AdminFooter.jsp" %>
 ```
+
+Reference: `~/.lutece-references/lutece-core/webapp/jsp/admin/templates/ManageThemes.jsp`, `~/.lutece-references/lutece-form-plugin-forms/webapp/jsp/admin/plugins/forms/ManageForms.jsp`.
+
+## Rules
+
+- One JSP per `@Controller` bean. Views and actions are dispatched by `processController()` from the `view=` / `action=` parameters — no separate `DoXxx.jsp` files.
+- NEVER call `init()` in the JSP: `processController()` calls `init(request, right)` itself with the `@Controller.right` value. `${bean.init(request, bean.RIGHT_X)}` is also invalid EL (a static constant cannot be read through an instance).
+- `init()` in a JSP is only for non-MVC beans (portlet JspBeans without `@Controller`).
+- No `<jsp:useBean>`, no scriptlets (`<% %>`, `<%= %>`). The bean is resolved by CDI name in EL.
+- Download endpoints: `${ entityJspBean.download( pageContext.request, pageContext.response ) }` after the `errorPage` directive, no header/footer.
 
 ## Bean Naming
 

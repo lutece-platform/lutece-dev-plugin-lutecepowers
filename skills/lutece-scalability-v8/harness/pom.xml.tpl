@@ -5,7 +5,7 @@
     <parent>
         <artifactId>lutece-site-pom</artifactId>
         <groupId>fr.paris.lutece.tools</groupId>
-        <version>8.0.1-SNAPSHOT</version>
+        <version>8.0.1</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <groupId>fr.paris.lutece</groupId>

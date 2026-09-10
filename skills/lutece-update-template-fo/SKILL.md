@@ -11,7 +11,7 @@ You must update a Lutece FO template by replacing all raw HTML with the FO FreeM
 
 1. **Read the template** target provided by the user
 2. **Identify** all raw HTML elements replaceable by FO macros
-3. **Consult the macros** if needed by reading the definition files in `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/`
+3. **Consult the macros** if needed by reading the definition files in `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/{components,elements,forms,layout,utilities}/` (one `.ftl` per macro; `@cTpl` is in `skin/themes/global_theme_commons.ftl`)
 4. **Rewrite** the template using FO macros exclusively
 5. **Do not modify** i18n files unless necessary and requested
 
@@ -29,7 +29,7 @@ You must update a Lutece FO template by replacing all raw HTML with the FO FreeM
 | `<article>` | `<@cArticle>` | Dedicated macro |
 | `<header>` | `<@cHeader>` | Dedicated macro |
 | `<aside>` | `<@cBlock type='aside'>` | No dedicated macro — use `cBlock` with `type` |
-| `<footer>` | `<@cBlock type='footer'>` | No dedicated macro — use `cBlock` with `type` |
+| `<footer>` | `<@cFooter>` | `elements/footer/cFooter.ftl`: `title titleLevel class id params` |
 | `<main>` | `<@cBlock type='main'>` | No dedicated macro — use `cBlock` with `type` |
 
 ### Text and Titles
@@ -38,7 +38,7 @@ You must update a Lutece FO template by replacing all raw HTML with the FO FreeM
 |---|---|---|
 | `<h1>` to `<h6>` | `<@cTitle level=N>` | N = 1 to 6 |
 | `<p>` | `<@cText>` | `type='p'` by default |
-| `<span>` | `<@cInline>` | `type='span'` by default. **Not self-closing** — always `</@cInline>` |
+| `<span>` | `<@cInline>` | `type='span'` by default; `<@cInline ... />` is valid when there is no content |
 | `<em>`, `<strong>`, `<small>` | `<@cInline type='em'>`, etc. | Via the `type` parameter |
 | `<time datetime="...">` | `<@cInline type='time' params='datetime="..."'>` | No dedicated macro — pre-build the date with `<#assign>` |
 | `<i class="ti ti-xxx">` | `<@cIcon name='xxx' />` | **Prefer `<@cIcon>`** — shortcut with automatic `ti ti-` prefix |
@@ -52,6 +52,7 @@ You must update a Lutece FO template by replacing all raw HTML with the FO FreeM
 | `<li>` | `<@chItem>` | |
 
 ### Components
+Also available (one `.ftl` each under `skin/themes/macros/components/`): `cEmpty` (empty state), `cOffcanvas`, `cPagination paginator`, `cTabs`/`cTab`/`cTabPane`, `cDropdown`, `cBadge`, `cInputDate` (`forms/inputs/`). Read the signature before use.
 
 | HTML | Macro FO | Notes |
 |---|---|---|
@@ -209,7 +210,7 @@ Pattern: `<@cTable>` → `<@chList>` + `<@chItem>` + `<@cCard title=entityTitle>
 ### cField - Fields with label
 - **Prefer `<@cField>`** to group a label and an input rather than cBlock + cLabel + cInput manually
 - Use `required=true` for mandatory fields — **do not append ` *` manually to the label**
-- **Do not use `for`** — the macro handles the label/input link
+- `for='<input id>'` links the label to the nested input (`cField.ftl` passes it to `cLabel`); give it whenever the input has an `id`
 - Can contain a nested `<@cInputGroup>` for fields with addons (password toggle, generator, etc.)
 
 ### cInputGroup - Input groups
@@ -384,17 +385,11 @@ Pattern: `<@cTable>` → `<@chList>` + `<@chItem>` + `<@cCard title=entityTitle>
 - BO → FO equivalents:
   - `<@messages infos=infos errors=errors />` →
     ```freemarker
-    <#if infos?? && infos?size gt 0>
-        <#list infos as info>
-            <@cAlert type='info' title=info.message ! />
-        </#list>
-    </#if>
-    <#if errors?? && errors?size gt 0>
-        <#list errors as error>
-            <@cAlert type='danger' title=error.message ! />
-        </#list>
-    </#if>
+    <#list (infos![]) as info><@cAlert type='info' title=info /></#list>
+    <#list (warnings![]) as warning><@cAlert type='warning' title=warning /></#list>
+    <#list (errors![]) as error><@cAlert type='danger' title=error.message! /></#list>
     ```
+    `infos` and `warnings` are `Set<String>` (`${info.message}` throws), `errors` are `MVCMessage`/`ParamError` objects: `rules/template-front-office.md` § Model Messages.
   - `<@aButton href='...' size='sm'>` → `<@cBtn href='...' class='outline-secondary btn-sm'>` (choose the color according to the context: `outline-primary`, `outline-secondary`, etc.)
   - `<@button>` → `<@cBtn>`
   - `<@tform>` → `<@cForm>`
@@ -526,25 +521,11 @@ Pattern: `<@cTable>` → `<@chList>` + `<@chItem>` + `<@cCard title=entityTitle>
 - The `<@cAlert>` macro handles its own icon according to the `type` — no need to add `<@cIcon>` manually
 
 ### cInline - Span / em / time / strong and other inlines
-- **Not self-closing**: always requires a closing tag `</@cInline>`, even when the content is empty
+- `type` selects the tag (`span` default, `em`, `strong`, `small`, `time`, `i`…); extra attributes go in `params`
+- FreeMarker accepts `<@cInline ... />` for an empty element, no closing tag required:
   ```freemarker
-  <#-- INCORRECT — self-closing -->
   <@cInline class='bl-marker' params='data-id="1"' />
-
-  <#-- CORRECT — always close, even when empty -->
-  <@cInline class='bl-marker' params='data-id="1"'></@cInline>
-  ```
-- The `type` parameter accepts any inline tag: `'span'` (default), `'em'`, `'strong'`, `'small'`, `'time'`, `'cite'`, `'mark'`, `'kbd'`, `'code'`, etc.
-- For HTML `<time>`, pre-build the ISO date with `<#assign>` then inject it into `params`:
-  ```freemarker
-  <#assign updateDateIso = blog.updateDate?string('yyyy-MM-dd')>
   <@cInline type='time' params='datetime="${updateDateIso}"'>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
-  ```
-  The reverse — `params='datetime="${blog.updateDate?string("yyyy-MM-dd")}"'` — causes a `ParseException` because of the nested quotes.
-- For `data-*` attributes that contain an i18n key, pre-build with `<#assign>` as well:
-  ```freemarker
-  <#assign label = "#i18n{plugin.key.label}">
-  <@cInline class='bl-target' params='data-label="${label}"'></@cInline>
   ```
 
 ### cFigure - Figures with caption
@@ -610,7 +591,7 @@ Pattern: `<@cTable>` → `<@chList>` + `<@chItem>` + `<@cCard title=entityTitle>
 - Remove `<!-- TOC -->`, `<!-- BODY -->` etc. comments whose intent is obvious in the structured FreeMarker code
 
 ### jQuery → Vanilla JS - Mandatory conversion
-**The jQuery library is no longer loaded by the theme.** Any JavaScript using `$(...)`, `jQuery(...)` or jQuery plugins must be **systematically** rewritten in vanilla JS when migrating a template — it is non-negotiable, otherwise the code breaks at runtime.
+**The jQuery library is no longer loaded by the theme** (`page_frameset.html`, optional `library-theme-jquery` only). Any JavaScript using `$(...)`, `jQuery(...)` or jQuery plugins must be **systematically** rewritten in vanilla JS when migrating a template — it is non-negotiable, otherwise the code breaks at runtime. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) needs a manual port to a vanilla equivalent or a core macro; flag it to the user.
 
 Standard mapping of the most common jQuery operations:
 
@@ -713,11 +694,11 @@ function setDisabled(btn, value) {
 ## Macro files reference
 
 The definitions are located in:
-- **Components**: `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/components/`
-- **Elements**: `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/elements/`
-- **Forms**: `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/forms/`
-- **Layout**: `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/layout/`
-- **Utilities**: `lutece-core/webapp/WEB-INF/templates/skin/themes/lutece/macros/utilities/`
+- **Components**: `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/components/`
+- **Elements**: `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/elements/`
+- **Forms**: `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/forms/`
+- **Layout**: `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/layout/`
+- **Utilities**: `lutece-core/webapp/WEB-INF/templates/skin/themes/macros/utilities/`
 
 If in doubt about a macro's parameters, **read the corresponding .ftl file** to check the signature and documentation.
 

@@ -37,12 +37,21 @@ SITE_NAME=$(jq -r '.siteName' "$CONFIG_FILE")
 SITE_DESCRIPTION=$(jq -r '.siteDescription // "Lutece Site"' "$CONFIG_FILE")
 
 DB_NAME_RAW=$(jq -r '.database.name // "lutece"' "$CONFIG_FILE")
-# Sanitize DB name: replace hyphens with underscores (hyphens are invalid in SQL identifiers without backticks)
 DB_NAME="${DB_NAME_RAW//-/_}"
 DB_USER=$(jq -r '.database.user // "root"' "$CONFIG_FILE")
 DB_PASSWORD=$(jq -r '.database.password // "root"' "$CONFIG_FILE")
 DB_HOST=$(jq -r '.database.host // "localhost"' "$CONFIG_FILE")
 DB_PORT=$(jq -r '.database.port // 3306' "$CONFIG_FILE")
+
+# Prints the latest released 8.x version of a fr.paris.lutece.tools artifact from the Lutece Maven repository, or the given fallback.
+latest_release() {
+    local v
+    v=$(curl -s -m 10 "https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/$1/maven-metadata.xml" 2>/dev/null \
+        | grep -o '<version>8\.[0-9.]*</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1)
+    echo "${v:-$2}"
+}
+
+PARENT_VERSION=$(latest_release lutece-site-pom 8.0.1)
 
 SITE_DIR="$OUTPUT_DIR/$SITE_NAME"
 mkdir -p "$SITE_DIR/src/conf/default/WEB-INF/conf"
@@ -65,13 +74,13 @@ for ((i=0; i<PLUGINS_COUNT; i++)); do
         </dependency>"
 done
 
-cat > "$SITE_DIR/pom.xml" << 'POMEOF'
+cat > "$SITE_DIR/pom.xml" << POMEOF
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
     <parent>
-        <artifactId>lutece-global-pom</artifactId>
+        <artifactId>lutece-site-pom</artifactId>
         <groupId>fr.paris.lutece.tools</groupId>
-        <version>8.0.1</version>
+        <version>$PARENT_VERSION</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -100,6 +109,12 @@ cat >> "$SITE_DIR/pom.xml" << 'POMEOF'
             <artifactId>lutece-core</artifactId>
             <version>[8.0.0,)</version>
             <type>lutece-core</type>
+        </dependency>
+        <dependency>
+            <groupId>fr.paris.lutece.plugins</groupId>
+            <artifactId>plugin-liquibase</artifactId>
+            <version>[2.0.0,)</version>
+            <type>lutece-plugin</type>
         </dependency>
         <dependency>
             <groupId>com.mysql</groupId>
@@ -148,16 +163,13 @@ Automatically generated Lutece site.
 
 Configure the connection in \`src/conf/default/WEB-INF/conf/db.properties\` if needed (MySQL user/password).
 
-The database will be created automatically by the \`ant\` script.
+Create the database empty (\`CREATE DATABASE $DB_NAME\`). The schema is deployed at first startup by plugin-liquibase (Lutece 8 replaces the v7 Ant script): every plugin SQL file is a Liquibase changeset, run when \`LIQUIBASE_ENABLED_AT_STARTUP=true\`.
 
 ## Build and run
 
 \`\`\`bash
 mvn lutece:site-assembly
-cd target/${SITE_NAME}-1.0.0-SNAPSHOT/WEB-INF/sql
-ant
-cd ../../../..
-mvn liberty:dev
+LIQUIBASE_ENABLED_AT_STARTUP=true mvn liberty:dev
 \`\`\`
 
 The site will be available at http://localhost:9080/${SITE_NAME}-1.0.0-SNAPSHOT/
@@ -180,6 +192,6 @@ echo ""
 echo "Next steps:"
 echo "  1. cd $SITE_DIR"
 echo "  2. mvn lutece:site-assembly"
-echo "  3. cd target/${SITE_NAME}-1.0.0-SNAPSHOT/WEB-INF/sql && ant"
-echo "  4. cd ../../../.. && mvn liberty:dev"
+echo "  3. Create the empty database $DB_NAME"
+echo "  4. LIQUIBASE_ENABLED_AT_STARTUP=true mvn liberty:dev  (plugin-liquibase deploys the schema at first startup)"
 echo "  5. Open http://localhost:9080/${SITE_NAME}-1.0.0-SNAPSHOT/"

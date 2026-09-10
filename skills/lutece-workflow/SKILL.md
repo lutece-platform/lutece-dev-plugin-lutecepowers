@@ -38,6 +38,7 @@ module-workflow-{pluginName}/
 │   │   ├── service/
 │   │   │   ├── Task{Name}.java
 │   │   │   ├── TaskType{Name}Producer.java
+│   │   │   ├── Task{Name}ConfigProducer.java
 │   │   │   └── Task{Name}ConfigServiceProducer.java
 │   │   ├── web/
 │   │   │   └── {Name}TaskComponent.java
@@ -69,7 +70,7 @@ import fr.paris.lutece.plugins.workflowcore.service.task.SimpleTask;
 import fr.paris.lutece.plugins.workflowcore.service.config.ITaskConfigService;
 import fr.paris.lutece.plugins.workflowcore.service.resource.IResourceHistoryService;
 import fr.paris.lutece.plugins.workflowcore.business.resource.ResourceHistory;
-import fr.paris.lutece.portal.business.user.AdminUser;
+import fr.paris.lutece.api.user.User;
 import jakarta.enterprise.context.Dependent;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -90,7 +91,7 @@ public class Task{Name} extends SimpleTask
     private IResourceHistoryService _resourceHistoryService;
 
     @Override
-    public void processTask( int nIdResourceHistory, HttpServletRequest request, Locale locale )
+    public void processTask( int nIdResourceHistory, HttpServletRequest request, Locale locale, User user )
     {
         ResourceHistory resourceHistory = _resourceHistoryService.findByPrimaryKey( nIdResourceHistory );
         Task{Name}Config config = _taskConfigService.findByPrimaryKey( this.getId( ) );
@@ -115,6 +116,8 @@ public class Task{Name} extends SimpleTask
 }
 ```
 
+`ITask` signatures (library-workflow-core `ITask.java`): the 3-arg `processTask( int, HttpServletRequest, Locale )` is `@Deprecated`; override the 4-arg one with `fr.paris.lutece.api.user.User`.
+
 ### Task with Result (conditional branching)
 
 ```java
@@ -123,7 +126,7 @@ public class Task{Name} extends SimpleTask
 public class Task{Name} extends Task
 {
     @Override
-    public boolean processTaskWithResult( int nIdResourceHistory, HttpServletRequest request, Locale locale, AdminUser user )
+    public boolean processTaskWithResult( int nIdResource, String strResourceType, int nIdResourceHistory, HttpServletRequest request, Locale locale, User user )
     {
         // return true  → default state
         // return false → alternative state
@@ -131,6 +134,8 @@ public class Task{Name} extends Task
     }
 }
 ```
+
+The 4-arg `processTaskWithResult( int, HttpServletRequest, Locale, User )` is `@Deprecated`; only the 6-arg overload above is current.
 
 ## 2. Task Config
 
@@ -284,12 +289,38 @@ public class TaskType{Name}Producer
 | `key` | Unique task identifier |
 | `titleI18nKey` | i18n key for the title in admin |
 | `beanName` | Task bean name (@Named) |
-| `configBeanName` | TaskComponent bean name (@Named) |
+| `configBeanName` | `ITaskConfig` producer bean name (@Named) — resolved by `TaskFactory.newTaskConfig` via `CDI.current().select( ITaskConfig.class, NamedLiteral.of( configBeanName ) )`, never the component |
 | `configRequired` | true = config mandatory before use |
 | `formTaskRequired` | true = requires a form during action execution |
 | `taskForAutomaticAction` | true = can be used in automatic actions |
 
-## 5. ConfigService Producer
+## 5. Config Producer
+
+`TaskFactory` needs a `@Named` producer for the config object itself (reference: workflow-forms `EditFormResponseConfigProducer`):
+
+```java
+package fr.paris.lutece.plugins.workflow.modules.{pluginName}.service;
+
+import fr.paris.lutece.plugins.workflow.modules.{pluginName}.business.Task{Name}Config;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.Produces;
+import jakarta.inject.Named;
+
+@ApplicationScoped
+public class Task{Name}ConfigProducer
+{
+    @Produces
+    @Dependent
+    @Named( "workflow-{pluginName}.task{Name}Config" )
+    public Task{Name}Config produceTask{Name}Config( )
+    {
+        return new Task{Name}Config( );
+    }
+}
+```
+
+## 6. ConfigService Producer
 
 ```java
 package fr.paris.lutece.plugins.workflow.modules.{pluginName}.service;
@@ -317,12 +348,15 @@ public class Task{Name}ConfigServiceProducer
 }
 ```
 
-## 6. Task Component (UI)
+## 7. Task Component (UI)
+
+`TaskComponentManager.getTaskComponent( key )` iterates every `ITaskComponent` bean and keeps the one whose `isInvoked( key )` is true; `TaskComponent.isInvoked` compares `_taskType.getKey()`. A component that never receives its `ITaskType` is never matched: inject it in the constructor and call `setTaskType` (reference: `EditFormResponseTaskComponent` constructor).
 
 ```java
 package fr.paris.lutece.plugins.workflow.modules.{pluginName}.web;
 
 import fr.paris.lutece.plugins.workflow.web.task.AbstractTaskComponent;
+import fr.paris.lutece.plugins.workflowcore.business.task.ITaskType;
 import fr.paris.lutece.plugins.workflowcore.service.config.ITaskConfigService;
 import fr.paris.lutece.plugins.workflowcore.service.task.ITask;
 import fr.paris.lutece.portal.service.template.AppTemplateService;
@@ -345,9 +379,20 @@ public class {Name}TaskComponent extends AbstractTaskComponent
 
     private static final String MARK_CONFIG = "config";
 
-    @Inject
-    @Named( Task{Name}.BEAN_CONFIG_SERVICE )
     private ITaskConfigService _taskConfigService;
+
+    public {Name}TaskComponent( )
+    {
+    }
+
+    @Inject
+    public {Name}TaskComponent( @Named( "workflow-{pluginName}.taskType{Name}" ) ITaskType taskType,
+            @Named( Task{Name}.BEAN_CONFIG_SERVICE ) ITaskConfigService taskConfigService )
+    {
+        _taskConfigService = taskConfigService;
+        setTaskType( taskType );
+        setTaskConfigService( taskConfigService );
+    }
 
     /**
      * Displays the task configuration form (workflow admin)
@@ -432,16 +477,12 @@ public class {Name}TaskComponent extends AbstractTaskComponent
         HtmlTemplate template = AppTemplateService.getTemplate( TEMPLATE_INFO, locale, model );
         return template.getHtml( );
     }
-
-    @Override
-    public String getTaskInformationXml( int nIdHistory, HttpServletRequest request, Locale locale, ITask task )
-    {
-        return null;
-    }
 }
 ```
 
-## 7. Configuration Properties
+`ITaskComponent` methods: `setTaskType`, `isInvoked`, `getDisplayTaskForm`, `getDisplayConfigForm`, `getDisplayTaskInformation`, `doValidateTask`, `doSaveConfig`. There is no `getTaskInformationXml`.
+
+## 8. Configuration Properties
 
 **`webapp/WEB-INF/conf/plugins/workflow-{pluginName}.properties`**
 
@@ -450,13 +491,13 @@ public class {Name}TaskComponent extends AbstractTaskComponent
 workflow-{pluginName}.task{Name}.key=task{Name}
 workflow-{pluginName}.task{Name}.titleI18nKey=module.workflow.{pluginName}.task.{name}.title
 workflow-{pluginName}.task{Name}.beanName=workflow-{pluginName}.task{Name}
-workflow-{pluginName}.task{Name}.configBeanName=workflow-{pluginName}.task{Name}Component
+workflow-{pluginName}.task{Name}.configBeanName=workflow-{pluginName}.task{Name}Config
 workflow-{pluginName}.task{Name}.configRequired=true
 workflow-{pluginName}.task{Name}.formTaskRequired=false
 workflow-{pluginName}.task{Name}.taskForAutomaticAction=true
 ```
 
-## 8. Plugin Descriptor
+## 9. Plugin Descriptor
 
 **`webapp/WEB-INF/plugins/workflow-{pluginName}.xml`**
 
@@ -470,7 +511,7 @@ workflow-{pluginName}.task{Name}.taskForAutomaticAction=true
     <provider>City of Paris</provider>
     <provider-url>http://lutece.paris.fr</provider-url>
     <icon-url>images/admin/skin/feature_default_icon.png</icon-url>
-    <copyright>Copyright (c) 2025</copyright>
+    <copyright>Copyright (c) {currentYear}</copyright>
     <db-pool-required>1</db-pool-required>
 
     <core-version-dependency>
@@ -479,7 +520,7 @@ workflow-{pluginName}.task{Name}.taskForAutomaticAction=true
 </plug-in>
 ```
 
-## 9. Templates
+## 10. Templates
 
 ### Config (workflow admin)
 
@@ -535,9 +576,14 @@ workflow-{pluginName}.task{Name}.taskForAutomaticAction=true
 </div>
 ```
 
-## 10. SQL
+## 11. SQL
+
+`src/sql/plugins/workflow/modules/{pluginName}/plugin/create_db_workflow-{pluginName}.sql` — Liquibase header required (`rules/sql-liquibase.md`; reference `create_db_workflow-forms.sql:1-3`):
 
 ```sql
+-- liquibase formatted sql
+-- changeset workflow-{pluginName}:create_db_workflow-{pluginName}.sql
+-- preconditions onFail:MARK_RAN onError:WARN
 DROP TABLE IF EXISTS workflow_task_{name}_config;
 CREATE TABLE workflow_task_{name}_config (
     id_task INT NOT NULL,
@@ -548,7 +594,7 @@ CREATE TABLE workflow_task_{name}_config (
 );
 ```
 
-## 11. i18n
+## 12. i18n
 
 **`workflow-{pluginName}_messages.properties`**
 
@@ -566,7 +612,9 @@ task.{name}.info.targetState=Target State
 task.{name}.info.noConfig=No configuration found
 ```
 
-## 12. pom.xml Dependencies
+## 13. pom.xml Dependencies
+
+`library-workflow-core` comes transitively through `plugin-workflow`; do not declare it (reference: `module-workflow-forms/pom.xml`).
 
 ```xml
 <dependencies>
@@ -579,19 +627,14 @@ task.{name}.info.noConfig=No configuration found
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-workflow</artifactId>
-        <version>[7.0.0-SNAPSHOT,)</version>
+        <version>[7.0.0,)</version>
         <type>lutece-plugin</type>
-    </dependency>
-    <dependency>
-        <groupId>fr.paris.lutece.plugins</groupId>
-        <artifactId>library-workflow-core</artifactId>
-        <version>[4.0.0-SNAPSHOT,)</version>
     </dependency>
     <!-- Business plugin if needed -->
     <dependency>
         <groupId>fr.paris.lutece.plugins</groupId>
         <artifactId>plugin-{pluginName}</artifactId>
-        <version>[1.0.0-SNAPSHOT,)</version>
+        <version>[1.0.0,)</version>
         <type>lutece-plugin</type>
     </dependency>
 </dependencies>
@@ -606,7 +649,8 @@ task.{name}.info.noConfig=No configuration found
 | Task class | `Task{Name}` | `TaskEditFormResponse` |
 | Config class | `Task{Name}Config` | `TaskEditFormResponseConfig` |
 | DAO class | `Task{Name}ConfigDAO` | `TaskEditFormResponseConfigDAO` |
-| Producer | `TaskType{Name}Producer` | `TaskTypeEditFormResponseProducer` |
+| TaskType producer | `TaskType{Name}Producer` | `TaskTypeProducer` (forms groups them) |
+| Config producer | `Task{Name}ConfigProducer` | `EditFormResponseConfigProducer` |
 | Component | `{Name}TaskComponent` | `EditFormResponseTaskComponent` |
 | Bean names | `workflow-{plugin}.task{Name}` | `workflow-forms.taskEditFormResponse` |
 | Properties prefix | `workflow-{plugin}.task{Name}.` | |
@@ -631,8 +675,9 @@ task.{name}.info.noConfig=No configuration found
 - [ ] `Task{Name}ConfigDAO.java` - DAO with @Named
 - [ ] `Task{Name}.java` - Task with @Dependent @Named
 - [ ] `TaskType{Name}Producer.java` - Producer @Produces ITaskType
+- [ ] `Task{Name}ConfigProducer.java` - Producer @Produces @Dependent @Named config (the `configBeanName`)
 - [ ] `Task{Name}ConfigServiceProducer.java` - Producer ITaskConfigService
-- [ ] `{Name}TaskComponent.java` - UI with @ApplicationScoped @Named
+- [ ] `{Name}TaskComponent.java` - UI with @ApplicationScoped @Named, ctor injecting `ITaskType` + `ITaskConfigService`
 - [ ] `workflow-{plugin}.properties` - TaskType config
 - [ ] `task_{name}_config.html` - Config template
 - [ ] `task_{name}_form.html` - Form template
