@@ -111,7 +111,6 @@ check_pom "PM07" '<springVersion>' "FAIL" "springVersion property in pom.xml"
 check_pom "PM08" '<jiraProjectName>\|<jiraComponentId>' "WARN" "Jira properties in pom.xml (remove)"
 
 # PM09: bounded version ranges [X,Y) should be open [X,)
-TOTAL=$((TOTAL + 1))
 if [ -f "pom.xml" ]; then
     BOUNDED=$(grep -c ',[0-9].*)</version>' pom.xml 2>/dev/null || true)
     if [ "$BOUNDED" -gt 0 ]; then
@@ -124,7 +123,6 @@ else
 fi
 
 # PM06: parent version must start with 8.
-TOTAL=$((TOTAL + 1))
 if [ -f "pom.xml" ]; then
     PARENT_VER=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
     if [[ "$PARENT_VER" == 8.* ]]; then
@@ -134,6 +132,73 @@ if [ -f "pom.xml" ]; then
     fi
 else
     emit "PM06" "PASS" "Parent version check (no pom.xml)" 0
+fi
+
+# PM10: EL implementation must match what the parent manages.
+#   parent >= 8.0.2 manages org.glassfish.expressly:expressly (org.glassfish:jakarta.el stopped at 5.0.0-M1)
+#   parent 8.0.0 / 8.0.1 manages org.glassfish:jakarta.el only
+# PM11: explicit <version> on a dependency the parent manages (list depends on the parent)
+# PM12: Jakarta EE 11 artifact on the EE 10 baseline
+# Only <dependency> blocks outside <dependencyManagement> are inspected.
+PARENT_GE_802=false
+[ -n "${PARENT_VER:-}" ] && [ "$(printf '%s\n' "8.0.2" "$PARENT_VER" | sort -V | head -1)" = "8.0.2" ] && PARENT_GE_802=true
+MANAGED='library-lutece-unit-testing|hibernate-validator|jaxb-runtime|jakarta.el|expressly'
+$PARENT_GE_802 && MANAGED="$MANAGED|jboss-logging|jakarta.el-api|jakarta.annotation-api"
+PM10_COUNT=0; PM10_MATCHES=""
+PM11_COUNT=0; PM11_MATCHES=""
+PM12_COUNT=0; PM12_MATCHES=""
+if [ -f "pom.xml" ]; then
+    DEP_BLOCKS=$(awk '
+        /<dependencyManagement>/ {dm=1}
+        /<\/dependencyManagement>/ {dm=0; next}
+        dm {next}
+        /<dependency>/ {f=1; b=""}
+        f {b = b " " $0}
+        /<\/dependency>/ {if (f) print b; f=0}
+    ' pom.xml 2>/dev/null) || true
+
+    while IFS= read -r blk; do
+        [ -z "$blk" ] && continue
+        GID=$(printf '%s' "$blk" | sed -n 's/.*<groupId>\([^<]*\)<\/groupId>.*/\1/p' | head -1)
+        AID=$(printf '%s' "$blk" | sed -n 's/.*<artifactId>\([^<]*\)<\/artifactId>.*/\1/p' | head -1)
+        VER=$(printf '%s' "$blk" | sed -n 's/.*<version>\([^<]*\)<\/version>.*/\1/p' | head -1)
+
+        case "$GID:$AID" in
+            org.glassfish:jakarta.el)
+                $PARENT_GE_802 && { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish:jakarta.el is not managed by parent $PARENT_VER, use org.glassfish.expressly:expressly"$'\n'; } ;;
+            org.glassfish.expressly:expressly)
+                $PARENT_GE_802 || { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish.expressly:expressly is not managed by parent $PARENT_VER, use org.glassfish:jakarta.el"$'\n'; } ;;
+        esac
+
+        if [ -n "$VER" ] && printf '%s' "$AID" | grep -qE "^($MANAGED)$"; then
+            PM11_COUNT=$((PM11_COUNT + 1))
+            PM11_MATCHES="$PM11_MATCHES$AID -> $VER"$'\n'
+        fi
+
+        case "$AID:$VER" in
+            jakarta.annotation-api:3.*|weld-junit5:5.*|jakarta.el-api:6.*)
+                PM12_COUNT=$((PM12_COUNT + 1))
+                PM12_MATCHES="$PM12_MATCHES$AID -> $VER"$'\n' ;;
+        esac
+    done <<< "$DEP_BLOCKS"
+fi
+
+if [ "$PM10_COUNT" -eq 0 ]; then
+    emit "PM10" "PASS" "EL implementation matches the parent (${PARENT_VER:-none})" 0
+else
+    emit "PM10" "FAIL" "EL implementation not managed by parent ${PARENT_VER:-?}" "$PM10_COUNT" "$PM10_MATCHES"
+fi
+
+if [ "$PM11_COUNT" -eq 0 ]; then
+    emit "PM11" "PASS" "No explicit version on a parent-managed dependency" 0
+else
+    emit "PM11" "WARN" "Explicit version on a parent-managed dependency (remove it)" "$PM11_COUNT" "$PM11_MATCHES"
+fi
+
+if [ "$PM12_COUNT" -eq 0 ]; then
+    emit "PM12" "PASS" "No Jakarta EE 11 artifact (EE 10 baseline)" 0
+else
+    emit "PM12" "FAIL" "Jakarta EE 11 artifact on an EE 10 baseline" "$PM12_COUNT" "$PM12_MATCHES"
 fi
 echo ""
 

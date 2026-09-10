@@ -197,7 +197,7 @@ The `library-lutece-unit-testing` provides helper classes — use them:
 |-------|---------|
 | `fr.paris.lutece.test.AdminUserUtils` | Register admin user with rights on `MockHttpServletRequest` for JspBean tests |
 | `fr.paris.lutece.test.ReflectionTestUtils` | Set private fields via reflection (replaces Spring's `ReflectionTestUtils`) |
-| `fr.paris.lutece.test.Utils` | `getRandomName()` for unique test data, `validateHtmlFragment()` for HTML validation |
+| `fr.paris.lutece.test.Utils` | `getRandomName()` for unique test data, `getFileContent()` to load a test resource. `validateHtmlFragment()` disappears in 5.0.2 (parent 8.0.2), do not introduce it |
 
 Example — JspBean test with admin user:
 ```java
@@ -212,7 +212,8 @@ ReflectionTestUtils.setField(myService, "_fieldName", mockValue);
 
 ## Step 8: Additional Test Dependencies (if needed)
 
-If tests use bean validation, JAXB, or Jakarta EL, these dependencies may be needed (Config Migrator should have added them, verify):
+If tests use bean validation, JAXB, or Jakarta EL, these dependencies may be needed (Config Migrator should have added them, verify).
+The EL implementation depends on the parent: `org.glassfish.expressly:expressly` from `8.0.2`, `org.glassfish:jakarta.el` with `8.0.0` / `8.0.1` (each parent manages only one of them):
 
 ```xml
 <!-- jakarta bean validation, for tests that need it -->
@@ -222,8 +223,8 @@ If tests use bean validation, JAXB, or Jakarta EL, these dependencies may be nee
     <scope>test</scope>
 </dependency>
 <dependency>
-    <groupId>org.glassfish</groupId>
-    <artifactId>jakarta.el</artifactId>
+    <groupId>org.glassfish.expressly</groupId>
+    <artifactId>expressly</artifactId>
     <scope>test</scope>
 </dependency>
 <dependency>

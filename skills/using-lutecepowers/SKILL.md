@@ -59,6 +59,7 @@ Rules are short constraints that apply to files matching a glob. Source files li
 | Rule | Applies to | Constraint |
 |---|---|---|
 | `dao-patterns` | `**/business/**/*.java` | Lutece 8 DAO/Home constraints: DAOUtil lifecycle, SQL constants, Home facade, CDI lookup |
+| `dependency-convergence` | `pom.xml` | Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts each parent manages, enforcer rules from 8.0.2 |
 | `dependency-references` | always | When a task involves a dependency (Lutece or external), ensure its source/docs are available for exploration |
 | `java-conventions` | `**/*.java` | Lutece 8 global Java conventions: Jakarta EE, CDI, forbidden patterns |
 | `jsp-admin` | `**/*.jsp` | Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage |

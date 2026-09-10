@@ -28,7 +28,7 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 
 ## Step 1: POM Migration
 
-1. Update `<parent>` version to latest `8.x` release (currently `8.0.0`). Use the release version, NOT a SNAPSHOT
+1. Update `<parent>` version to the **latest released `8.x`**: `project.latestParent` in `.migration/scan.json` (read from the Lutece release repository; if empty, look it up yourself at `https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml`). Never a SNAPSHOT parent. What each parent manages is in `rules/dependency-convergence.md`
 2. Bump artifact `<version>` by one major (e.g., `4.2.1-SNAPSHOT` → `5.0.0-SNAPSHOT`)
 3. **Remove** these dependencies:
    - `org.springframework.*` (all Spring artifacts)
@@ -55,6 +55,10 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 9. For **libraries**: replace `lutece-core` dependency with `library-core-utils` if the library should not depend on full core
 10. **Remove** Jira properties: `<jiraProjectName>` and `<jiraComponentId>` from `<properties>` block
 11. **Convert** bounded version ranges to open ranges: `[X,Y)` → `[X,)`. Upper bounds are unnecessary in v8
+12. **Test EL implementation, by parent version.** Parent `8.0.2` or later manages `org.glassfish.expressly:expressly` and no longer manages `org.glassfish:jakarta.el` (stopped at `5.0.0-M1`): rename it. Parent `8.0.0` / `8.0.1` manages only `org.glassfish:jakarta.el`: keep it, `expressly` would have no version there
+13. **Remove** any `<version>` on a dependency the parent already manages. Every 8.x parent: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, the EL implementation. From `8.0.2`: also `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
+14. **Stay on Jakarta EE 10.** Do not introduce EE 11 artifacts — `jakarta.annotation-api` 3.0.0, `weld-junit5` 5.x (Weld 6 / CDI 4.1), `jakarta.el-api` 6.x. They resolve fine and break at runtime
+15. **From parent `8.0.2` the enforcer checks dependencies.** `requireUpperBoundDeps` fails the build on a transitive downgrade (all scopes except `provided`, so test dependencies count); `dependencyConvergence` only reports. Align the versions, do not disable the rule with `-Denforcer.dependencyRules.fail=false` except to diagnose
 
 ## Step 2: Create beans.xml
 

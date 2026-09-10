@@ -27,6 +27,9 @@
 | PM07 | FAIL | springVersion property | `<springVersion>` | pom.xml |
 | PM08 | WARN | Jira properties (remove) | `<jiraProjectName>\|<jiraComponentId>` | pom.xml |
 | PM09 | WARN | Bounded version range (use open) | `,[0-9].*)</version>` | pom.xml |
+| PM10 | FAIL | EL implementation not managed by the parent: `org.glassfish:jakarta.el` with parent ≥ 8.0.2, or `org.glassfish.expressly:expressly` with parent 8.0.0 / 8.0.1 | (custom check, parent-aware) | pom.xml |
+| PM11 | WARN | Explicit `<version>` on a parent-managed dependency (`jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api` only from parent 8.0.2) | (custom check, ignores `<dependencyManagement>`) | pom.xml |
+| PM12 | FAIL | Jakarta EE 11 artifact on an EE 10 baseline (`jakarta.annotation-api` 3.x, `weld-junit5` 5.x, `jakarta.el-api` 6.x) | (custom check) | pom.xml |
 
 ## javax Residues (JX)
 
@@ -174,9 +177,9 @@
 
 | Severity | Count |
 |----------|-------|
-| FAIL | ~54 |
-| WARN | ~17 |
-| **Total** | **~71** |
+| FAIL | ~56 |
+| WARN | ~18 |
+| **Total** | **~74** |
 
 ## verify-file.sh Check Mapping
 
@@ -189,3 +192,4 @@
 | `*.jsp` | JS01, JS02 |
 | `*.xml` (plugins) | WB02, WB04 |
 | `web.xml` | WB01, WB03 |
+| `pom.xml` | PM01-PM12 |
