@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Clones or updates the Lutece v8 reference repositories into ~/.lutece-references.
+# Runs in the background, silently, six repositories at a time. A stamp file written after a successful
+# pass throttles the sync to once per hour; a failed pass leaves no stamp so the next session retries.
+
+TARGET="${LUTECE_REFERENCES_DIR:-$HOME/.lutece-references}"
+ORG="lutece-platform"
+BRANCH="develop"
+STAMP="$TARGET/.last-sync"
+REPOS=(
+  lutece-core
+  lutece-form-plugin-forms
+  lutece-genattrs-plugin-genericattributes
+  lutece-tech-library-httpaccess
+  lutece-tech-library-signrequest
+  lutece-tech-plugin-asynchronousupload
+  lutece-tech-plugin-filegenerator
+  lutece-tech-plugin-rest
+  lutece-wf-library-workflow-core
+  lutece-wf-plugin-workflow
+  lutece-wf-module-workflow-forms
+  lutece-wf-module-workflow-forms-automatic-assignment
+  lutece-wf-module-workflow-formstopdf
+  lutece-wf-module-workflow-upload
+  lutece-search-plugin-solr
+  lutece-search-module-forms-solr
+  lutece-elk-library-elastic
+  lutece-elk-plugin-elasticdata
+  lutece-form-module-elasticdata-forms
+  lutece-tech-module-address-autocomplete
+  lutece-auth-plugin-mylutece
+  lutece-auth-module-mylutece-database
+  lutece-auth-module-mylutece-users
+  lutece-test-library-lutece-unit-testing
+  lutece-tech-plugin-liquibase
+  lutece-tech-plugin-health
+  lutece-tech-plugin-quartz-scheduler
+  lutece-tech-library-configsource-vault
+  lutece-tech-library-core-utils
+  tech-module-rest-healthcheck
+)
+
+command -v git >/dev/null 2>&1 || exit 0
+mkdir -p "$TARGET" || exit 0
+[ -n "$(find "$STAMP" -mmin -60 2>/dev/null)" ] && exit 0
+
+# Pulls one repository if present, otherwise clones it shallowly. Args: target dir, repo name, branch, org.
+sync_one() {
+  local dir="$1/$2"
+  if [ -d "$dir/.git" ]; then
+    git -C "$dir" pull -q --ff-only 2>/dev/null
+  else
+    rm -rf "$dir" 2>/dev/null
+    git clone -q --depth 1 --branch "$3" --single-branch "https://github.com/$4/$2.git" "$dir" 2>/dev/null
+  fi
+}
+export -f sync_one
+
+(
+  printf '%s\n' "${REPOS[@]}" | xargs -P 6 -I{} bash -c 'sync_one "$@"' _ "$TARGET" {} "$BRANCH" "$ORG" && touch "$STAMP"
+) >/dev/null 2>&1 </dev/null &
+disown 2>/dev/null
+exit 0

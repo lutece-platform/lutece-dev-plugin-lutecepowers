@@ -1,7 +1,6 @@
 ---
 name: lutece-dao
-description: "Lutece 8 DAO and Home layer patterns: DAOUtil lifecycle, SQL constants, Home static facade, CDI lookup, collection types, interface conventions. MUST be consulted before creating or modifying DAO/Home classes."
-user-invocable: true
+description: "Use when creating, modifying or reviewing a Lutece 8 DAO, Home or business class: DAOUtil lifecycle, SQL constants, Home static facade, CDI lookup, collection types, interface conventions. Must be consulted before touching anything under a business package."
 ---
 
 # DAO & Home Patterns — Lutece 8

@@ -1,195 +1,141 @@
 # Lutecepowers
 
-Claude Code plugin for **Lutece 8** framework development.
+**Lutece 8** development toolkit for coding agents: skills, path-scoped rules, reference sources, and orchestrated workflows for v7 to v8 migration and scalability proofs.
+
+One content tree, several coding agents. Skills follow the open [Agent Skills](https://agentskills.io) format. Supported coding agents are the ones verified with a live session: Claude Code, Codex, Cursor, Grok Build and OpenCode.
 
 ## Installation
 
-```bash
-/plugin marketplace add lutece-platform/lutece-dev-plugin-claude
-/plugin install lutecepowers-v8
-# install in user scope
+Install once per coding agent you use.
+
+### Claude Code
+
+```
+/plugin marketplace add lutece-platform/lutece-dev-plugin-lutecepowers
+/plugin install lutecepowers-v8@lutece-plugins
 ```
 
-## What it does
+Local development: `claude --plugin-dir /path/to/lutecepowers`.
 
-At session start, the plugin automatically:
+### Codex (CLI and app)
 
-1. **Clones/updates reference repos** — 30 Lutece v8 repositories into `~/.lutece-references/`
-2. **Copies rules** — Detects if the current project is a Lutece plugin and copies coding constraint rules into `.claude/rules/`
-3. **Injects context** — Bootstrap message with architecture patterns and available skills
+```bash
+codex plugin marketplace add https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers
+codex plugin add lutecepowers-v8@lutece-plugins
+```
+
+Then start a new thread. `/plugins` lists installed plugins.
+
+### Cursor
+
+```bash
+git clone https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers
+cursor-agent --plugin-dir /path/to/lutecepowers
+```
+
+Verified with Cursor CLI. Marketplace publication (`/add-plugin`) is not done yet.
+
+### Grok Build
+
+```bash
+grok plugin install https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers --trust
+```
+
+### OpenCode
+
+```bash
+git clone https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers ~/.config/opencode/lutece-dev-plugin-lutecepowers
+ln -s ~/.config/opencode/lutece-dev-plugin-lutecepowers/.opencode/plugins/lutecepowers.js ~/.config/opencode/plugins/lutecepowers.js
+```
+
+OpenCode loads every plugin file found in `~/.config/opencode/plugins/`. Requires `bash` on the PATH.
+
+## What happens at session start
+
+A single hook script, `hooks/session-start`, runs on every coding agent that supports session hooks. It:
+
+1. Injects the `using-lutecepowers` skill as context, with the absolute plugin root substituted for `LUTECEPOWERS_ROOT`. Fires on startup, clear and compact, not on resume, so a resumed session is not charged twice.
+2. Clones or updates 30 Lutece v8 reference repositories into `~/.lutece-references/` in the background.
+3. On Claude Code, when the current directory is a Lutece Maven project, copies the rules into `.claude/rules/` so they load automatically by path. It also exports `LUTECEPOWERS_ROOT` to the shell.
+
+The reference sync runs at most once per hour, six repositories at a time.
+
+The script takes the coding agent name as an optional argument (Cursor and OpenCode pass it), otherwise detects it from its environment, and emits the output shape that agent expects (`hookSpecificOutput.additionalContext` for Claude Code and Codex; `additional_context` for Cursor).
+
+Coding agents without a usable session hook load the bootstrap another way: OpenCode through an in-process plugin that runs the same hook script and injects its output into the first user message, Grok through the skill description alone.
 
 ## Skills
 
-| Skill | Description |
-|-------|-------------|
-| `lutece-patterns` | Architecture reference: layered design, CDI patterns, CRUD lifecycle, pagination, XPages, daemons, security checklist |
-| `lutece-migration-v8-agent-teams` | Migration v7 → v8 via **Agent Teams** (Swarm Mode). Parallel teammates, 9 scripts, JSON-driven task decomposition. Requires `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` |
-| `lutece-scalability-v8` | Make a plugin **horizontally scalable** (multi-instance) and **prove it**. Scans 7 scalability axes, fixes via **Agent Teams**, then deploys in a real 3-instance cluster (Liberty + MariaDB + nginx + Hazelcast) and verifies empirically. Run **after** the migration. Requires `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` + Docker |
-| `lutece-dao` | DAO + Home layer patterns: DAOUtil lifecycle, SQL constants, CDI lookup |
-| `lutece-workflow` | Workflow module patterns: tasks, CDI producers, components, templates |
-| `lutece-rbac` | RBAC: entity permissions, ResourceIdService, plugin.xml, JspBean authorization |
-| `lutece-cache` | Cache: AbstractCacheableService, CDI init, invalidation via CDI events |
-| `lutece-lucene-indexer` | Plugin-internal Lucene search: custom index, daemon, CDI events |
-| `lutece-solr-indexer` | Solr search module: SolrIndexer interface, CDI auto-discovery, batch indexing |
-| `lutece-elasticdata` | Elasticsearch DataSource: DataSource/DataObject interfaces, two-daemon indexing |
-| `lutece-deep-review` | Deep review via **Agent Teams**. Traces request lifecycle (template → bean → service → DAO → SQL), cross-references layers to find guaranteed bugs. Requires `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` |
-| `lutece-update-template-bo` | Updates a Back Office (admin) template by replacing raw HTML with the FreeMarker macros from lutece-core's Tabler theme |
-| `lutece-update-template-fo` | Updates a Front Office (skin) template by replacing raw HTML with the FreeMarker FO macros from lutece-core |
+<!-- skills:start -->
+| Skill | Use when |
+|---|---|
+| `lutece-brainstorming` | Use before any creative Lutece work: a new plugin, a new feature, a new screen, or a behaviour change. Explores intent, requirements and design with the user before any implementation. Triggers on 'I want to build', 'add a feature', 'new plugin', 'how should we design'. |
+| `lutece-cache` | Use when adding, fixing or reviewing a cache in a Lutece 8 plugin: AbstractCacheableService, CDI initialization, cache keys, invalidation through CDI events. Triggers on 'cache', 'cacheable', 'invalidate', 'CacheService'. |
+| `lutece-dao` | Use when creating, modifying or reviewing a Lutece 8 DAO, Home or business class: DAOUtil lifecycle, SQL constants, Home static facade, CDI lookup, collection types, interface conventions. Must be consulted before touching anything under a business package. |
+| `lutece-elasticdata` | Use when creating or modifying an Elasticsearch DataSource module for Lutece 8: DataSource and DataObject interfaces, CDI auto-discovery, @ConfigProperty injection, batch processing, two-daemon indexing, incremental updates through CDI events. Triggers on 'elasticdata', 'Elasticsearch', 'DataSource module'. |
+| `lutece-lucene-indexer` | Use when adding plugin-internal Lucene search to a Lutece 8 plugin: custom index, indexing daemon, CDI events, batch processing. Triggers on 'Lucene', 'full-text search inside the plugin', 'indexer'. |
+| `lutece-migration-v8-agent-teams` | Use when migrating a Lutece v7 plugin, module or library to v8: Spring to CDI, javax to jakarta, XML context to JSON, templates, tests. Script-heavy, JSON-driven task decomposition run by teammates or subagents, with a sequential fallback. Triggers on 'migrate to v8', 'migration v7 v8', 'CDI migration'. |
+| `lutece-patterns` | Use before writing or reviewing any Lutece 8 code (CRUD, JspBean, XPage, service, DAO, daemon, template) and when answering questions about Lutece 8 architecture, layered design or coding conventions. Canonical patterns extracted from lutece-core. |
+| `lutece-rbac` | Use when adding or reviewing permissions in a Lutece 8 plugin: RBAC entity permissions, ResourceIdService, plugin.xml declaration, JspBean authorization checks. Triggers on 'RBAC', 'permission', 'right', 'authorization', 'ResourceIdService'. |
+| `lutece-scalability-v8` | Use after a v7 to v8 migration to make a Lutece plugin horizontally scalable and prove it: scans scalability anti-patterns, fixes them, deploys a real 3-instance cluster (Liberty, MariaDB, nginx, Hazelcast) and verifies through UI end-to-end tests. Triggers on 'scalability', 'cluster', 'multi-instance', 'horizontal scaling'. |
+| `lutece-solr-indexer` | Use when creating or modifying a Solr search module for Lutece 8: SolrIndexer interface, CDI auto-discovery, SolrItem dynamic fields, batch indexing, incremental updates through CDI events. Triggers on 'Solr', 'search module', 'SolrIndexer'. |
+| `lutece-update-template-bo` | Use when the user asks to migrate, convert or update a Lutece Back Office (admin) template to the BO FreeMarker macros from lutece-core (Tabler theme). Takes the template path as argument. |
+| `lutece-update-template-fo` | Use when the user asks to migrate, convert or update a Lutece Front Office (skin) template to the FO FreeMarker macros from lutece-core. Takes the template path as argument. |
+| `lutece-v8-review` | Use when the user asks to review, audit, check or verify a Lutece plugin, module or library for v8 compliance or conformity, or after a v7 to v8 migration before delivering. Read-only. Dispatches the lutece-v8-reviewer instructions as a subagent, or follows them inline on a harness without dispatch. |
+| `lutece-workflow` | Use when creating or modifying a Lutece 8 workflow module: tasks, CDI producers, task components, templates, configuration DAOs. Triggers on 'workflow', 'task', 'workflow module', 'TaskComponent'. |
+<!-- skills:end -->
 
 ## Agent
 
-| Agent | Model | Description |
-|-------|-------|-------------|
-| `lutece-v8-reviewer` | Opus | Read-only compliance reviewer. Runs `scan-project.sh` + `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers, cache guards), then full build with tests. Produces a structured PASS/WARN/FAIL report. |
-
-## Migration flow (`/lutece-migration-v8-agent-teams`)
-
-**Input:** a Lutece v7 plugin/module/library (Spring, javax, XML context).
-
-**Architecture:** Team Lead orchestrates, specialized teammates execute in parallel. 9 bash scripts handle mechanical work, AI handles intelligent decisions (CDI scopes, producers, events).
-
-| Phase | What | Who |
-|-------|------|-----|
-| A — Scan | `scan-project.sh` → JSON inventory, dependency v8 check | @lead |
-| B — Task Decomposition | `task-splitter.sh` → per-teammate JSON task files | @lead |
-| C — Spawn Teammates | @config-migrator, @java-migrator (×1-3), @template-migrator, @test-migrator, @verifier | @lead |
-| D — Task Dependencies | @config-migrator → @java-migrator(s) → @template-migrator + @test-migrator → @verifier final build | @lead |
-| E — Monitoring | `progress-report.sh`, mailbox messaging, blocker resolution | @lead |
-| F — Final Gate | 0 FAIL on `verify-migration.sh`, green build, v8-reviewer agent | @verifier + @lead |
-
-```mermaid
-graph TD
-    L(["@lead — orchestrator"])
-
-    L -->|"delegates"| C["@config-migrator"]
-    L -->|"delegates"| J["@java-migrator ×1-3"]
-    L -->|"delegates"| T["@template-migrator"]
-    L -->|"delegates"| TE["@test-migrator"]
-    L -->|"delegates"| V["@verifier"]
-
-    C -.->|"unblocks"| J
-    J -.->|"unblocks"| T
-    J -.->|"unblocks"| TE
-    T -.->|"unblocks"| V
-    TE -.->|"unblocks"| V
-    V -->|"delegates"| R{{"lutece-v8-reviewer agent"}}
-
-    R -.->|"findings"| V
-    V -.->|"reports issues"| L
-```
-
-### Teammates
-
-| Teammate | Count | Role |
-|----------|-------|------|
-| @config-migrator | 1 | POM, beans.xml, context XML → JSON, plugin descriptor, web.xml, SQL Liquibase |
-| @java-migrator | 1-3 | `migrate-java-mechanical.sh` then CDI scopes, producers, events, cache, deprecated API |
-| @template-migrator | 0-1 | `migrate-template-mechanical.sh` then JSP, admin/skin templates, jQuery→vanilla JS |
-| @test-migrator | 0-1 | JUnit 4→5, mock renames, CDI test extensions |
-| @verifier | 1 | Continuous `verify-file.sh`, final `verify-migration.sh`, `mvn clean install`, reviewer agent |
-
-### Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `scan-project.sh` | Full project scan → structured JSON |
-| `task-splitter.sh` | JSON scan → per-teammate task files |
-| `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI on file list |
-| `migrate-template-mechanical.sh` | BO macros + null-safety + namespace |
-| `extract-context-beans.sh` | Spring context XML → JSON catalog |
-| `verify-migration.sh` | 70+ checks, optional `--json` mode |
-| `verify-file.sh` | Per-file verification subset |
-| `add-liquibase-headers.sh` | Liquibase headers on SQL files |
-| `progress-report.sh` | Migration progress dashboard |
-
-**Output:** migrated v8 plugin with green build and clean compliance report.
-
-## Deep review flow (`/lutece-deep-review`)
-
-**Input:** any Lutece plugin/module (v8).
-
-**Goal:** Trace the complete request lifecycle across all layers and cross-reference them to find **guaranteed bugs**
-**Architecture:** Team Lead orchestrates, 6 specialized teammates (5 parallel + 1 final verifier).
-
-| Phase | What | Who |
-|-------|------|-----|
-| A — Scan | `scan-project.sh` + `verify-migration.sh` → JSON baseline | @lead |
-| B — Spawn | 5 mappers/checkers in parallel | @lead |
-| C — Cross-ref | Cross-Layer Verifier merges all JSON, finds disconnects | @cross-layer-verifier |
-| D — Report | Structured report: script results + semantic checks + guaranteed bugs | @lead |
-| E — Fix (opt.) | Propose fixes for found bugs | @lead |
-
-```mermaid
-graph TD
-    L(["@lead — orchestrator"])
-
-    L -->|"delegates"| SR["@script-runner"]
-    L -->|"delegates"| TM["@template-mapper"]
-    L -->|"delegates"| JM["@java-mapper"]
-    L -->|"delegates"| CM["@config-mapper"]
-    L -->|"delegates"| SC["@semantic-checker"]
-
-    SR -.->|"JSON"| CLV
-    TM -.->|"JSON"| CLV
-    JM -.->|"JSON"| CLV
-    CM -.->|"JSON"| CLV
-    SC -.->|"JSON"| CLV
-
-    CLV{{"@cross-layer-verifier"}} -.->|"guaranteed-bugs.json"| L
-```
-
-### Teammates
-
-| Teammate | Role |
-|----------|------|
-| @script-runner | Runs `scan-project.sh` + `verify-migration.sh`, produces baseline JSON |
-| @template-mapper | Extracts template flows: model attributes, form fields, actions, i18n keys |
-| @java-mapper | Extracts Java flows: bean methods, service calls, DAO queries, model puts |
-| @config-mapper | Extracts config: plugin.xml rights, XPage paths, REST endpoints |
-| @semantic-checker | CDI scopes, singletons, producers, cache guards, deprecated API |
-| @cross-layer-verifier | Merges all JSONs, cross-references layers, outputs guaranteed bugs only |
-
-**Output:** structured report with guaranteed bugs + optional auto-fix.
+| Agent | Description |
+|-------|-------------|
+| `lutece-v8-reviewer` | Read-only compliance reviewer. Runs `scan-project.sh` and `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers, cache guards), then a full build with tests. Structured PASS/WARN/FAIL report. Frontmatter limited to `name` and `description` so any coding agent that reads `agents/` loads it; the `lutece-v8-review` skill drives it elsewhere. |
 
 ## Rules
 
-Rules are short constraints (5-15 lines) automatically loaded when the agent touches matching files.
+Short constraints applied to files matching a glob. Source of truth: `rules/*.md` (Claude Code format, `paths:` frontmatter). `rules-cursor/*.mdc` and the tables below are generated from it (`scripts/build-cursor-rules.sh`, `scripts/build-tables.sh`).
 
-| Rule | Scope |
-|------|-------|
-| `java-conventions` | `**/*.java` — Jakarta EE, CDI (not Spring), forbidden libraries, DAOUtil, logging |
-| `web-bean` | `**/web/**/*.java` — JspBean/XPage: CDI, CRUD lifecycle, security tokens |
-| `service-layer` | `**/service/**/*.java` — CDI scopes, injection, events, cache |
-| `dao-patterns` | `**/business/**/*.java` — DAOUtil lifecycle, SQL constants, Home facade |
-| `sql-liquibase` | `**/sql/**/*.sql` — Liquibase formatted-sql header, changeset identity, real preconditions |
-| `sql-rename` | `**/sql/**/*.sql` + `**/plugins/*.xml` — Renaming SQL dirs/plugins: logicalFilePath on the changeset line |
-| `testing` | `**/test/**/*.java` + `pom.xml` — Build/test commands, JUnit 5, test base classes |
-| `template-back-office` | `**/templates/admin/**/*.html` — v8 Freemarker macros, BS5/Tabler |
-| `template-front-office` | `**/templates/skin/**/*.html` — BS5 classes, vanilla JS, no jQuery |
-| `jsp-admin` | `**/*.jsp` — JSP boilerplate, bean naming |
-| `plugin-descriptor` | `**/plugins/*.xml` — Mandatory tags, core-version-dependency |
-| `messages-properties` | global — i18n key conventions |
-| `dependency-references` | global — Auto-fetch Lutece dep sources, v8 branch detection |
+<!-- rules:start -->
+| Rule | Applies to | Constraint |
+|---|---|---|
+| `dao-patterns` | `**/business/**/*.java` | Lutece 8 DAO/Home constraints: DAOUtil lifecycle, SQL constants, Home facade, CDI lookup |
+| `dependency-references` | always | When a task involves a dependency (Lutece or external), ensure its source/docs are available for exploration |
+| `java-conventions` | `**/*.java` | Lutece 8 global Java conventions: Jakarta EE, CDI, forbidden patterns |
+| `jsp-admin` | `**/*.jsp` | Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage |
+| `messages-properties` | always | Lutece 8 i18n constraints: no prefix in .properties, prefix in Java/templates, key naming |
+| `plugin-descriptor` | `**/plugins/*.xml` | Lutece 8 plugin.xml constraints: mandatory tags, icon-url, core-version-dependency, admin-feature declaration |
+| `service-layer` | `**/service/**/*.java` | Lutece 8 service layer constraints: CDI scopes, injection, events, configuration |
+| `sql-liquibase` | `**/sql/**/*.sql` | Lutece 8 SQL: every plugin .sql (create_db, init_db, init_core, upgrade) MUST carry the Liquibase formatted-sql header, otherwise the schema silently fails to deploy in v8 |
+| `sql-rename` | `**/sql/**/*.sql`, `**/WEB-INF/plugins/*.xml` | Renaming a SQL directory or a plugin: logicalFilePath goes on the changeset line (not the file header), or existing sites replay their creation scripts and lose data |
+| `template-back-office` | `**/templates/admin/**/*.html` | Lutece 8 Freemarker constraints: layout macros, form components, JSP paths, i18n |
+| `template-front-office` | `**/templates/skin/**/*.html` | Lutece 8 front-office (skin/site) templates: Bootstrap 5, vanilla JS, core modules |
+| `testing` | `**/test/**/*.java`, `pom.xml` | Lutece 8 build and test commands, JUnit 5 conventions, test base classes |
+| `web-bean` | `**/web/**/*.java` | Lutece 8 JspBean/XPage constraints: CDI annotations, CRUD lifecycle, security tokens, pagination |
+<!-- rules:end -->
 
-## Tests
+## Orchestrated workflows
 
-```bash
-pip install -r tests/requirements.txt
-python3 -m pytest tests/test.py -v
+Two skills are written as a lead that dispatches teammates described in `teammates/*.md`. On Claude Code with Agent Teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, still experimental) they run in parallel. With plain subagents (Claude Code, Codex `spawn_agent`, OpenCode `task`) each teammate is a subagent. Without any dispatch tool the lead executes the teammate files itself, in dependency order.
 
-# Run a specific test
-python3 -m pytest tests/test.py -v -k "v8_reviewer"
+### Migration (`lutece-migration-v8-agent-teams`)
 
-# Run tests in parallel
-python3 -m pytest tests/test.py -v -n 4
-```
+| Phase | What | Who |
+|-------|------|-----|
+| A — Scan | `scan-project.sh` → JSON inventory, dependency v8 check | lead |
+| B — Task decomposition | `task-splitter.sh` → per-teammate JSON task files | lead |
+| C — Dispatch | config-migrator, java-migrator (×1-3), template-migrator, test-migrator, verifier | lead |
+| D — Dependencies | config → java → template + test → verifier final build | lead |
+| E — Monitoring | `progress-report.sh`, blocker resolution | lead |
+| F — Final gate | 0 FAIL on `verify-migration.sh`, green build, `lutece-v8-reviewer` | verifier + lead |
 
-Latest results: [TEST_REPORT.md](TEST_REPORT.md)
+Scripts (`skills/lutece-migration-v8-agent-teams/scripts/`): `scan-project.sh`, `task-splitter.sh`, `migrate-java-mechanical.sh`, `migrate-template-mechanical.sh`, `extract-context-beans.sh`, `verify-migration.sh` (70+ checks, `--json`), `verify-file.sh`, `add-liquibase-headers.sh`, `progress-report.sh`.
 
-## Local development
+### Scalability (`lutece-scalability-v8`)
 
-```bash
-# Test against a Lutece project
-cd /path/to/your-lutece-plugin
-claude --plugin-dir /path/to/lutecepowers
-```
+Scans seven scalability axes, reproduces each defect through a UI end-to-end test on a real cluster, fixes it, and proves the fix by turning that test green.
+
+## Known limits
+
+- The `lutece-v8-reviewer` agent keeps only `name` and `description` so every coding agent loads it. Its read-only guarantee is therefore in the prompt, not enforced by a tool allowlist.
+- Grok Build 1.0.13 discovers the plugin hooks but does not execute them, so the reference sync and the rules copy do not run there. Skills still trigger from their descriptions.
+- Codex runs its own sandbox (bwrap). Inside another sandbox, run `codex exec --dangerously-bypass-approvals-and-sandbox` or the scan scripts fail to start.

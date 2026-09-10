@@ -1,5 +1,7 @@
 # Verifier & Builder — Teammate Instructions
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 You are the **Verifier** teammate. You run continuous verification, the final build, and the compliance review.
 
 ## Your Scope
@@ -18,14 +20,14 @@ You are the **Verifier** teammate. You run continuous verification, the final bu
 While other teammates are working, periodically run:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh . --json
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh . --json
 ```
 
 This writes results to `.migration/verify-latest.json`.
 
 Also run the progress report:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
 ```
 
 ### Monitoring rules
@@ -40,7 +42,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progre
 
 1. Run full verification:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh . --json
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh . --json
 ```
 
 2. **ALL checks must PASS** (FAIL = 0). WARN items are acceptable but should be noted.
@@ -120,7 +122,7 @@ Once the Lead tells you to proceed:
 
 3. **Final verification sweep**:
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh .
+   bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh .
    ```
 
 4. Report final status to Lead:

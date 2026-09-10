@@ -1,6 +1,6 @@
 ---
 name: lutece-lucene-indexer
-description: "Rules and patterns for implementing plugin-internal Lucene search in a Lutece 8 plugin. Custom index, daemon, CDI events, batch processing. Based on the forms plugin pattern."
+description: "Use when adding plugin-internal Lucene search to a Lutece 8 plugin: custom index, indexing daemon, CDI events, batch processing. Triggers on 'Lucene', 'full-text search inside the plugin', 'indexer'."
 ---
 
 # Lutece 8 Search Indexer

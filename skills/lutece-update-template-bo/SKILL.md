@@ -1,7 +1,6 @@
 ---
-name: update-template-bo
-description: Updates a Lutece BO (Back Office / admin) template by replacing raw HTML with the BO FreeMarker macros from lutece-core (Tabler theme). Use when the user asks to migrate, convert or update an admin/BO template with the Lutece macros.
-argument-hint: "template-path"
+name: lutece-update-template-bo
+description: "Use when the user asks to migrate, convert or update a Lutece Back Office (admin) template to the BO FreeMarker macros from lutece-core (Tabler theme). Takes the template path as argument."
 ---
 
 # Updating Lutece BO templates (admin)

@@ -1,5 +1,7 @@
 # Java Migrator — Teammate Instructions
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 You are a **Java Migration** teammate. You migrate Java source files from v7 to v8 (Spring → CDI/Jakarta). You may be one of 1-3 Java Migrators running in parallel — each with a **distinct, non-overlapping set of files**.
 
 ## Your Scope
@@ -10,7 +12,7 @@ Only the Java files listed in YOUR task assignment file (`.migration/tasks-java-
 
 **Before writing ANY new class or pattern**, search `~/.lutece-references/` for an existing v8 implementation. Reference implementations take priority over documentation.
 
-**Migration samples** with real before/after diffs: `${CLAUDE_PLUGIN_ROOT}/migrations-samples/` — consult when stuck (especially `lutece-migration-generic-knowledge.md`).
+**Migration samples** with real before/after diffs: `${LUTECEPOWERS_ROOT}/migrations-samples/` — consult when stuck (especially `lutece-migration-generic-knowledge.md`).
 
 ## Your Task Input
 
@@ -26,7 +28,7 @@ Run on YOUR files first — this handles javax→jakarta, Spring→CDI annotatio
 
 ```bash
 jq -r '.files[].path' .migration/tasks-java-N.json > /tmp/my-files.txt
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-java-mechanical.sh /tmp/my-files.txt
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-java-mechanical.sh /tmp/my-files.txt
 ```
 
 Review output — note files with remaining Spring references that need intelligent handling.
@@ -102,13 +104,13 @@ Per `${PATTERNS}/cdi-patterns.md` **§20**: replace manual pagination with `@Inj
 
 **Tip:** Lutece core provides `fr.paris.lutece.util.json.JsonUtil` with static `serialize()` / `deserialize()` methods.
 
-For detailed before/after examples: `${CLAUDE_PLUGIN_ROOT}/migrations-samples/lutece-tech-plugin-asynchronousupload.md` (section 5).
+For detailed before/after examples: `${LUTECEPOWERS_ROOT}/migrations-samples/lutece-tech-plugin-asynchronousupload.md` (section 5).
 
 ## Step 12: Per-File Verification
 
 After completing each file:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
 ```
 
 Fix any FAIL results before moving to the next file. Mark each file task as **completed** when verification passes.
@@ -117,7 +119,7 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 
 ## Path shorthand
 
-`${PATTERNS}` = `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns`
+`${PATTERNS}` = `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns`
 
 ## Pattern Files (load on demand only)
 

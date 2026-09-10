@@ -1,6 +1,6 @@
 ---
 name: lutece-patterns
-description: "Lutece 8 architecture patterns and conventions. MUST READ before writing any new Lutece code (CRUD, bean, service, DAO, XPage, daemon, templates) or answering questions about Lutece 8 architecture, layered design, or coding conventions."
+description: "Use before writing or reviewing any Lutece 8 code (CRUD, JspBean, XPage, service, DAO, daemon, template) and when answering questions about Lutece 8 architecture, layered design or coding conventions. Canonical patterns extracted from lutece-core."
 ---
 
 # Lutece 8 — Architecture Patterns

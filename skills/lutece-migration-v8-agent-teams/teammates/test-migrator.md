@@ -1,5 +1,7 @@
 # Test Migrator — Teammate Instructions
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 You are the **Test Migration** teammate. You handle all test file migration from JUnit 3/4 to JUnit 5 + CDI.
 
 ## Your Scope
@@ -55,7 +57,7 @@ The `migrate-java-mechanical.sh` script already handles test files. If not alrea
 
 ```bash
 jq -r '.files[].path' .migration/tasks-test.json > /tmp/test-files.txt
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-java-mechanical.sh /tmp/test-files.txt
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-java-mechanical.sh /tmp/test-files.txt
 ```
 
 This handles:
@@ -251,7 +253,7 @@ If tests fail:
 
 After each test file:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
 ```
 
 Mark each file task as **completed** when verification passes.

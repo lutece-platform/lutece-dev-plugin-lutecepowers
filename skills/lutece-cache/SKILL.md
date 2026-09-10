@@ -1,6 +1,6 @@
 ---
 name: lutece-cache
-description: "Rules and patterns for implementing cache in a Lutece 8 plugin. AbstractCacheableService, CDI initialization, cache operations, invalidation via CDI events."
+description: "Use when adding, fixing or reviewing a cache in a Lutece 8 plugin: AbstractCacheableService, CDI initialization, cache keys, invalidation through CDI events. Triggers on 'cache', 'cacheable', 'invalidate', 'CacheService'."
 ---
 
 # Lutece 8 Cache Implementation

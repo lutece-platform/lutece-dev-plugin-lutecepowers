@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Copies the plugin rules into .claude/rules/ when the given directory is a Lutece Maven project.
+# Existing copies are only replaced when the plugin file is newer, so local edits survive a session start.
+# Prints one status line. Never fails the hook.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RULES_SRC="$(cd "${SCRIPT_DIR}/.." && pwd)/rules"
+PROJECT_DIR="${1:-$PWD}"
+RULES_DST="${PROJECT_DIR}/.claude/rules"
+
+[ -d "$RULES_SRC" ] || exit 0
+[ -f "${PROJECT_DIR}/pom.xml" ] || exit 0
+grep -q "lutece-plugin\|lutece-module\|lutece-library\|lutece-site\|lutece-global-pom" "${PROJECT_DIR}/pom.xml" 2>/dev/null || exit 0
+
+mkdir -p "$RULES_DST" && cp -u "$RULES_SRC"/*.md "$RULES_DST/" 2>/dev/null && echo "Lutece project detected: rules copied to .claude/rules/"
+exit 0

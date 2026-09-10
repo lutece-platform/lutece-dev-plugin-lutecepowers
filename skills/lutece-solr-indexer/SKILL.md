@@ -1,6 +1,6 @@
 ---
 name: lutece-solr-indexer
-description: "Rules and patterns for implementing a Solr search module in Lutece 8. SolrIndexer interface, CDI auto-discovery, SolrItem dynamic fields, batch indexing, incremental updates via CDI events. Based on the forms-solr module pattern."
+description: "Use when creating or modifying a Solr search module for Lutece 8: SolrIndexer interface, CDI auto-discovery, SolrItem dynamic fields, batch indexing, incremental updates through CDI events. Triggers on 'Solr', 'search module', 'SolrIndexer'."
 ---
 
 # Lutece 8 Solr Indexer Module

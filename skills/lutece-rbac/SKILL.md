@@ -1,6 +1,6 @@
 ---
 name: lutece-rbac
-description: "Rules and patterns for implementing RBAC (Role-Based Access Control) in a Lutece 8 plugin. Entity permissions, ResourceIdService, plugin.xml declaration, JspBean authorization checks."
+description: "Use when adding or reviewing permissions in a Lutece 8 plugin: RBAC entity permissions, ResourceIdService, plugin.xml declaration, JspBean authorization checks. Triggers on 'RBAC', 'permission', 'right', 'authorization', 'ResourceIdService'."
 ---
 
 # Lutece 8 RBAC Implementation

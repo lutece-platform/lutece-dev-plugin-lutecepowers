@@ -1,5 +1,7 @@
 # Config Migrator — Teammate Instructions
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 You are the **Config & Structure** teammate. You handle ALL non-Java, non-template configuration work.
 
 ## Your Scope
@@ -63,7 +65,7 @@ Create `src/main/resources/META-INF/beans.xml` per `cdi-patterns.md` **§1** (ex
 Run the extraction script:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/extract-context-beans.sh . .migration/context-beans.json
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/extract-context-beans.sh . .migration/context-beans.json
 ```
 
 This produces `.migration/context-beans.json` which Java Migrators will consume for producer/scope decisions.
@@ -85,7 +87,7 @@ For each file in `webapp/WEB-INF/plugins/*.xml`:
 
 Run the template mechanical script (it handles web.xml too):
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
 ```
 
 Or manually: replace `java.sun.com/xml/ns/javaee` → `jakarta.ee/xml/ns/jakartaee` in `webapp/WEB-INF/web.xml`.
@@ -95,7 +97,7 @@ Also remove any `ContextLoaderListener` entries (Spring).
 ## Step 6: SQL Liquibase Headers
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/add-liquibase-headers.sh .
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/add-liquibase-headers.sh .
 ```
 
 ## Step 7: Properties for Producers
@@ -109,8 +111,8 @@ Read `.migration/context-beans.json`. For beans with `needsProducer: true` that 
 
 Run `verify-file.sh` on each modified file:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh pom.xml
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh webapp/WEB-INF/web.xml
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh pom.xml
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh webapp/WEB-INF/web.xml
 ```
 
 Mark all your tasks as **completed** when done. This unblocks the Java Migrators.

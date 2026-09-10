@@ -1,5 +1,7 @@
 # Template Migrator — Teammate Instructions
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 You are the **Template & UI** teammate. You handle JSP files, admin templates, skin templates, and JavaScript.
 
 ## Your Scope
@@ -30,7 +32,7 @@ Read `.migration/tasks-template.json` for your file lists.
 Run template mechanical migrations first:
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/migrate-template-mechanical.sh .
 ```
 
 This handles: BO macro renames, null-safety for errors/infos/warnings, web.xml namespace.
@@ -81,7 +83,7 @@ ${myJspBean.download(pageContext.request, pageContext.response)}
 
 **Every admin template MUST use v8 Freemarker macros.** This is the most significant UI change.
 
-Load quick reference: Read `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md`
+Load quick reference: Read `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md`
 
 ### List page pattern
 ```html
@@ -168,7 +170,7 @@ Wrap front-office templates with `<@cTpl>`:
 
 ## Step 5: JavaScript Migration
 
-Replace jQuery with vanilla ES6 JS. See `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md` **§ JavaScript Migration** for the full conversion table.
+Replace jQuery with vanilla ES6 JS. See `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/template-macros.md` **§ JavaScript Migration** for the full conversion table.
 
 ## Step 6: SuggestPOI Migration (conditional)
 
@@ -184,7 +186,7 @@ Search `~/.lutece-references/module-address-autocomplete/` for the v8 implementa
 
 After each file:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
 ```
 
 Mark each file task as **completed** when verification passes.

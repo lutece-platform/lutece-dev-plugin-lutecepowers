@@ -1,5 +1,0 @@
-files:
-  - source: /src/java/fr/paris/lutece/plugins/referencelist/resources/referencelist_messages.properties
-    translation: /src/java/fr/paris/lutece/plugins/referencelist/resources/referencelist_messages_%two_letters_code%.properties
-  - source: /src/site/xdoc/index.xml
-    translation: /src/site/%two_letters_code%/xdoc/index.xml

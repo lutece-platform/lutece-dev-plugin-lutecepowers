@@ -1,6 +1,6 @@
 ---
 name: lutece-workflow
-description: "Rules and patterns for creating/modifying Lutece 8 workflow modules. Tasks, CDI producers, components, templates."
+description: "Use when creating or modifying a Lutece 8 workflow module: tasks, CDI producers, task components, templates, configuration DAOs. Triggers on 'workflow', 'task', 'workflow module', 'TaskComponent'."
 ---
 
 # Lutece 8 Workflow Module Development

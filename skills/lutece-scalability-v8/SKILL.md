@@ -1,7 +1,6 @@
 ---
 name: lutece-scalability-v8
-description: "Make a Lutece v8 plugin horizontally scalable (multi-instance/cluster) and PROVE it. Scans for scalability anti-patterns, applies fixes via Agent Teams, then deploys the plugin in a real 3-instance cluster (Liberty + MariaDB + nginx + Hazelcast) and verifies empirically. Run AFTER the v7→v8 migration."
-user-invocable: true
+description: "Use after a v7 to v8 migration to make a Lutece plugin horizontally scalable and prove it: scans scalability anti-patterns, fixes them, deploys a real 3-instance cluster (Liberty, MariaDB, nginx, Hazelcast) and verifies through UI end-to-end tests. Triggers on 'scalability', 'cluster', 'multi-instance', 'horizontal scaling'."
 ---
 
 # Lutece Scalability v8 — Consolidate & Prove (Agent Teams)
@@ -12,7 +11,7 @@ Takes a **v8-compliant** Lutece plugin and makes it **scalable for multi-instanc
 
 Unlike migration (largely mechanical), scalability is mostly **semantic** — it needs judgment. So this skill is: **scan (detect) → triage (drop false positives) → reproduce (observe each real defect — RED) → fix (intelligent teammates + patterns) → PROVE (same reproduction, now GREEN, in the real cluster)**. The empirical red→green loop is the heart of the skill: **a scanner finding is never a bug until it has been observed failing, and a fix is never "done" until that same observation turns green.**
 
-**Prerequisites:** Agent Teams enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`); Docker + Compose; JDK 21; Maven; access to the Lutece Maven repos (or a populated `~/.m2`).
+**Prerequisites:** a harness that can dispatch subagents or teammates. On Claude Code, Agent Teams is experimental and needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; plain subagents also work. Without any dispatch tool, run the teammates yourself sequentially in the dependency order below (see `using-lutecepowers`, section Subagents and teams). Also required: Docker + Compose; JDK 21; Maven; access to the Lutece Maven repos (or a populated `~/.m2`).
 
 The 7 scalability axes (observed in core/forms, the architect's work) are documented under `patterns/`. Always read the real references in `~/.lutece-references/` before writing any new pattern.
 
@@ -38,7 +37,7 @@ So, before scanning, **ask the user**: *"Should the analysis cover only this plu
 ```bash
 mkdir -p .scalability
 # the plugin itself:
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/scripts/scan-scalability.sh . > .scalability/scan.json
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/scripts/scan-scalability.sh . > .scalability/scan.json
 # and one file per additional module/related repo the user confirmed in A.0:
 # bash .../scan-scalability.sh <module-dir> > .scalability/scan-<module>.json
 ```
@@ -104,7 +103,7 @@ Plan fixes for the **confirmed (reproduced) defects only** — never for raw sca
 
 ## PHASE C — Spawn Teammates
 
-Switch to **Delegate Mode**. From here, orchestrate only — never modify files.
+On Claude Code with Agent Teams, switch to **Delegate Mode**. From here, orchestrate only — never modify files. On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
 
 Spawn the teammates whose axes have findings:
 
@@ -117,10 +116,12 @@ Spawn the teammates whose axes have findings:
 | Verifier | `teammates/verifier.md` | builds + runs the cluster test |
 
 ### Spawn template
+Replace `${LUTECEPOWERS_ROOT}` by the literal absolute path from your session context before sending; a teammate does not see that context.
 ```
-Read your instruction file at ${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/teammates/<file>.md.
+LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (export it in your shell before running any script)
+Read your instruction file at ${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/teammates/<file>.md.
 Your findings are in .scalability/scan.json (your axes only). Own only your assigned files.
-Patterns: ${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/patterns/ — load only what you need.
+Patterns: ${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/patterns/ — load only what you need.
 Reference-first: ALWAYS read ~/.lutece-references/ (especially lutece-form-plugin-forms and lutece-core) before writing any pattern.
 Run verify-file.sh after each file you change. Never commit.
 ```
@@ -158,7 +159,7 @@ Serialization & session ─┤ (run first — locks/config may depend on the new
 The Verifier (`teammates/verifier.md`):
 1. `mvn -B clean install` the **fixed** plugin, then **redeploy into the standing cluster** and restart the app nodes (rebuild the war + `docker compose up -d --build`, or restart the containers so the new classes load). If the cluster is not up (fresh run), generate + boot it first:
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/scripts/gen-test-site.sh \
+   bash ${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/scripts/gen-test-site.sh \
         --local . --enable <plugin-names> --out e2e/.scalability-test
    ( cd e2e/.scalability-test && docker compose up -d )
    ```
@@ -169,7 +170,7 @@ The Verifier (`teammates/verifier.md`):
    - **no startup exception / stack trace / `WELD-` / `SRCFG` / `Failed to serialize`**. In particular Hazelcast forms **two distinct member groups** (HTTP-session vs JCache, different class loaders) — they MUST have different `cluster-name`s, else partition migration fails with `Failed to serialize ...MigrationOperation` (see harness `hazelcast.xml` / `hazelcast-session.xml`).
    - `cluster-verify.sh` health (3 instances, shared DB, single Liquibase migration, both Hazelcast groups formed, session replicated):
    ```bash
-   LOCK_TABLE=<plugin>_lock bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/scripts/cluster-verify.sh e2e/.scalability-test
+   LOCK_TABLE=<plugin>_lock bash ${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/scripts/cluster-verify.sh e2e/.scalability-test
    ```
 5. **Re-run the A.4.2 UI e2e — it must now be GREEN. This IS the proof.** Run the **exact same** browser-driven e2e that went RED on the baseline, unchanged, against the redeployed cluster. It drives the *real* functional operation **concurrently through the UI over nginx** (requests hit different nodes with replicated sessions) — e.g. N concurrent clients book/reserve/consume the same limited resource (capacity M) → **exactly M succeed, never more**, counters never drift; N concurrent edits of the same page → no lost write, invariant intact. **Drive through the UI; assert against the DB** — the DB is the source of truth (never trust the UI's rendered text as the assertion), but the *actions* must go through the UI/nginx, not a raw SQL/API shortcut. A pass = that same e2e, RED before the fix, is GREEN after, end-to-end (real Java, real HTTP, real multi-node).
    - **If the flow is a stateful multi-step wizard (`@SessionScoped`), this also proves session replication of the CDI bean** — the single thing `cluster-verify.sh` cannot prove (its admin-auth check is a false-green; see §6/§7). The flow completing end-to-end while its steps are served by *different* nodes (log the upstream per step) IS the proof. If a step returns "session lost" / "form no longer valid" while a different node served the previous step → it's the Liberty `writeContents` default (see `patterns/serialization-session.md`), and the harness e2e gotchas in `harness/README.md` apply (expect_navigation, cookie overlay, domcontentloaded).
@@ -186,7 +187,7 @@ A green run proves: 3 instances serving, shared DB, single Liquibase migration, 
 
 ## PHASE G — Review & Final Gate
 
-1. When build + `cluster-verify.sh` are green, spawn the **v8 reviewer** (`${CLAUDE_PLUGIN_ROOT}/agents/lutece-v8-reviewer.md`) read-only; resolve FAIL items via teammates.
+1. When build + `cluster-verify.sh` are green, spawn the **v8 reviewer** (`${LUTECEPOWERS_ROOT}/agents/lutece-v8-reviewer.md`) read-only; resolve FAIL items via teammates.
 2. Present the summary: scan deltas, triage verdicts (false positives dropped + reason), **RED→GREEN** reproduction results, build result, `cluster-verify.sh` PASS/FAIL, files modified.
 3. **KEEP all artifacts** (see retention rule) — do NOT delete `.scalability/`. Disband the team only. **STOP. Never commit** — the user decides (they may then commit the `.scalability/` report, the `e2e/` scripts and the generated cluster).
 
@@ -219,7 +220,7 @@ Only **ephemeral runtime** is torn down: running containers (`docker compose dow
 ---
 
 ## Script Locations
-All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/scripts/`:
+All in `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/scripts/`:
 
 | Script | Purpose | Used by |
 |--------|---------|---------|
@@ -229,7 +230,7 @@ All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/scripts/`:
 | `cluster-verify.sh` | Empirical scalability proofs against the running cluster | Verifier (F) |
 
 ## Pattern Locations
-All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/patterns/`:
+All in `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/patterns/`:
 
 | File | Axis |
 |------|------|
@@ -240,4 +241,4 @@ All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/patterns/`:
 | `config-and-robustness.md` | 5 & 6 — MicroProfile config, streams, thread-locals, determinism |
 
 ## Test Harness
-`${CLAUDE_PLUGIN_ROOT}/skills/lutece-scalability-v8/harness/` — a proven, parameterized 3-instance cluster (Liberty + MariaDB + nginx + Hazelcast, Liquibase migrator pattern, sessionCache session replication). `gen-test-site.sh` templates it for the plugin under test. See `harness/README.md`.
+`${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/harness/` — a proven, parameterized 3-instance cluster (Liberty + MariaDB + nginx + Hazelcast, Liquibase migrator pattern, sessionCache session replication). `gen-test-site.sh` templates it for the plugin under test. See `harness/README.md`.

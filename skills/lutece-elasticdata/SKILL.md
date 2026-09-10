@@ -1,6 +1,6 @@
 ---
 name: lutece-elasticdata
-description: "Rules and patterns for implementing an Elasticsearch DataSource module in Lutece 8. DataSource/DataObject interfaces, CDI auto-discovery, @ConfigProperty injection, batch processing, two-daemon indexing, incremental updates via CDI events. Based on the elasticdata-forms module pattern."
+description: "Use when creating or modifying an Elasticsearch DataSource module for Lutece 8: DataSource and DataObject interfaces, CDI auto-discovery, @ConfigProperty injection, batch processing, two-daemon indexing, incremental updates through CDI events. Triggers on 'elasticdata', 'Elasticsearch', 'DataSource module'."
 ---
 
 # Lutece 8 ElasticData DataSource Module

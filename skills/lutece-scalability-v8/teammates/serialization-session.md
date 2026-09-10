@@ -1,5 +1,7 @@
 # Teammate — Serialization & session state
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 ## Role
 Make all session/cache state **cluster-safe** (serializable, light, free of non-replicable resources).
 

@@ -1,5 +1,7 @@
 # Teammate — Locks & Concurrency
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 ## Role
 Replace any JVM-local coordination of a contended resource with the **right cluster-safe primitive** (atomic CAS on a counter, or a DB distributed lock), and make ID generation safe.
 

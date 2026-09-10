@@ -23,9 +23,13 @@ venv/
 .pytest_cache/
 .mypy_cache/
 
-.claude
 .token-counter
 CLAUDE.md
 docker
 lutece-analyze
 AGENTTEAM.md
+
+# Node (OpenCode plugin has no dependencies; keep local installs out)
+node_modules/
+package-lock.json
+.claude/

@@ -1,5 +1,7 @@
 # Teammate — CDI scopes & singletons
 
+> `${LUTECEPOWERS_ROOT}` below is the plugin root given in your spawn prompt. If the variable is not set in your shell, `export LUTECEPOWERS_ROOT=<that path>` before running any script.
+
 ## Role
 Eliminate mutable static singletons and JVM-local state; make services stateless and correctly scoped.
 

@@ -1,7 +1,6 @@
 ---
 name: lutece-brainstorming
-description: "Collaborative brainstorming for Lutece 8 features — explores intent, requirements and design before any implementation. MUST be used before creative work."
-user-invocable: true
+description: "Use before any creative Lutece work: a new plugin, a new feature, a new screen, or a behaviour change. Explores intent, requirements and design with the user before any implementation. Triggers on 'I want to build', 'add a feature', 'new plugin', 'how should we design'."
 ---
 
 # Brainstorming — Turning Ideas Into Designs
@@ -316,7 +315,7 @@ If yes:
    - `/lutece-workflow` if workflow integration is needed
    - `/lutece-rbac` if RBAC is needed
    - `/lutece-cache` if caching is needed
-3. **Create a task list** — use `TodoWrite` to break the design into implementation tasks
+3. **Create a task list** — use your task-tracking tool to break the design into implementation tasks
 
 ---
 

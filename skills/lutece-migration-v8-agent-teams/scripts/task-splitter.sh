@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+PLUGIN_ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+PATTERNS_BASE="$PLUGIN_ROOT_DIR/skills/lutece-migration-v8-agent-teams/patterns/"
+
 SCAN_FILE="${1:-.migration/scan.json}"
 OUTPUT_DIR="${2:-.migration}"
 
@@ -76,52 +79,52 @@ echo "  Created tasks-config.json"
 
 if [ "$JAVA_TEAMMATES" -eq 1 ]; then
     # Single Java teammate: all files in one group
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-0",
       files: [.files.java[] | select(.classType != "interface" and .classType != "home")],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-0.json"
     echo "  Created tasks-java-0.json (all files)"
 
 elif [ "$JAVA_TEAMMATES" -eq 2 ]; then
     # Two teammates: {business + home} and {service + web + other}
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-0",
       files: [.files.java[] | select((.classType != "interface" and .classType != "home") and (.package | test("business")))],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-0.json"
 
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-1",
       files: [.files.java[] | select((.classType != "interface" and .classType != "home") and (.package | test("business") | not))],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-1.json"
     echo "  Created tasks-java-0.json (business/), tasks-java-1.json (service+web+other)"
 
 elif [ "$JAVA_TEAMMATES" -ge 3 ]; then
     # Three teammates: business/, service/, web+other
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-0",
       files: [.files.java[] | select((.classType != "interface" and .classType != "home") and (.package | test("business")))],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-0.json"
 
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-1",
       files: [.files.java[] | select((.classType != "interface" and .classType != "home") and (.package | test("service")))],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-1.json"
 
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "java-migrator-2",
       files: [.files.java[] | select((.classType != "interface" and .classType != "home") and ((.package | test("business|service")) | not))],
       contextBeansFile: ".migration/context-beans.json",
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-2.json"
     echo "  Created tasks-java-{0,1,2}.json (business/, service/, web+other)"
 fi
@@ -139,12 +142,12 @@ echo "  Created tasks-java-homes.json"
 # ─── Template tasks ──────────────────────────────────────
 
 if [ "$TEMPLATE_TEAMMATES" -gt 0 ]; then
-    jq '{
+    jq --arg patterns "$PATTERNS_BASE" '{
       teammate: "template-migrator",
       adminTemplates: [.files.adminTemplates[]],
       skinTemplates: [.files.skinTemplates[]],
       jspFiles: [.files.jsp[]],
-      patternsBase: "${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/"
+      patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-template.json"
     echo "  Created tasks-template.json"
 fi

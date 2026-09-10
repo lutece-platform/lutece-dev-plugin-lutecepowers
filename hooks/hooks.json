@@ -1,19 +1,34 @@
 {
+  "description": "Lutecepowers bootstrap: injects the using-lutecepowers skill with the plugin root, syncs ~/.lutece-references and copies rules into .claude/rules/ on Lutece projects (Claude Code).",
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Lutecepowers loaded. Skills: lutece-brainstorming, lutece-dao, lutece-workflow, lutece-migration-v8-agent-teams, lutece-scalability-v8, lutece-rbac, lutece-cache, lutece-lucene-indexer, lutece-solr-indexer, lutece-elasticdata, lutece-patterns, lutece-deep-review, lutece-update-template-bo, lutece-update-template-fo. Agent: lutece-v8-reviewer. IMPORTANT: Before writing any feature, you MUST read at least the lutece-patterns skill for architecture patterns (layered architecture, CRUD lifecycle, CDI, security). Reference sources are available at ~/.lutece-references/ — use Read/Grep/Glob on these repos for real implementation examples. BUILD & TEST COMMANDS: Compile only: mvn clean install -Dmaven.test.skip=true | Full build with tests: mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test -q | NEVER use plain \"mvn test\" — Lutece requires exploded webapp + HSQL setup via the lutece:exploded antrun:run goals.'"
-          },
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "shell": "bash"
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
           {
             "type": "command",
-            "command": "bash -c '( T=$HOME/.lutece-references; mkdir -p $T; for r in lutece-core:lutece-platform:develop lutece-form-plugin-forms:lutece-platform:develop lutece-genattrs-plugin-genericattributes:lutece-platform:develop lutece-tech-library-httpaccess:lutece-platform:develop lutece-tech-library-signrequest:lutece-platform:develop lutece-tech-plugin-asynchronousupload:lutece-platform:develop lutece-tech-plugin-filegenerator:lutece-platform:develop lutece-tech-plugin-rest:lutece-platform:develop lutece-wf-library-workflow-core:lutece-platform:develop lutece-wf-plugin-workflow:lutece-platform:develop lutece-wf-module-workflow-forms:lutece-platform:develop lutece-wf-module-workflow-forms-automatic-assignment:lutece-platform:develop lutece-wf-module-workflow-formstopdf:lutece-platform:develop lutece-wf-module-workflow-upload:lutece-platform:develop lutece-search-plugin-solr:lutece-platform:develop lutece-search-module-forms-solr:lutece-platform:develop lutece-elk-library-elastic:lutece-platform:develop lutece-elk-plugin-elasticdata:lutece-platform:develop lutece-form-module-elasticdata-forms:lutece-platform:develop lutece-tech-module-address-autocomplete:lutece-platform:develop lutece-auth-plugin-mylutece:lutece-platform:develop lutece-auth-module-mylutece-database:lutece-platform:develop lutece-auth-module-mylutece-users:lutece-platform:develop lutece-test-library-lutece-unit-testing:lutece-platform:develop lutece-tech-plugin-liquibase:lutece-platform:develop lutece-tech-plugin-health:lutece-platform:develop lutece-tech-plugin-quartz-scheduler:lutece-platform:develop lutece-tech-library-configsource-vault:lutece-platform:develop lutece-tech-library-core-utils:lutece-platform:develop tech-module-rest-healthcheck:lutece-platform:develop; do IFS=: read -r n o b <<< \"$r\"; d=$T/$n; if [ ! -d \"$d/.git\" ]; then rm -rf \"$d\" 2>/dev/null; git clone -q --branch $b --single-branch https://github.com/$o/$n.git \"$d\" 2>/dev/null; fi; done; for d in \"$T\"/*/; do [ -d \"$d/.git\" ] && git -C \"$d\" pull -q 2>/dev/null; done ) >/dev/null 2>&1 &'; echo 'References ready: syncing in background'"
-          },
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "shell": "bash"
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/lutece-rules-setup.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "shell": "bash"
           }
         ]
       }

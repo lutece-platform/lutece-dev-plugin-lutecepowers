@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Session-start hook: injects the using-lutecepowers bootstrap with the literal plugin root,
+# syncs the reference repositories and copies the rules where the harness supports them.
+# Usage: session-start [harness]   harness = claude | cursor | opencode (default: auto-detect)
+# Emits the JSON shape the calling harness expects. Never prints anything else on stdout.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+BOOTSTRAP="${ROOT_DIR}/skills/using-lutecepowers/SKILL.md"
+
+if [ ! -t 0 ]; then cat >/dev/null 2>&1 || true; fi
+
+# Resolves the harness: explicit argument, then environment.
+detect_harness() {
+  if [ -n "${1:-}" ]; then printf '%s' "$1"
+  elif [ -n "${LUTECEPOWERS_HARNESS:-}" ]; then printf '%s' "$LUTECEPOWERS_HARNESS"
+  elif [ -n "${CURSOR_PROJECT_DIR:-}" ] || [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then printf 'cursor'
+  else printf 'claude'
+  fi
+}
+
+# Prints the skill body without frontmatter, CR and BOM; portable across GNU and BSD tools.
+skill_body() {
+  tr -d '\r' < "$1" | sed '1s/^\xEF\xBB\xBF//' | awk 'NR==1 && $0=="---" {skip=1; next} skip && $0=="---" {skip=0; next} !skip'
+}
+
+# Encodes stdin as a JSON string literal, with every control character escaped.
+json_string() {
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; sys.stdout.write(json.dumps(sys.stdin.read()))'
+  elif command -v jq >/dev/null 2>&1; then jq -Rs .
+  else
+    local s; s="$(tr -d '\000-\010\013\014\016-\037' | cat)"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+    printf '"%s"' "$s"
+  fi
+}
+
+HARNESS="$(detect_harness "${1:-}")"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${CURSOR_PROJECT_DIR:-$PWD}}"
+
+bash "${SCRIPT_DIR}/sync-references" >/dev/null 2>&1 </dev/null
+
+RULES_LINE=""
+if [ "$HARNESS" = "claude" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${PLUGIN_ROOT:-}" ]; then
+  COPIED="$(bash "${SCRIPT_DIR}/setup-rules" "$PROJECT_DIR" 2>/dev/null)"
+  [ -n "$COPIED" ] && RULES_LINE="${COPIED} They load automatically by path."
+fi
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "export LUTECEPOWERS_ROOT=\"${ROOT_DIR}\"" >> "$CLAUDE_ENV_FILE" 2>/dev/null
+fi
+
+BODY="$(skill_body "$BOOTSTRAP" 2>/dev/null || echo "Error reading using-lutecepowers skill")"
+BODY="${BODY//\$\{LUTECEPOWERS_ROOT\}/$ROOT_DIR}"
+
+CONTEXT="<EXTREMELY_IMPORTANT>
+You have Lutecepowers, a toolkit for Lutece 8 development.
+
+LUTECEPOWERS_ROOT=${ROOT_DIR}
+${RULES_LINE:+$RULES_LINE
+}Reference sources: ~/.lutece-references/ (synced in the background at session start).
+
+The using-lutecepowers skill is reproduced below and is already active. Do not load it again. Load every other skill through your harness skill mechanism.
+
+${BODY}
+</EXTREMELY_IMPORTANT>"
+
+ESCAPED="$(printf '%s' "$CONTEXT" | json_string)"
+ROOT_ESCAPED="$(printf '%s' "$ROOT_DIR" | json_string)"
+
+case "$HARNESS" in
+  cursor)  printf '{"additional_context":%s,"env":{"LUTECEPOWERS_ROOT":%s}}\n' "$ESCAPED" "$ROOT_ESCAPED" ;;
+  *)       printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' "$ESCAPED" ;;
+esac
+exit 0

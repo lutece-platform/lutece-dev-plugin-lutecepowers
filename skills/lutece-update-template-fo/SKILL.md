@@ -1,7 +1,6 @@
 ---
-name: update-template-fo
-description: Updates a Lutece FO (Front Office) template by replacing raw HTML with the FO FreeMarker macros from lutece-core. Use when the user asks to migrate, convert or update a skin/FO template with Lutece macros.
-argument-hint: "template-path"
+name: lutece-update-template-fo
+description: "Use when the user asks to migrate, convert or update a Lutece Front Office (skin) template to the FO FreeMarker macros from lutece-core. Takes the template path as argument."
 ---
 
 # Updating Lutece FO templates

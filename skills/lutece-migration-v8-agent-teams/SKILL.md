@@ -1,7 +1,6 @@
 ---
 name: lutece-migration-v8-agent-teams
-description: "Migration v7 → v8 via Agent Teams. Parallel teammates, script-heavy, JSON-driven task decomposition."
-user-invocable: true
+description: "Use when migrating a Lutece v7 plugin, module or library to v8: Spring to CDI, javax to jakarta, XML context to JSON, templates, tests. Script-heavy, JSON-driven task decomposition run by teammates or subagents, with a sequential fallback. Triggers on 'migrate to v8', 'migration v7 v8', 'CDI migration'."
 ---
 
 # Lutece Migration v7→v8 — Agent Teams Orchestrator
@@ -10,7 +9,7 @@ user-invocable: true
 
 Migrates any Lutece plugin/module/library from v7 to v8 using **Agent Teams (Swarm Mode)**. The Team Lead (you) orchestrates, specialized teammates execute in parallel, and bash scripts handle all mechanical work.
 
-**Prerequisites:** Agent Teams must be enabled (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`).
+**Prerequisites:** a harness that can dispatch subagents or teammates. On Claude Code, Agent Teams is experimental and needs `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; plain subagents also work. Without any dispatch tool, run the teammates yourself sequentially in the dependency order below (see `using-lutecepowers`, section Subagents and teams).
 
 ---
 
@@ -22,7 +21,7 @@ Confirm the current directory is a Lutece project (pom.xml with lutece-plugin/mo
 ### A.2 — Run scanner
 ```bash
 mkdir -p .migration
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh . > .migration/scan.json
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh . > .migration/scan.json
 ```
 
 ### A.3 — Display summary
@@ -49,7 +48,7 @@ For every Lutece dependency in `scan.json`:
 ## PHASE B — Task Decomposition (Lead executes directly)
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/task-splitter.sh .migration/scan.json .migration
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/task-splitter.sh .migration/scan.json .migration
 ```
 
 Read the output to know how many teammates to spawn.
@@ -58,40 +57,41 @@ Read the output to know how many teammates to spawn.
 
 ## PHASE C — Spawn Teammates
 
-Switch to **Delegate Mode** (Shift+Tab). From this point, you orchestrate only — never implement.
+On Claude Code with Agent Teams, switch to **Delegate Mode** (Shift+Tab). From this point, you orchestrate only — never implement. On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
 
 ### Always spawn:
 1. **Config Migrator** (1 teammate)
-   - Instructions: `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/config-migrator.md`
+   - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/config-migrator.md`
    - Task file: `.migration/tasks-config.json`
 
 2. **Verifier** (1 teammate)
-   - Instructions: `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/verifier.md`
+   - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/verifier.md`
    - Starts monitoring immediately, builds only after all others complete
 
 ### Conditionally spawn:
 3. **Java Migrator(s)** (1-3, based on `scan.json` recommendation)
-   - Instructions: `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/java-migrator.md`
+   - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/java-migrator.md`
    - Task files: `.migration/tasks-java-0.json`, `.migration/tasks-java-1.json`, `.migration/tasks-java-2.json`
    - Each gets a DISTINCT file partition — no overlap
 
 4. **Template Migrator** (0-1, if templates/JSP exist)
-   - Instructions: `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/template-migrator.md`
+   - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/template-migrator.md`
    - Task file: `.migration/tasks-template.json`
 
 5. **Test Migrator** (0-1, if test files exist)
-   - Instructions: `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/test-migrator.md`
+   - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/test-migrator.md`
    - Task file: `.migration/tasks-test.json`
 
 ### Spawn instructions template
-When spawning each teammate, provide:
+When spawning each teammate, provide the text below **with `${LUTECEPOWERS_ROOT}` replaced by the literal absolute path** from your session context. A teammate does not see that context and may have no such shell variable.
 ```
+LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (export it in your shell before running any script)
 Read your instruction file at [path to teammates/*.md].
 Read your task assignment at [path to .migration/tasks-*.json].
-Execute all steps in your instructions. Use scripts from ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/.
-Pattern files are at ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/ — load only when needed.
+Execute all steps in your instructions. Use scripts from ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/.
+Pattern files are at ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/ — load only when needed.
 Reference implementations: always search ~/.lutece-references/ before writing any new pattern.
-Migration samples with real before/after diffs: ${CLAUDE_PLUGIN_ROOT}/migrations-samples/ — consult when stuck on a specific migration pattern.
+Migration samples with real before/after diffs: ${LUTECEPOWERS_ROOT}/migrations-samples/ — consult when stuck on a specific migration pattern.
 Run verify-file.sh after each file you complete.
 ```
 
@@ -129,7 +129,7 @@ While teammates work:
 1. Check task list progress every ~30 seconds
 2. Run progress report periodically:
    ```bash
-   bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
+   bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
    ```
 3. **If a teammate is stuck** (same task > 5 min): send a message via mailbox asking for status
 4. **If a teammate reports a blocker**: investigate and either reassign, advise, or fix the blocker
@@ -142,13 +142,14 @@ While teammates work:
 When the Verifier reports **BUILD SUCCESS** (compile + tests) and **verify-migration.sh: 0 FAIL**, spawn a **Reviewer teammate**:
 
 ```
-Read your instruction file at ${CLAUDE_PLUGIN_ROOT}/agents/lutece-v8-reviewer.md.
+LUTECEPOWERS_ROOT=${LUTECEPOWERS_ROOT} (literal path, export it in your shell)
+Read your instruction file at ${LUTECEPOWERS_ROOT}/agents/lutece-v8-reviewer.md.
 Review this project for v8 compliance. Do NOT modify any files.
 Reference implementations: ~/.lutece-references/
-Migration samples: ${CLAUDE_PLUGIN_ROOT}/migrations-samples/
+Migration samples: ${LUTECEPOWERS_ROOT}/migrations-samples/
 ```
 
-**Why a teammate?** In Delegate Mode, the Lead can only spawn teammates — the Task tool is not available. The reviewer runs as a read-only teammate that reports findings without modifying files.
+**Why a teammate?** In Delegate Mode the Lead can only spawn teammates. The reviewer runs as a read-only teammate (or a read-only subagent, or inline when no dispatch exists) and reports findings without modifying files.
 
 Process the reviewer's findings:
 - **FAIL items**: Assign fixes to the appropriate teammate. Re-spawn reviewer after fixes.
@@ -209,7 +210,7 @@ The scan reports counts only — these patterns require human judgment, no mecha
 
 ## Script Locations
 
-All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
+All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 
 | Script | Purpose | Used by |
 |--------|---------|---------|
@@ -225,7 +226,7 @@ All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 
 ## Pattern Locations
 
-All in `${CLAUDE_PLUGIN_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
+All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 
 | File | Content | Loaded by |
 |------|---------|-----------|
