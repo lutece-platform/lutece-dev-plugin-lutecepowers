@@ -45,6 +45,7 @@ grok plugin install https://github.com/lutece-platform/lutece-dev-plugin-lutecep
 
 ```bash
 git clone https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers ~/.config/opencode/lutece-dev-plugin-lutecepowers
+mkdir -p ~/.config/opencode/plugins
 ln -s ~/.config/opencode/lutece-dev-plugin-lutecepowers/.opencode/plugins/lutecepowers.js ~/.config/opencode/plugins/lutecepowers.js
 ```
 
