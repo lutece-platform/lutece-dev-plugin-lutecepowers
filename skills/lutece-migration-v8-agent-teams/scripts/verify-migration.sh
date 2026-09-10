@@ -111,7 +111,6 @@ check_pom "PM07" '<springVersion>' "FAIL" "springVersion property in pom.xml"
 check_pom "PM08" '<jiraProjectName>\|<jiraComponentId>' "WARN" "Jira properties in pom.xml (remove)"
 
 # PM09: bounded version ranges [X,Y) should be open [X,)
-TOTAL=$((TOTAL + 1))
 if [ -f "pom.xml" ]; then
     BOUNDED=$(grep -c ',[0-9].*)</version>' pom.xml 2>/dev/null || true)
     if [ "$BOUNDED" -gt 0 ]; then
@@ -124,7 +123,6 @@ else
 fi
 
 # PM06: parent version must start with 8.
-TOTAL=$((TOTAL + 1))
 if [ -f "pom.xml" ]; then
     PARENT_VER=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
     if [[ "$PARENT_VER" == 8.* ]]; then
@@ -136,16 +134,19 @@ else
     emit "PM06" "PASS" "Parent version check (no pom.xml)" 0
 fi
 
-# PM10: stale EL implementation artifact. org.glassfish:jakarta.el stopped at the
-# 5.0.0-M1 milestone and is no longer managed by global-pom 8.0.2 — the successor
-# is org.glassfish.expressly:expressly. Matches jakarta.el but not jakarta.el-api.
-check_pom "PM10" '<artifactId>jakarta\.el</artifactId>' "FAIL" "Stale EL artifact org.glassfish:jakarta.el (use org.glassfish.expressly:expressly)"
-
-# PM11 / PM12: inspect each <dependency> block outside <dependencyManagement>.
-#   PM11 — explicit <version> on a dependency the parent already manages
-#   PM12 — Jakarta EE 11 artifact on an EE 10 baseline
-PM11_MATCHES=""; PM11_COUNT=0
-PM12_MATCHES=""; PM12_COUNT=0
+# PM10: EL implementation must match what the parent manages.
+#   parent >= 8.0.2 manages org.glassfish.expressly:expressly (org.glassfish:jakarta.el stopped at 5.0.0-M1)
+#   parent 8.0.0 / 8.0.1 manages org.glassfish:jakarta.el only
+# PM11: explicit <version> on a dependency the parent manages (list depends on the parent)
+# PM12: Jakarta EE 11 artifact on the EE 10 baseline
+# Only <dependency> blocks outside <dependencyManagement> are inspected.
+PARENT_GE_802=false
+[ -n "${PARENT_VER:-}" ] && [ "$(printf '%s\n' "8.0.2" "$PARENT_VER" | sort -V | head -1)" = "8.0.2" ] && PARENT_GE_802=true
+MANAGED='library-lutece-unit-testing|hibernate-validator|jaxb-runtime|jakarta.el|expressly'
+$PARENT_GE_802 && MANAGED="$MANAGED|jboss-logging|jakarta.el-api|jakarta.annotation-api"
+PM10_COUNT=0; PM10_MATCHES=""
+PM11_COUNT=0; PM11_MATCHES=""
+PM12_COUNT=0; PM12_MATCHES=""
 if [ -f "pom.xml" ]; then
     DEP_BLOCKS=$(awk '
         /<dependencyManagement>/ {dm=1}
@@ -158,16 +159,21 @@ if [ -f "pom.xml" ]; then
 
     while IFS= read -r blk; do
         [ -z "$blk" ] && continue
+        GID=$(printf '%s' "$blk" | sed -n 's/.*<groupId>\([^<]*\)<\/groupId>.*/\1/p' | head -1)
         AID=$(printf '%s' "$blk" | sed -n 's/.*<artifactId>\([^<]*\)<\/artifactId>.*/\1/p' | head -1)
         VER=$(printf '%s' "$blk" | sed -n 's/.*<version>\([^<]*\)<\/version>.*/\1/p' | head -1)
 
-        case "$AID" in
-            library-lutece-unit-testing|hibernate-validator|expressly|jaxb-runtime|jboss-logging|jakarta.el-api|jakarta.annotation-api)
-                if [ -n "$VER" ]; then
-                    PM11_COUNT=$((PM11_COUNT + 1))
-                    PM11_MATCHES="$PM11_MATCHES$AID -> $VER"$'\n'
-                fi ;;
+        case "$GID:$AID" in
+            org.glassfish:jakarta.el)
+                $PARENT_GE_802 && { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish:jakarta.el is not managed by parent $PARENT_VER, use org.glassfish.expressly:expressly"$'\n'; } ;;
+            org.glassfish.expressly:expressly)
+                $PARENT_GE_802 || { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish.expressly:expressly is not managed by parent $PARENT_VER, use org.glassfish:jakarta.el"$'\n'; } ;;
         esac
+
+        if [ -n "$VER" ] && printf '%s' "$AID" | grep -qE "^($MANAGED)$"; then
+            PM11_COUNT=$((PM11_COUNT + 1))
+            PM11_MATCHES="$PM11_MATCHES$AID -> $VER"$'\n'
+        fi
 
         case "$AID:$VER" in
             jakarta.annotation-api:3.*|weld-junit5:5.*|jakarta.el-api:6.*)
@@ -175,6 +181,12 @@ if [ -f "pom.xml" ]; then
                 PM12_MATCHES="$PM12_MATCHES$AID -> $VER"$'\n' ;;
         esac
     done <<< "$DEP_BLOCKS"
+fi
+
+if [ "$PM10_COUNT" -eq 0 ]; then
+    emit "PM10" "PASS" "EL implementation matches the parent (${PARENT_VER:-none})" 0
+else
+    emit "PM10" "FAIL" "EL implementation not managed by parent ${PARENT_VER:-?}" "$PM10_COUNT" "$PM10_MATCHES"
 fi
 
 if [ "$PM11_COUNT" -eq 0 ]; then

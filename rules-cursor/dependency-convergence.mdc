@@ -1,9 +1,8 @@
 ---
 description: "Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts each parent manages, enforcer rules from 8.0.2"
-paths:
-  - "pom.xml"
+globs: pom.xml
+alwaysApply: false
 ---
-
 # Dependency Convergence — Lutece 8
 
 ## The Baseline

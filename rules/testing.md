@@ -38,7 +38,8 @@ paths:
 </dependency>
 
 <!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB.
-     The EL implementation is org.glassfish.expressly:expressly. -->
+     EL implementation: org.glassfish.expressly:expressly with parent 8.0.2+,
+     org.glassfish:jakarta.el with parent 8.0.0 / 8.0.1 (only one is managed). -->
 <dependency>
     <groupId>org.hibernate.validator</groupId>
     <artifactId>hibernate-validator</artifactId>

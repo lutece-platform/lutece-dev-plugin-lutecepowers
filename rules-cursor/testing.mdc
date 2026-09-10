@@ -35,15 +35,17 @@ alwaysApply: false
     <scope>test</scope>
 </dependency>
 
-<!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB -->
+<!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB.
+     EL implementation: org.glassfish.expressly:expressly with parent 8.0.2+,
+     org.glassfish:jakarta.el with parent 8.0.0 / 8.0.1 (only one is managed). -->
 <dependency>
     <groupId>org.hibernate.validator</groupId>
     <artifactId>hibernate-validator</artifactId>
     <scope>test</scope>
 </dependency>
 <dependency>
-    <groupId>org.glassfish</groupId>
-    <artifactId>jakarta.el</artifactId>
+    <groupId>org.glassfish.expressly</groupId>
+    <artifactId>expressly</artifactId>
     <scope>test</scope>
 </dependency>
 <dependency>
@@ -54,6 +56,7 @@ alwaysApply: false
 ```
 
 Versions are managed by the Lutece global POM — do NOT specify `<version>` for these.
+See `dependency-convergence.md` for the Jakarta EE 10 baseline and the enforcer rules.
 
 ## Test Base Classes
 
