@@ -41,7 +41,7 @@ jq '{
   teammate: "config-migrator",
   tasks: {
     pom: {
-      description: "Migrate pom.xml: parent 8.0.0, bump version, remove Spring/EhCache/Jersey deps, add library-lutece-unit-testing",
+      description: "Migrate pom.xml: parent 8.0.2, bump version, remove Spring/EhCache/Jersey deps, rename jakarta.el to expressly, add library-lutece-unit-testing",
       project: .project
     },
     beansXml: {

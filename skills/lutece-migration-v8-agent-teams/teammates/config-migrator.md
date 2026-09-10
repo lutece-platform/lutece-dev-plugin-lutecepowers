@@ -28,7 +28,7 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 
 ## Step 1: POM Migration
 
-1. Update `<parent>` version to latest `8.x` release (currently `8.0.0`). Use the release version, NOT a SNAPSHOT
+1. Update `<parent>` version to **`8.0.2`** — the version that makes the test classpath converge (see `rules/dependency-convergence.md`). Use the release version, NOT a SNAPSHOT
 2. Bump artifact `<version>` by one major (e.g., `4.2.1-SNAPSHOT` → `5.0.0-SNAPSHOT`)
 3. **Remove** these dependencies:
    - `org.springframework.*` (all Spring artifacts)
@@ -55,6 +55,10 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 9. For **libraries**: replace `lutece-core` dependency with `library-core-utils` if the library should not depend on full core
 10. **Remove** Jira properties: `<jiraProjectName>` and `<jiraComponentId>` from `<properties>` block
 11. **Convert** bounded version ranges to open ranges: `[X,Y)` → `[X,)`. Upper bounds are unnecessary in v8
+12. **Rename** the test EL implementation if present: `org.glassfish:jakarta.el` → `org.glassfish.expressly:expressly`. The old artifact stopped at the `5.0.0-M1` milestone and is no longer managed by the parent — leaving it produces a dependency with no version and fails the build
+13. **Remove** any `<version>` on a dependency the parent already manages: `library-lutece-unit-testing`, `hibernate-validator`, `expressly`, `jaxb-runtime`, `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
+14. **Stay on Jakarta EE 10.** Do not introduce EE 11 artifacts — `jakarta.annotation-api` 3.0.0, `weld-junit5` 5.x (Weld 6 / CDI 4.1), `jakarta.el-api` 6.x. They resolve fine and break at runtime
+15. **Expect the enforcer to check the test scope.** `requireUpperBoundDeps` and `dependencyConvergence` only exclude the `provided` scope. A conflict between test dependencies fails the build — align the versions, do not widen `excludedScopes`
 
 ## Step 2: Create beans.xml
 
