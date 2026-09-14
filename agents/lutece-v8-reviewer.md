@@ -48,7 +48,7 @@ bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify
 
 Parse the output:
 - **scan-project.sh** gives the project inventory (type, files, dependencies, migration scope). Use this as context for Phase B.
-- **verify-migration.sh** gives PASS/FAIL/WARN for 70+ checks (POM, javax, Spring, events, cache, deprecated API, deprecated libraries, DAO, CDI patterns, web config, JSP, templates, logging, tests, structure). Collect all FAIL and WARN items — these go directly into the final report under their respective categories.
+- **verify-migration.sh** gives PASS/FAIL/WARN for 80+ checks (POM, javax, Spring, events, cache, deprecated API, deprecated libraries, DAO, JPA, CDI patterns, web config, JSP, templates, logging, tests, structure). Collect all FAIL and WARN items — these go directly into the final report under their respective categories.
 
 The script covers report checks **1, 2, 3 (partial), 4 (partial), 6, 7 (partial), 8, 9, 10** mechanically. Do NOT re-grep for patterns the script already checked.
 
@@ -71,7 +71,8 @@ Create a task list for the semantic checks only:
 12. Verify ConfigProperty vs AppPropertiesService usage
 13. Check jQuery → Vanilla JS ES6 conversion
 14. Check the CSRF policy (`securityTokenEnabled`)
-15. Compile final report
+15. JPA projects (`persistence.hasJpa`): entities whose `equals`/`hashCode` include a collection, new objects reachable through a relation without `cascade = PERSIST` before a flush, `EntityManager`/`DAOUtil` mixed outside `@Transactional`, JPQL calling database functions without `FUNCTION( )` (`persistence-patterns.md` §5–§7)
+16. Compile final report
 ```
 
 These checks require reading code, understanding context, and comparing against references. The script cannot do them.

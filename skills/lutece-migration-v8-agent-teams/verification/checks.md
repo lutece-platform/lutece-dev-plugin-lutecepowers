@@ -43,6 +43,7 @@
 | JX06 | FAIL | javax.ws.rs | `javax\.ws\.rs` | *.java |
 | JX07 | FAIL | javax.xml.bind | `javax\.xml\.bind` | *.java |
 | JX08 | FAIL | javax.transaction | `javax\.transaction` (non-cache) | *.java |
+| JX09 | FAIL | javax.persistence | `javax\.persistence` | *.java |
 
 ## Spring Residues (SP)
 
@@ -95,6 +96,20 @@
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | DA01 | WARN | daoUtil.free() | `daoUtil\.free( )` | *.java |
+
+## JPA (JP)
+
+Rules in `patterns/persistence-patterns.md`: the API only, the provider of the container (EclipseLink, `persistence-3.1`).
+
+| ID | Severity | Description | Pattern | Files |
+|----|----------|-------------|---------|-------|
+| JP01 | FAIL | Hibernate imports | `import org\.hibernate\.[^v]` (hibernate-validator excluded) | *.java |
+| JP02 | FAIL | JPA provider in pom.xml | `hibernate-core\|hibernate-entitymanager\|module-jpa-hibernate\|spring-orm\|spring-data-jpa` | pom.xml |
+| JP03 | FAIL | Hibernate settings in persistence.xml | `hibernate\.\|HibernatePersistenceProvider` | persistence.xml |
+| JP04 | FAIL | Parenthesised collection parameter | `IN (:\|IN (?\|IN(:\|IN(?` | *.java |
+| JP05 | WARN | Named parameters in native SQL | `:name` inside string literals of files calling `createNativeQuery` (heuristic) | *.java |
+| JP06 | WARN | shared-cache-mode missing | `<shared-cache-mode>` absent | persistence.xml |
+| JP07 | WARN | persistenceContainer-3.1 feature | `persistenceContainer-3\.1` | server.xml |
 
 ## CDI Patterns (CD)
 
@@ -178,9 +193,9 @@
 
 | Severity | Count |
 |----------|-------|
-| FAIL | 58 |
-| WARN | 20 |
-| **Total** | **78** |
+| FAIL | 63 |
+| WARN | 23 |
+| **Total** | **86** |
 
 Counts taken from a `verify-migration.sh --json` run (`.migration/verify-latest.json`, field `total`).
 
@@ -188,7 +203,7 @@ Counts taken from a `verify-migration.sh --json` run (`.migration/verify-latest.
 
 | File type | Checks applied |
 |-----------|---------------|
-| `*.java` (main) | JX01-08, SP01-02, SP04, CD04, DA01, LG01, DP03, MV01 (if JspBean/XPage) |
+| `*.java` (main) | JX01-09, JP01, JP04, SP01-02, SP04, CD04, DA01, LG01, DP03, MV01 (if JspBean/XPage) |
 | `*.java` (test) | Above + TS01-08 |
 | `*.html` (admin) | TM01, TM02, TM04, TM06 |
 | `*.html` (skin) | TM02, TM04 |

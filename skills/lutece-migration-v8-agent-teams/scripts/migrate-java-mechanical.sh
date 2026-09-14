@@ -47,6 +47,7 @@ for file in "${FILES[@]}"; do
     for pair in \
         'javax\.servlet:jakarta.servlet' \
         'javax\.validation:jakarta.validation' \
+        'javax\.persistence:jakarta.persistence' \
         'javax\.annotation\.PostConstruct:jakarta.annotation.PostConstruct' \
         'javax\.annotation\.PreDestroy:jakarta.annotation.PreDestroy' \
         'javax\.inject:jakarta.inject' \

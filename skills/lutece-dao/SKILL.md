@@ -5,6 +5,8 @@ description: "Use when creating, modifying or reviewing a Lutece 8 DAO, Home or 
 
 # DAO & Home Patterns — Lutece 8
 
+`DAOUtil` is the data layer of new code. A plugin that already carries a JPA model keeps it on the `jakarta.persistence` API with the EclipseLink provider of the container (`persistence-3.1`): `lutece-migration-v8-agent-teams/patterns/persistence-patterns.md`.
+
 > Before writing DAO or Home code, consult `~/.lutece-references/lutece-core/` and `~/.lutece-references/lutece-form-plugin-forms/` using Read, Grep and Glob.
 
 ## DAO Class Structure

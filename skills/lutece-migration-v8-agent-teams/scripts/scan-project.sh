@@ -90,7 +90,7 @@ while IFS= read -r file; do
     PKG=$(grep -m1 '^package ' "$file" 2>/dev/null | sed 's/package \(.*\);/\1/' | tr -d ' \r' || echo "")
 
     # Counts
-    JAVAX_COUNT=$(grep -c 'import javax\.\(servlet\|validation\|annotation\.PostConstruct\|annotation\.PreDestroy\|inject\|enterprise\|ws\.rs\|xml\.bind\)' "$file" 2>/dev/null || true)
+    JAVAX_COUNT=$(grep -c 'import javax\.\(servlet\|validation\|annotation\.PostConstruct\|annotation\.PreDestroy\|inject\|enterprise\|ws\.rs\|xml\.bind\|persistence\)' "$file" 2>/dev/null || true)
     SPRING_COUNT=$(grep -c 'import org\.springframework' "$file" 2>/dev/null || true)
     SPRING_LOOKUP=$(grep -c 'SpringContextService' "$file" 2>/dev/null || true)
     GETINSTANCE_COUNT=$(grep -c '\.getInstance( )' "$file" 2>/dev/null || true)
@@ -105,6 +105,8 @@ while IFS= read -r file; do
     HAS_REST=false
     grep -q '@Path\|@GET\|@POST\|@PUT\|@DELETE' "$file" 2>/dev/null && HAS_REST=true
 
+    HAS_JPA=false
+    grep -q 'jakarta\.persistence\|javax\.persistence\|org\.hibernate\.[^v]\|createNativeQuery\|createQuery' "$file" 2>/dev/null && HAS_JPA=true
     HAS_CDI=false
     grep -q '@ApplicationScoped\|@RequestScoped\|@SessionScoped\|@Dependent\|@Inject\|@Named\|@Produces' "$file" 2>/dev/null && HAS_CDI=true
 
@@ -139,7 +141,7 @@ while IFS= read -r file; do
     # Home class detection (static facade)
     grep -q 'class.*Home\b' "$file" 2>/dev/null && grep -q 'private.*Home( )' "$file" 2>/dev/null && CLASS_TYPE="home"
 
-    FILE_JSON="{\"path\":\"$file\",\"classType\":\"$CLASS_TYPE\",\"package\":\"$PKG\",\"javaxImports\":$JAVAX_COUNT,\"springImports\":$SPRING_COUNT,\"springLookups\":$SPRING_LOOKUP,\"getInstanceCalls\":$GETINSTANCE_COUNT,\"eventPatterns\":$HAS_EVENTS,\"cachePatterns\":$HAS_CACHE,\"restPatterns\":$HAS_REST,\"paginationPatterns\":$HAS_PAGINATION,\"existingCDI\":$HAS_CDI,\"deprecatedPatterns\":$DEPRECATED}"
+    FILE_JSON="{\"path\":\"$file\",\"classType\":\"$CLASS_TYPE\",\"package\":\"$PKG\",\"javaxImports\":$JAVAX_COUNT,\"springImports\":$SPRING_COUNT,\"springLookups\":$SPRING_LOOKUP,\"getInstanceCalls\":$GETINSTANCE_COUNT,\"eventPatterns\":$HAS_EVENTS,\"cachePatterns\":$HAS_CACHE,\"restPatterns\":$HAS_REST,\"paginationPatterns\":$HAS_PAGINATION,\"existingCDI\":$HAS_CDI,\"jpaPatterns\":$HAS_JPA,\"deprecatedPatterns\":$DEPRECATED}"
 
     if $IS_TEST; then
         $FIRST_TEST || TEST_JSON="$TEST_JSON,"
@@ -285,7 +287,7 @@ TEST_FILES=$(find src/ -name "*.java" -path '*/test/*' 2>/dev/null | wc -l)
 CONTEXT_FILES=$({ find webapp/ -name "*_context.xml" 2>/dev/null || true; } | wc -l)
 SPRING_LOOKUPS=$(gcount -rn 'SpringContextService' src/ --include="*.java" 2>/dev/null)
 GETINSTANCE_CALLS=$(gcount -rn '\.getInstance( )' src/ --include="*.java" 2>/dev/null)
-JAVAX_IMPORTS=$(gcount -rn 'import javax\.\(servlet\|validation\|annotation\.PostConstruct\|annotation\.PreDestroy\|inject\|enterprise\|ws\.rs\|xml\.bind\)' src/ --include="*.java" 2>/dev/null)
+JAVAX_IMPORTS=$(gcount -rn 'import javax\.\(servlet\|validation\|annotation\.PostConstruct\|annotation\.PreDestroy\|inject\|enterprise\|ws\.rs\|xml\.bind\|persistence\)' src/ --include="*.java" 2>/dev/null)
 EVENT_LISTENERS=$(gcount -rln 'EventRessourceListener\|LuteceUserEventManager\|QueryListenersService\|AbstractEventManager' src/ --include="*.java" 2>/dev/null)
 CACHE_SERVICES=$(gcount -rln 'AbstractCacheableService\|net\.sf\.ehcache' src/ --include="*.java" 2>/dev/null)
 ADMIN_TEMPLATES=$({ find webapp/WEB-INF/templates/admin/ -name "*.html" 2>/dev/null || true; } | wc -l)
@@ -297,9 +299,17 @@ DAO_FREE=$(gcount -rn 'daoUtil\.free( )' src/ --include="*.java" 2>/dev/null)
 DEPRECATED_GETMODEL=$(gcount -rn 'getModel( )' src/ --include="*.java" 2>/dev/null)
 DEPRECATED_HASHMAP=$({ grep -rln 'new HashMap' src/ --include="*.java" -not -path '*/test/*' 2>/dev/null || true; } | while read -r f; do grep -l 'MVCAdminJspBean\|MVCApplication' "$f" 2>/dev/null; done | wc -l)
 FILEUPLOAD_REFS=$(gcount -rn 'org\.apache\.commons\.fileupload' src/ --include="*.java" 2>/dev/null)
+HAS_JPA_PROJECT=false
+{ [ -f src/main/resources/META-INF/persistence.xml ] || [ -f webapp/WEB-INF/classes/META-INF/persistence.xml ] || grep -rq '@Entity\b' src/ --include="*.java" 2>/dev/null; } && HAS_JPA_PROJECT=true
+HIBERNATE_IMPORTS=$(gcount -rn 'import org\.hibernate\.[^v]' src/ --include="*.java" 2>/dev/null)
+JPA_NAMED_NATIVE_PARAMS=$({ grep -rl 'createNativeQuery' src/ --include="*.java" 2>/dev/null || true; } | xargs -r grep -n '"[^"]*[=(, ]:[a-zA-Z_][a-zA-Z0-9_]*' 2>/dev/null | { grep -v '::\|://\|createQuery(\|\.class\|\(FROM\|UPDATE\|JOIN\) [A-Z][a-zA-Z]* ' || true; } | wc -l)
+JPA_IN_PAREN_PARAMS=$(gcount -rn 'IN (:\|IN (?\|IN(:\|IN(?' src/ --include="*.java" 2>/dev/null)
+JPA_HQL_FUNCTIONS=$(gcount -rn '"[^"]*\(REPLACE\|replace\|str\|STR\|unaccent\|date_trunc\|to_char\|TO_CHAR\)( [^"]*"' src/ --include="*.java" 2>/dev/null)
+HAS_SPRING_JDBC=false
+grep -rq 'JdbcTemplate' src/ --include="*.java" 2>/dev/null && HAS_SPRING_JDBC=true
 SHUTDOWN_SERVICE_IMPLS=$(gcount -rn 'implements\s\+\(.*,\s*\)*ShutdownService\b' src/ --include="*.java" 2>/dev/null)
 
-TOTAL_ISSUES=$((SPRING_LOOKUPS + GETINSTANCE_CALLS + JAVAX_IMPORTS + EVENT_LISTENERS + CACHE_SERVICES + DAO_FREE + DEPRECATED_GETMODEL + FILEUPLOAD_REFS + SHUTDOWN_SERVICE_IMPLS))
+TOTAL_ISSUES=$((SPRING_LOOKUPS + GETINSTANCE_CALLS + JAVAX_IMPORTS + EVENT_LISTENERS + CACHE_SERVICES + DAO_FREE + DEPRECATED_GETMODEL + FILEUPLOAD_REFS + SHUTDOWN_SERVICE_IMPLS + HIBERNATE_IMPORTS + JPA_NAMED_NATIVE_PARAMS + JPA_IN_PAREN_PARAMS))
 
 # Migration scope
 SCOPE="ALREADY_MIGRATED"
@@ -369,6 +379,14 @@ cat << ENDJSON
     "deprecatedNewHashMap": $DEPRECATED_HASHMAP,
     "shutdownServiceImpls": $SHUTDOWN_SERVICE_IMPLS,
     "fileuploadRefs": $FILEUPLOAD_REFS,
+    "persistence": {
+      "hasJpa": $HAS_JPA_PROJECT,
+      "hasSpringJdbc": $HAS_SPRING_JDBC,
+      "hibernateImports": $HIBERNATE_IMPORTS,
+      "namedNativeParams": $JPA_NAMED_NATIVE_PARAMS,
+      "inParenParams": $JPA_IN_PAREN_PARAMS,
+      "hqlFunctions": $JPA_HQL_FUNCTIONS
+    },
     "totalMigrationPoints": $TOTAL_ISSUES,
     "scope": "$SCOPE",
     "hasUnitTestingDep": $HAS_UNIT_TESTING_DEP,

@@ -34,6 +34,10 @@ Every DAO has an `IEntityDAO` interface with `insert`, `load`, `store`, `delete`
 - `ReferenceList` for dropdowns (`<select>`)
 - `Optional<Entity>` for optional single results
 
+## Existing JPA Model
+
+Kept on the `jakarta.persistence` API, provider EclipseLink of the container (`persistence-3.1`, `persistence.xml` in JTA on `jdbc/portal`, `shared-cache-mode NONE`), no `org.hibernate` import, `DAOUtil` and `EntityManager` mixed only under `@Transactional` with `ManagedConnectionService`. Rules: `skills/lutece-migration-v8-agent-teams/patterns/persistence-patterns.md`.
+
 ## Reference
 
 For full code examples and DAOUtil parameter types: `/lutece-dao` skill.

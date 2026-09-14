@@ -87,6 +87,32 @@ check_pom() {
     fi
 }
 
+# JP05: named parameters (:name) inside native SQL strings; EclipseLink binds positional parameters only in native queries.
+check_named_native_params() {
+    local matches count=0
+    matches=$({ grep -rl 'createNativeQuery' src/ --include="*.java" 2>/dev/null || true; } | xargs -r grep -n '"[^"]*[=(, ]:[a-zA-Z_][a-zA-Z0-9_]*' 2>/dev/null | grep -v '::\|://\|createQuery(\|\.class\|\(FROM\|UPDATE\|JOIN\) [A-Z][a-zA-Z]* ' || true)
+    [ -n "$matches" ] && count=$(echo "$matches" | wc -l)
+    if [ "$count" -eq 0 ]; then
+        emit "JP05" "PASS" "Named parameters in native SQL" 0
+    else
+        emit "JP05" "WARN" "Named parameters in native SQL -> positional ?n (heuristic on string literals)" "$count" "$matches"
+    fi
+}
+
+# JP06: a JPA unit declares its shared cache mode; EclipseLink caches entities across transactions by default.
+check_persistence_xml() {
+    local px="src/main/resources/META-INF/persistence.xml"
+    if [ ! -f "$px" ]; then
+        emit "JP06" "PASS" "persistence.xml shared-cache-mode (no persistence unit)" 0
+        return
+    fi
+    if grep -q '<shared-cache-mode>' "$px" 2>/dev/null; then
+        emit "JP06" "PASS" "persistence.xml declares shared-cache-mode" 0
+    else
+        emit "JP06" "WARN" "persistence.xml without shared-cache-mode (EclipseLink shared cache on by default; NONE unless entities are @Cacheable)" 1 "$px"
+    fi
+}
+
 check_file_exists() {
     local id="$1" filepath="$2" severity="$3" description="$4"
     if [ -f "$filepath" ]; then
@@ -211,6 +237,7 @@ check_grep "JX04" 'javax\.inject' "src/" "FAIL" "javax.inject -> jakarta.inject"
 check_grep "JX05" 'javax\.enterprise' "src/" "FAIL" "javax.enterprise -> jakarta.enterprise"
 check_grep "JX06" 'javax\.ws\.rs' "src/" "FAIL" "javax.ws.rs -> jakarta.ws.rs"
 check_grep "JX07" 'javax\.xml\.bind' "src/" "FAIL" "javax.xml.bind -> jakarta.xml.bind"
+check_grep "JX09" 'javax\.persistence' "src/" "FAIL" "javax.persistence -> jakarta.persistence"
 check_grep "JX08" 'javax\.transaction\.Transactional\|import javax\.transaction\.[^x]' "src/" "FAIL" "javax.transaction -> jakarta.transaction"
 echo ""
 
@@ -273,6 +300,17 @@ echo ""
 # ─── DAO ─────────────────────────────────────────────────
 echo "CATEGORY: DAO"
 check_grep "DA01" 'daoUtil\.free( )' "src/" "WARN" "daoUtil.free() -> try-with-resources"
+echo ""
+
+# ─── JPA ─────────────────────────────────────────────────
+echo "CATEGORY: JPA (persistence-patterns.md)"
+check_grep "JP01" 'import org\.hibernate\.[^v]' "src/" "FAIL" "Hibernate imports -> jakarta.persistence API only (EclipseLink of the container)"
+check_pom "JP02" 'hibernate-core\|hibernate-entitymanager\|module-jpa-hibernate\|spring-orm\|spring-data-jpa' "FAIL" "JPA provider in pom.xml (the container provides EclipseLink)"
+check_grep "JP03" 'hibernate\.\|HibernatePersistenceProvider' "src/main/resources/META-INF/" "FAIL" "Hibernate settings in persistence.xml" "--include=persistence.xml"
+check_grep "JP04" 'IN (:\|IN (?\|IN(:\|IN(?' "src/" "FAIL" "Parenthesised collection parameter -> IN :param"
+check_named_native_params
+check_persistence_xml
+check_grep "JP07" 'persistenceContainer-3\.1' "src/main/liberty/" "WARN" "persistenceContainer-3.1 in server.xml (norm: persistence-3.1)" "--include=server.xml"
 echo ""
 
 # ─── CDI Patterns ────────────────────────────────────────

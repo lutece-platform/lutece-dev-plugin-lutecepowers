@@ -61,6 +61,12 @@ Read `${PATTERNS}/events-patterns.md` and apply all relevant transformations.
 
 Read `${PATTERNS}/cache-patterns.md` and apply. Key: override `put`/`get`/`remove` with `isCacheEnable() && isCacheAvailable()` guards.
 
+## Step 6b: JPA (conditional)
+
+**Only if your files have `jpaPatterns: true`.**
+
+Read `${PATTERNS}/persistence-patterns.md` and apply §5–§7: positional parameters in native SQL, `IN :param`, `FUNCTION( 'name', … )` for any database function, explicit `SELECT`, no `org.hibernate` import (`FlushModeType.COMMIT` replaces the read-only session, application exceptions replace Hibernate ones), collections out of `equals`/`hashCode`, no transient object on a relation without cascade before a flush.
+
 ## Step 7: Deprecated API (MANDATORY for all files)
 
 Per `${PATTERNS}/cdi-patterns.md` **§7** (Singleton/getInstance table) and **§16** (Models injection — **MANDATORY** for JspBean/XPage):
@@ -133,3 +139,4 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 | `patterns/mvc-patterns.md` | If migrating JspBeans or XPages |
 | `patterns/fileupload-patterns.md` | If `fileupload` in deprecatedPatterns |
 | `patterns/json-patterns.md` | If a file imports `net.sf.json` (Step 11) |
+| `patterns/persistence-patterns.md` | If `jpaPatterns: true` on any file (Step 6b) |

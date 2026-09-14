@@ -30,6 +30,7 @@ Read `.migration/scan.json` and show the user:
 - Migration scope (SMALL/MEDIUM/LARGE)
 - Total migration points
 - Recommended teammate count
+- Persistence base (`summary.persistence`): `hasJpa` → the JPA model is kept on the EclipseLink of the container (`patterns/persistence-patterns.md` §1); `hasSpringJdbc` → Spring JDBC kept as a library (§9)
 
 ### A.4 — Dependency v8 check (BLOCKER)
 For every Lutece dependency in `scan.json`:
@@ -189,6 +190,8 @@ Then:
 
 The scan reports counts only — these patterns require human judgment, no mechanical sed:
 
+- **JPA entities** (`persistence.hasJpa`) — `equals`/`hashCode` including a collection attribute, and a new object attached to a relation without `cascade = PERSIST` (inverse side included) before a flush: both pass with Hibernate and fail at runtime with EclipseLink (`persistence-patterns.md` §6). Only the e2e campaign on a fresh bench proves them.
+
 - **`shutdownServiceImpls`** — Classes implementing `fr.paris.lutece.portal.service.init.ShutdownService`. With CDI-managed `@ApplicationScoped` beans, replace with Jakarta-native `@PreDestroy` on a shutdown method. **Drop the interface entirely if `process()` does nothing meaningful** (no real cleanup work). When real cleanup exists:
   ```java
   // Before
@@ -216,7 +219,7 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI + net.sf.json imports | Java Migrators |
 | `migrate-template-mechanical.sh` | BO macros + null-safety (`--no-webxml` for the Template Migrator) | Template Migrator |
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
-| `verify-migration.sh` | 78 checks (see `verification/checks.md`), optional --json mode | Verifier |
+| `verify-migration.sh` | 86 checks (see `verification/checks.md`), optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |
@@ -235,3 +238,4 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `template-macros.md` | v8 Freemarker macros, jQuery→vanilla JS | Template Migrator |
 | `fileupload-patterns.md` | FileItem→MultipartItem | Java Migrators (if fileupload) |
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
+| `persistence-patterns.md` | JPA kept on EclipseLink (`persistence-3.1`), JPQL/native SQL rules, entity rules, Spring JDBC as library | Java Migrators + Config Migrator (if `persistence.hasJpa` or `hasSpringJdbc`) |

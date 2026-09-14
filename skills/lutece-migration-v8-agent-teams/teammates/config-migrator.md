@@ -34,13 +34,13 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
    - `org.springframework.*` (all Spring artifacts)
    - `net.sf.ehcache` (EhCache)
    - `com.sun.mail` / `javax.mail`
-   - `javax.persistence`
    - `org.quartz-scheduler`
    - `net.sourceforge.scannotation`
    - `org.glassfish.jersey.*` (Jersey)
    - `net.sf.json-lib`
 4. **Remove** `<springVersion>` property
 5. **Update** `lutece-core` to latest `8.x` release range `[8.0.0,)`
+5b. **JPA project** (`summary.persistence.hasJpa` in `.migration/scan.json`): apply `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/persistence-patterns.md` §2–§4 — `jakarta.persistence-api` in `provided`, no provider jar (`hibernate-core`, `module-jpa-hibernate`, `spring-orm`…), `persistence.xml` on `org.eclipse.persistence.jpa.PersistenceProvider` with `transaction-type="JTA"`, `jta-data-source jdbc/portal`, `shared-cache-mode NONE`, no `hibernate.*` property. For a site: feature `persistence-3.1` in `server.xml`, `ManagedConnectionService` + `portal.ds=jdbc/portal` in `db.properties`.
 6. **Update** all Lutece dependencies to their v8 versions — each dependency in `.migration/scan.json` has a `v8Version` field extracted from its reference POM. Use those exact versions. If `v8Version` is empty, read the version from `~/.lutece-references/<artifactId>/pom.xml`
 7. **Update** repository URLs from `http://` to `https://` (in `<repositories>`, `<pluginRepositories>`, `<distributionManagement>`)
 8. **Add** if not present:

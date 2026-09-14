@@ -41,7 +41,7 @@ jq '{
   teammate: "config-migrator",
   tasks: {
     pom: {
-      description: "Migrate pom.xml: parent = latest released 8.x (project.latestParent), bump version, remove Spring/EhCache/Jersey deps, EL implementation matching the parent, add library-lutece-unit-testing",
+      description: "Migrate pom.xml: parent = latest released 8.x (project.latestParent), bump version, remove Spring/EhCache/Jersey deps, JPA on the container provider (persistence-patterns.md) when summary.persistence.hasJpa, EL implementation matching the parent, add library-lutece-unit-testing",
       project: .project
     },
     beansXml: {
