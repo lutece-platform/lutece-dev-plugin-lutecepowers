@@ -38,7 +38,7 @@ fi
 ARTIFACT=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<artifactId>' | sed 's/.*<artifactId>\(.*\)<\/artifactId>.*/\1/' | tr -d ' \r')
 VERSION=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
 PARENT_VERSION=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
-LATEST_PARENT=$(curl -s -m 10 "https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml" 2>/dev/null | grep -o '<version>8\.[0-9.]*</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1)
+LATEST_PARENT=$(curl -sf -m 10 "https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml" 2>/dev/null | grep -o '<version>8\.[0-9.]*</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1 || true)
 
 # ─── Lutece Dependencies ────────────────────────────────
 
