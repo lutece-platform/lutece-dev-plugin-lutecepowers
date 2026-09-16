@@ -1,11 +1,21 @@
 {
   "name": "lutecepowers-v8",
   "displayName": "Lutecepowers",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Lutece 8 development toolkit for coding agents: skills, path-scoped rules, reference sources, migration and review workflows.",
-  "author": { "name": "Lutece", "url": "https://github.com/lutece-platform" },
+  "author": {
+    "name": "Lutece",
+    "url": "https://github.com/lutece-platform"
+  },
   "homepage": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers",
   "repository": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers",
   "license": "MIT",
-  "keywords": ["lutece", "java", "jakarta", "cdi", "migration", "skills"]
+  "keywords": [
+    "lutece",
+    "java",
+    "jakarta",
+    "cdi",
+    "migration",
+    "skills"
+  ]
 }

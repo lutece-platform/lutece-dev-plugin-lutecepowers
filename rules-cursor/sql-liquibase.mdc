@@ -46,6 +46,27 @@ ALTER TABLE appointment_slot ADD CONSTRAINT chk_... CHECK ( ... );
   Keep the policy line everywhere for consistency, but do not read it as a safety net — most scripts of the estate carry it with no condition attached, which is why replaying a non-idempotent `init_*` breaks the startup instead of being marked as ran.
 - Don't declare `ON DELETE CASCADE` to clean child tables — the house convention is a **restrictive FK + explicit `deleteByIdForm`/`deleteByIdSlot`** chained in the service (see `FormService.removeForm`).
 
+## The file name is parsed — digits only in the versions
+
+`SqlPathInfo` (library-sql-utils) recognises an upgrade script by a regular expression whose two versions are
+`[0-9]+(\.[0-9]+)*`: `update_db_<plugin>-<from>-<to>.sql`, `sql/upgrade/update_db_lutece_core-<from>-<to>.sql`.
+A name that does not match parses to `null` and the file is **dropped silently, twice**: the lutece-maven-plugin
+does not copy it to `WEB-INF/classes/sql/` at assembly, and `plugin-liquibase` would not include it at startup.
+No log line names it — the include log only lists files the parser understood.
+
+The core itself ships one: `update_db_lutece_core-7.1.x-8.0.0.sql`,
+400 lines — the whole 7 → 8 schema migration of the core (`core_theme` rebuilt, `core_mode` dropped, datastore
+keys) — is absent from every assembled v8 site because of the `x`. A site upgraded from 7.1.x under Liquibase
+gets `8.0.0-8.0.1` and `8.0.1-8.0.2` and never the step before. Only the destination version is compared to
+the installed one, so `7.1.9-8.0.0` would have been picked up by any 7.1.x site.
+
+Rules that follow:
+- **versions in a script name are digits and dots only** — no `x`, no `SNAPSHOT`, no `beta`;
+- a migration that changes a schema ships `update_db_<plugin>-<v7 version>-<v8 version>.sql` with a real
+  version on both sides; the destination is what decides, the source documents;
+- after `lutece:site-assembly`, compare `src/sql` with `WEB-INF/classes/sql`: a file missing there is a file
+  Liquibase will never see. `run.sh compare` (lutece-e2e) prints that difference.
+
 ## The failure mode is the whole webapp
 
 `db/changelog.xml` holds a single `<includeAll>` for the entire webapp, so every plugin is deployed by one `update()` call: one refused changeset fails all of them. `LiquibaseRunnerContext.setComponentVersion` only appends to an in-memory list, and `LiquibaseRunnerContext.close()` — which writes every `core.plugins.status.<plugin>.version` through `DatastoreService.setDataValue` — is reached only after a successful `update()`. A failed startup therefore records no version key at all, `LiquibaseRunner` rethrows a `RuntimeException` and `isCriticalService()` returns `true`: **Lutece does not start**, and this is not scoped to the guilty plugin.
@@ -71,6 +92,31 @@ ALTER TABLE my_table ADD COLUMN my_column VARCHAR(350);
 It holds in the three branches of the filter: executed on an empty database, `MARK_RAN` on a site that already got the column from an `update_*` script, no effect on a second pass.
 
 `-- validCheckSum: ANY` also silences a mismatch — on its own line, the attribute is ignored on the `changeset` line. But Liquibase does **not** rewrite the stored `MD5SUM`, so the directive can never be removed afterwards, and it disables the integrity check on scripts that usually begin with `DROP TABLE IF EXISTS`. Permanent debt, on the least forgiving file of the plugin.
+
+## What the creation script gains, existing sites never get
+
+A fresh bench runs `create_db_*.sql` and is green. An existing site runs only the `update_db_*` scripts newer
+than its recorded version. So every column or table added to `create_db` during the migration needs its own
+`update_db_<plugin>-<v7 version>-<v8 version>.sql` (digits and dots only in the versions), with a **real**
+precondition scoped on the current schema:
+
+```sql
+-- liquibase formatted sql
+-- changeset <plugin>:update_db_<plugin>-1.0.12-2.0.0.sql
+-- preconditions onFail:MARK_RAN onError:WARN
+-- precondition-sql-check expectedResult:0 SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=database() AND TABLE_NAME='my_table' AND COLUMN_NAME='my_column';
+ALTER TABLE my_table ADD COLUMN my_column varchar(255) default '';
+```
+
+Do not trust an older upgrade that (re)creates the table: it created it as it was then, without the column
+(an older upgrade recreates a history table as it was then, the v8 DAO writes a new column into it, every v7
+base answers `Unknown column`). `verify-migration.sh` SQ02 diffs the
+creation scripts against the last commit and fails on an addition no upgrade script covers; `run.sh compare`
+of the e2e skill proves it on a real v7 base.
+
+The symptom hides: `DAOUtil.free` throws `NullPointerException` (`results` is null) inside the error path of
+`executeUpdate`, so the visible stack is a NPE in `DAOUtil.free`, not the `SQLException`. Read the log for
+`Unknown column` / `doesn't exist` a few lines above.
 
 ## Why it bites only in v8
 

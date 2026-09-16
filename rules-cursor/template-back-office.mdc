@@ -149,3 +149,31 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - **NEVER** use CDN links. All third-party JS/CSS must be downloaded and placed locally.
 - JS files go in `webapp/js/{pluginName}/`
 - CSS files go in `webapp/css/{pluginName}/`
+
+## Auto-escaping — write templates that render the same in both modes (LUT-33153, upstream in progress)
+
+The core carries `service.freemarker.templateAutoEscape` (default `false`). A branch of `lutece-core`
+(`LUT-33153-autoescape-bicompat`; check `git branch -r` of the core reference to know whether it has merged) makes the whole rendering pass with the property
+at `true`, ships codemods (`tools/autoescape/`) and a guide, and states the order of work: core first as a
+compatibility pass, then every plugin, then the property. A plugin template written today has to survive both
+values, and four built-ins do not: `?html` and `?xhtml` are a **ParseException** when the property is `true`,
+`?no_esc` and `?esc` when it is `false` — the template does not load at all.
+
+| Goal | Do not write | Write |
+|---|---|---|
+| Print HTML unescaped | `${x?no_esc}` | `<#noautoesc>${x}</#noautoesc>` |
+| Escape explicitly | `${x?html}`, `${x?esc}` | `<#outputformat "HTML">${x}</#outputformat>` |
+| Escape inside a macro argument (a directive cannot sit in a string) | `params='title="${x?html}"'` | capture first: `<#assign p><#outputformat "HTML">title="${x}"</#outputformat></#assign>` then `params=p` |
+| Test a captured block | `c != ''`, `c = ''` | `c?has_content`, `!c?has_content` |
+| Pass a bundle of attributes to a macro | `<#assign p = 'title="x"'>` | `<#assign p>title="x"</#assign>` |
+
+Why the capture: under auto-escaping a block capture is *markup* (already-safe HTML) and a string literal is
+not — a string holding HTML gets escaped a second time when a macro prints it. Escaping through a captured
+`<#outputformat "HTML">` block is what `?html` did, and it parses under both settings.
+
+HTML built on the Java side cannot be told apart from text by the template: on the branch the model carries it
+as `HtmlMarkup.of( html )` and the template prints a plain `${x}`. Until that reaches develop, skin templates
+run with an undefined output format and print the value as it is — do not add `?no_esc` there, it is refused.
+
+Do **not** put `<#ftl output_format="HTML" auto_esc=true>` at the top of plugin templates as a migration
+vehicle: a non-migrated caller feeding a migrated macro double-escapes, and nothing catches it.

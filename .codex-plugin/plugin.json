@@ -1,12 +1,22 @@
 {
   "name": "lutecepowers-v8",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Lutece 8 development toolkit for coding agents: skills, path-scoped rules, reference sources, migration and review workflows.",
-  "author": { "name": "Lutece", "url": "https://github.com/lutece-platform" },
+  "author": {
+    "name": "Lutece",
+    "url": "https://github.com/lutece-platform"
+  },
   "homepage": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers",
   "repository": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers",
   "license": "MIT",
-  "keywords": ["lutece", "java", "jakarta", "cdi", "migration", "skills"],
+  "keywords": [
+    "lutece",
+    "java",
+    "jakarta",
+    "cdi",
+    "migration",
+    "skills"
+  ],
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "interface": {
@@ -15,8 +25,14 @@
     "longDescription": "Architecture patterns, DAO/service/web rules, workflow, RBAC, cache and search skills, migration to v8, scalability proofs for the Lutece platform.",
     "developerName": "Lutece",
     "category": "Developer Tools",
-    "capabilities": ["Read", "Write"],
-    "defaultPrompt": ["Migrate this Lutece plugin to v8.", "Review this Lutece plugin for v8 compliance."],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Migrate this Lutece plugin to v8.",
+      "Review this Lutece plugin for v8 compliance."
+    ],
     "websiteURL": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers"
   }
 }
