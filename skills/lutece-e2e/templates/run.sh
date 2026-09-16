@@ -357,6 +357,14 @@ cmd_compare() {
   # --no-deps: dbinit normally waits for the v8 container to be healthy (Liquibase creates the schema there);
   # here the schema comes from the v7 Ant build and the v8 container must stay down until phase 4.
   E2E_VERSION=v7 "${COMPOSE[@]}" run --rm --no-deps dbinit
+  # The v7 Ant build continues on SQL errors, so a plugin whose init_core targets tables the chosen v7 core has
+  # already dropped installs silently half-way — and the comparison then reads "corrigé" where the bench simply
+  # did not prepare v7. Say it here, with the way out.
+  docker logs "$APP7" 2>&1 | grep -q "core_style.*doesn't exist" && cat <<'WARN'
+>> WARNING: this plugin's v7 SQL writes core_style* and the core E2E_V7_CORE no longer has those tables.
+>> The v7 portlet will render nothing and every portlet scenario will read as "corrigé" in the comparison.
+>> Set E2E_V7_CORE to a core that still carries them (7.1.8) in e2e.conf, and run compare again.
+WARN
   # The v8 site must take over the v7 database as a site would hand it over — seeded and used, not consumed:
   # the suites create, modify and delete rows (the forms fuzzer posts every form it finds). The seeded state is
   # kept and restored before the hand-over, so what the v8 legs sees is deterministic.
