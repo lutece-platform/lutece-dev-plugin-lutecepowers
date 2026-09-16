@@ -27,7 +27,9 @@ Step vocabulary (one key per step):
   dom_set: {var: name, selector: ..., attr: name | text}   store an attribute (or the text) of the first match
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
                                    {subject: text} restricts to a subject; state that lives in the mail queue
-  http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...}
+  http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...,
+         poll: seconds}          `poll` repeats the call until the assertions hold (an asynchronous action:
+                                   a daemon, an @Asynchronous task); without it one call, one verdict
                                    call an endpoint as a client would, not as a browser: the Accept header is yours,
                                    the answer is asserted on its status and its body. For a REST api, whose consumers
                                    are programs; `body` and `headers` complete a POST. {fresh: true} calls as a
@@ -68,6 +70,7 @@ import os
 import pathlib
 import random
 import re
+import time
 import string
 
 import pytest
@@ -233,28 +236,46 @@ def run_step(page, step, vars_, record):
         fetch = {"method": method, "headers": headers, "data": arg.get("body")}
         if arg.get("follow") is False:
             fetch["max_redirects"] = 0
-        for _ in range(times):
-            if arg.get("fresh"):
-                ctx = page.context.browser.new_context()
-                try:
-                    resp = ctx.request.fetch(lutece.url(arg["url"]), **fetch)
+        def call():
+            body = status = location = None
+            for _ in range(times):
+                if arg.get("fresh"):
+                    ctx = page.context.browser.new_context()
+                    try:
+                        resp = ctx.request.fetch(lutece.url(arg["url"]), **fetch)
+                        body, status, location = _body(resp), resp.status, resp.headers.get("location", "")
+                    finally:
+                        ctx.close()
+                else:
+                    resp = page.request.fetch(lutece.url(arg["url"]), **fetch)
                     body, status, location = _body(resp), resp.status, resp.headers.get("location", "")
-                finally:
-                    ctx.close()
-            else:
-                resp = page.request.fetch(lutece.url(arg["url"]), **fetch)
-                body, status, location = _body(resp), resp.status, resp.headers.get("location", "")
-        record["http_status"] = status
-        if arg.get("location_contains"):
-            assert arg["location_contains"] in location, "http %s %s: redirected to %r, expected it to contain %r" % (
-                method, arg["url"], location, arg["location_contains"])
-        if arg.get("expect_status"):
-            assert status == int(arg["expect_status"]), "http %s %s: status %d, expected %s\n%s" % (
-                method, arg["url"], status, arg["expect_status"], body[:300])
-        for needle in ([arg["contains"]] if isinstance(arg.get("contains"), str) else (arg.get("contains") or [])):
-            assert needle in body, "http %s %s: %r absent from the answer\n%s" % (method, arg["url"], needle, body[:300])
-        for needle in ([arg["not_contains"]] if isinstance(arg.get("not_contains"), str) else (arg.get("not_contains") or [])):
-            assert needle not in body, "http %s %s: %r present in the answer\n%s" % (method, arg["url"], needle, body[:300])
+            return body, status, location
+
+        def check(body, status, location):
+            if arg.get("location_contains"):
+                assert arg["location_contains"] in location, "http %s %s: redirected to %r, expected it to contain %r" % (
+                    method, arg["url"], location, arg["location_contains"])
+            if arg.get("expect_status"):
+                assert status == int(arg["expect_status"]), "http %s %s: status %d, expected %s\n%s" % (
+                    method, arg["url"], status, arg["expect_status"], body[:300])
+            for needle in ([arg["contains"]] if isinstance(arg.get("contains"), str) else (arg.get("contains") or [])):
+                assert needle in body, "http %s %s: %r absent from the answer\n%s" % (method, arg["url"], needle, body[:300])
+            for needle in ([arg["not_contains"]] if isinstance(arg.get("not_contains"), str) else (arg.get("not_contains") or [])):
+                assert needle not in body, "http %s %s: %r present in the answer\n%s" % (method, arg["url"], needle, body[:300])
+
+        # `poll`: an asynchronous effect (a daemon pass, an @Asynchronous task) is proven by asking until it shows,
+        # within a bound; the last failure is the one reported.
+        deadline = time.time() + float(arg.get("poll", 0))
+        while True:
+            body, status, location = call()
+            record["http_status"] = status
+            try:
+                check(body, status, location)
+                break
+            except AssertionError:
+                if time.time() >= deadline:
+                    raise
+                time.sleep(2)
     elif key == "fake_log":
         lines = lutece.fake_log_lines(arg["channel"], arg.get("contains"))
         if arg.get("absent"):

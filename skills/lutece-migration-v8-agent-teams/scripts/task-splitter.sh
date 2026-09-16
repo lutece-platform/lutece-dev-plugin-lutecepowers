@@ -131,13 +131,17 @@ fi
 
 # ─── Home/Interface files — assign to java-migrator-0 (usually just @Inject updates)
 
-jq '{
-  teammate: "java-migrator-0",
-  note: "Home and interface files: usually only need import updates, no scope changes",
-  homeFiles: [.files.java[] | select(.classType == "home")],
-  interfaceFiles: [.files.java[] | select(.classType == "interface")]
-}' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-homes.json"
-echo "  Created tasks-java-homes.json"
+if [ "$(jq '[.files.java[] | select(.classType == "home" or .classType == "interface")] | length' "$SCAN_FILE")" -gt 0 ]; then
+  jq '{
+    teammate: "java-migrator-0",
+    note: "Home and interface files: usually only need import updates, no scope changes",
+    homeFiles: [.files.java[] | select(.classType == "home")],
+    interfaceFiles: [.files.java[] | select(.classType == "interface")]
+  }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-java-homes.json"
+  echo "  Created tasks-java-homes.json"
+else
+  rm -f "$OUTPUT_DIR/tasks-java-homes.json"
+fi
 
 # ─── Template tasks ──────────────────────────────────────
 

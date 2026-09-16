@@ -147,18 +147,20 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | ST02 | FAIL | final on a CDI class resolved by its concrete type | (cross-file check) | *.java |
 | ST03 | WARN | DAO without CDI scope | (cross-file check) | *.java |
 | ST04 | WARN | Service without CDI scope | (cross-file check) | *.java |
-| ST05 | FAIL | files created by the migration untracked by git | `git ls-files --error-unmatch` | beans.xml, test microprofile-config |
+| ST05 | FAIL | files created by the migration excluded by .gitignore (they would never be committed) | `git check-ignore` | beans.xml, test microprofile-config |
+| LE01 | WARN | line endings converted in a changed file (diff widened to the whole file) | `git diff --numstat` vs `--ignore-cr-at-eol` | changed files |
 
 **ST02** — `final` is legal and is the core's own pattern when the bean is resolved only
 through its interface (`@ApplicationScoped public final class XDAO implements IXDAO`, twelve
 such classes in lutece-core). The check only fails when the code injects or selects the
 **concrete** type, which is the case CDI cannot proxy. See `cdi-patterns.md` §1.
 
-**ST05** — ST01 only proves the file sits on disk. `git commit -a` never picks up an
-untracked file, so the plugin ships without its CDI descriptor; at the next clone the Home
-static initializer dies with `UnsatisfiedResolutionException` and every portlet call fails
-with `NoClassDefFoundError` — and the build still prints `BUILD SUCCESS` because the parent pom sets
-`testFailureIgnore`.
+**ST05** — ST01 only proves the file sits on disk. A file `.gitignore` excludes never reaches the
+repository, so the plugin ships without its CDI descriptor; at the next clone the Home static
+initializer dies with `UnsatisfiedResolutionException` and every portlet call fails with
+`NoClassDefFoundError` — and the build still prints `BUILD SUCCESS` because the parent pom sets
+`testFailureIgnore`. Untracked-but-not-ignored is not a finding: the skill stages with `git add -A`
+after the gate.
 
 ## SQL (SQ)
 
@@ -176,6 +178,8 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | XS01 | FAIL | portlet still rendered by XSL | (cross-file check) | *.java, src/sql, *.xsl |
+| XT01 | FAIL | XSL services or `core_style*` tables used without `plugin-xmltransformer` declared | (cross-file check) | *.java, src/sql, pom.xml |
+| CS02 | FAIL | content service calling the cache methods v8 removed from `ContentService` | `extends ContentService` + `initCache\|getFromCache\|putInCache` | *.java |
 | TL01 | FAIL | ThreadLocal not cleared with remove() | (cross-file check) | *.java |
 | CS01 | FAIL | portlet JspBean mutations without a CSRF token | (cross-file check) | *.java |
 | I18N01 | FAIL | i18n key repeating the plugin prefix | (cross-file check) | *_messages*.properties |

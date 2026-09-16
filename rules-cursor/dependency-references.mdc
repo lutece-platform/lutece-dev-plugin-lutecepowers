@@ -19,7 +19,7 @@ When a user's request (feature, bug, question) involves — explicitly or implic
    ```bash
    curl -s "https://raw.githubusercontent.com/{org}/{repo}/develop/pom.xml" | grep -A3 '<parent>' | grep '<version>'
    ```
-5. **Clone into references** — add `{repo}` (or `{org}/{repo}` outside `lutece-platform`) to the `REPOS` array of `${LUTECEPOWERS_ROOT}/hooks/sync-references` and run that hook: it clones `develop` and fetches the v7 branches (see `using-lutecepowers`, Mandatory reads)
+5. **Clone into references yourself** — `git clone --branch develop https://github.com/{org}/{repo}.git ~/.lutece-references/{repo}` then `git -C ~/.lutece-references/{repo} fetch origin 'refs/heads/*_core7:refs/remotes/origin/*_core7'` for the v7 branches. Never edit `hooks/sync-references` from inside a task on another repository: adding `{repo}` to its `REPOS` array is done afterwards, in lutecepowers, by whoever maintains it. The hook clones `develop` and fetches the v7 branches (see `using-lutecepowers`, Mandatory reads)
 
 ## When It Fails
 

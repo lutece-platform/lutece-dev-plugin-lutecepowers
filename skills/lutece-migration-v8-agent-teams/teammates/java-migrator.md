@@ -204,3 +204,21 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 | `patterns/fileupload-patterns.md` | If `fileupload` in deprecatedPatterns |
 | `patterns/json-patterns.md` | If a file imports `net.sf.json` (Step 11) |
 | `patterns/persistence-patterns.md` | If `jpaPatterns: true` on any file (Step 6b) |
+
+## Step 8h: zero compiler warning
+
+Every file you own compiles **without a warning** when it leaves your hands: `@Deprecated` API replaced by
+its successor, generics declared (no raw types, no unchecked casts left to the reader), `serialVersionUID`
+on `Serializable` classes, unused imports and variables removed, `@Override` where it applies. The migration is
+the one moment somebody reads these files; a warning left now stays for years and hides the next real one.
+Check with `mvn -q compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true` when the
+Verifier reports the build compiles; the final gate fails on any warning in `src/`.
+
+## Before you finish
+
+- **Do not widen the diff.** Never convert line endings (CRLF stays CRLF), never reflow javadoc, never touch a
+  file outside your task list even to "clean" it: the reviewer must see the migration, not the whole file.
+  `verify-migration.sh` LE01 flags a converted file.
+- **Write `.migration/report-<your teammate name>.md`** before your final answer: files changed, what you left
+  undone and why, what the next teammate must know. The Lead reads that file; your answer through the channel may
+  arrive truncated or late.

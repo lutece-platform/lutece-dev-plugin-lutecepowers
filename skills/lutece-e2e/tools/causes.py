@@ -30,6 +30,9 @@ def main():
     for f in sorted((A / "results").glob("*.jsonl")) if (A / "results").exists() else []:
         rows += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
     inv = json.loads((A / "inventory.json").read_text()) if (A / "inventory.json").exists() else {"screens": [], "actions": []}
+    # An exception that names nothing of the artefact — its package, its plugin names, its tables — is the
+    # platform's noise in the same time window, never this test's cause: say so instead of offering it.
+    art = (inv.get("surface") or {}).get("markers") or []
     beans = {}
     for e in inv["screens"] + inv["actions"]:
         beans[e["url"].split("?")[0].split("/")[-1]] = (e.get("bean") or "", e.get("method") or "")
@@ -51,7 +54,8 @@ def main():
             if t0 <= t <= t1:
                 m = EXC.search(b)
                 if m:
-                    causes.append(("[confirmed] " if any(k in b for k in marks) else "[candidate] ") + m.group(1).strip())
+                    tag = "[confirmed] " if any(k in b for k in marks) else ("[candidate] " if (not art or any(a in b for a in art)) else "[hors périmètre] ")
+                    causes.append(tag + m.group(1).strip())
         causes.sort(key=lambda c: not c.startswith("[confirmed]"))
         uniq = []
         for c in causes:

@@ -165,3 +165,12 @@ does not prevent it from also being a CDI bean.
 `BlogUrlInsertServiceJspBean.doInsertBlogLink(...)` and `.doSearchBlogLink(...)` — by class name, and
 neither method exists in that class. A reference shows what was done, not that it works: verify the
 symbol exists and that the mechanism can resolve it.
+
+## Before you finish
+
+- **Do not widen the diff.** Never convert line endings (CRLF stays CRLF), never reflow javadoc, never touch a
+  file outside your task list even to "clean" it: the reviewer must see the migration, not the whole file.
+  `verify-migration.sh` LE01 flags a converted file.
+- **Write `.migration/report-<your teammate name>.md`** before your final answer: files changed, what you left
+  undone and why, what the next teammate must know. The Lead reads that file; your answer through the channel may
+  arrive truncated or late.

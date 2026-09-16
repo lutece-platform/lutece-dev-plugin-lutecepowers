@@ -25,12 +25,13 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-pr
 ```
 
 Keep the migration's own scratch out of the diff, once, now — a reviewer should never see it, and
-`git add -A` at the end would otherwise stage it:
+`git add -A` at the end would otherwise stage it. The e2e bench (`e2e/`) is part of it: a local test tool,
+never committed with the plugin:
 
 ```bash
 # a file not ending with a newline would glue the first entry to its last line, silently
 [ -s .gitignore ] && [ -n "$(tail -c1 .gitignore)" ] && echo >> .gitignore
-for p in 'target/' 'logs/' 'java.io.tmpdir/' '.migration/' '*.log' 'e2e/artifacts/'; do
+for p in 'target/' 'logs/' 'java.io.tmpdir/' '.migration/' '*.log' 'e2e/'; do
   grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore
 done
 ```
@@ -45,10 +46,11 @@ Read `.migration/scan.json` and show the user:
 
 ### A.4 — Dependency v8 check (BLOCKER)
 For every Lutece dependency in `scan.json`:
-1. If `v8Status: "available"` → OK (already cloned in `~/.lutece-references/`)
-2. If `v8Status: "unknown"` → find the repository and check its v8 branch as described in the `dependency-references` rule (v8 lives on `develop`; the pom parent must be `8.x`)
-3. If a dependency has NO v8 version → **STOP**. Do not proceed. Report to user.
-4. **Clone missing dependencies** — for each dependency confirmed v8 but not yet in `~/.lutece-references/`, add it to the `REPOS` list of `${LUTECEPOWERS_ROOT}/hooks/sync-references` and run the hook (it clones `develop` and fetches the v7 branches). Teammates can then search reference sources for ALL dependencies, not just the repositories listed in the hook.
+1. If `v8Status: "available"` → OK (already cloned in `~/.lutece-references/`); `latestRelease` / `latestSnapshot` are the published versions the pom will name
+2. If `v8Status: "published"` → the artefact exists in the Lutece repositories at the versions listed; clone its sources into `~/.lutece-references/` as the `dependency-references` rule says (the clone, not an edit of the hook)
+3. If `v8Status: "to-resolve"` → nothing found locally nor published: find the repository and check its v8 branch (`dependency-references` rule; v8 lives on `develop`, the pom parent must be `8.x`)
+4. If a dependency has NO v8 version → **STOP**. Do not proceed. Report to user.
+5. **Clone missing dependencies** — for each dependency confirmed v8 but not yet in `~/.lutece-references/`, clone it there yourself (`dependency-references` rule); adding it to the `REPOS` list of `${LUTECEPOWERS_ROOT}/hooks/sync-references` is the lead's job, afterwards, outside the migrated repository. The hook (it clones `develop` and fetches the v7 branches). Teammates can then search reference sources for ALL dependencies, not just the repositories listed in the hook.
 
 ---
 
@@ -134,6 +136,10 @@ Config Migrator ─────────────────────�
 
 ## PHASE E — Monitoring
 
+Teammate answers travel through a channel that truncates and may arrive late: every teammate also writes
+`.migration/report-<teammate>.md` (what it changed, what it could not, what the next one must know) when it
+finishes, and the Lead reads **those files**, not the channel, to decide the next phase.
+
 While teammates work:
 
 1. Check task list progress every ~30 seconds
@@ -216,7 +222,7 @@ item.
 diagnosis is wrong, not the fix, and another round will not find it.
 
 The gate passes when ALL of the following are true:
-- Compile **BUILD SUCCESS** and surefire reports with 0 failures and 0 errors
+- Compile **BUILD SUCCESS**, **0 compiler warning in the plugin's sources** (`-Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true`: deprecation, unchecked, rawtypes, serial… all fixed, never suppressed), and surefire reports with 0 failures and 0 errors
 - **verify-migration.sh**: 0 FAIL
 - **Reviewer agent**: all FAIL items resolved
 - **e2e bench** (Phase G): every suite green, or every red attributed to a defect outside the plugin
@@ -282,7 +288,7 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
 | `verify-migration.sh` | every check of `verification/checks.md`, optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
-| `final-gate.sh` | Postcondition: checks + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase G, after every fix) |
+| `final-gate.sh` | Postcondition: checks + compiler warnings + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase G, after every fix) |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |
 
@@ -300,4 +306,5 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `template-macros.md` | v8 Freemarker macros, jQuery→vanilla JS | Template Migrator |
 | `fileupload-patterns.md` | FileItem→MultipartItem | Java Migrators (if fileupload) |
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
+| `core-8x-moves.md` | Core APIs that moved or shrank (XSL to plugin-xmltransformer, ContentService without cache, Parser in library-core-utils), reflection-instantiated classes | Java Migrators + Config Migrator (always, short) |
 | `persistence-patterns.md` | JPA kept on EclipseLink (`persistence-3.1`), JPQL/native SQL rules, entity rules, Spring JDBC as library | Java Migrators + Config Migrator (if `persistence.hasJpa` or `hasSpringJdbc`) |

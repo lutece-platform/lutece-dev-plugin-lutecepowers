@@ -69,6 +69,12 @@ cmd_up() {
   rm -rf artifacts/logs; mkdir -p artifacts/logs; chmod 777 artifacts/logs 2>/dev/null || true
   # The profile makes the stand-ins eligible; they still have to be named here or nothing starts them and the
   # application quietly calls the real system instead.
+  # The Solr schema comes from the search plugin's webapp, which is in the assembled site whatever artefact is
+  # under test; a bench only points E2E_SOLR_CONF elsewhere when it ships another one.
+  if [ -n "${E2E_SEARCH:-}" ] && [ -z "${E2E_SOLR_CONF:-}" ]; then
+    local sconf; sconf=$(find harness/site/target -maxdepth 1 -type d -name "e2e-site-*" | head -1)/WEB-INF/plugins/solr/conf
+    [ -f "$sconf/solrconfig.xml" ] && export E2E_SOLR_CONF="$(cd "$sconf" && pwd)" && echo "solr: schema from the assembled site ($E2E_SOLR_CONF)"
+  fi
   "${COMPOSE[@]}" up -d db lutece ${E2E_FAKES:+fakes oauth2} ${E2E_SEARCH:+solr elastic}
   step "waiting for the application"
   until [ "$(health)" != starting ]; do sleep 3; done
@@ -277,7 +283,8 @@ cmd_perf() {
 cmd_report() {
   step "report"
   # The structural baseline is taken on the first run, so the next ones have something to diff against.
-  if [ -d artifacts/aria ] && [ -z "$(ls -A baselines/aria 2>/dev/null)" ]; then
+  # Never from a widened run (E2E_SCOPE=all): it would freeze hundreds of core screens as this artefact's baseline.
+  if [ "${E2E_SCOPE:-target}" != all ] && [ -d artifacts/aria ] && [ -z "$(ls -A baselines/aria 2>/dev/null)" ]; then
     mkdir -p baselines/aria && cp artifacts/aria/*.yaml baselines/aria/ 2>/dev/null && echo "baselines/aria seeded from this run ($(ls baselines/aria | wc -l) screens): commit it"
   fi
   python3 tools/coverage.py | head -3

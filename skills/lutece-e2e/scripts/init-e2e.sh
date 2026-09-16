@@ -62,7 +62,13 @@ cp -a "$SKILL/tests/." "$E2E/tests/"
 cp "$SKILL/templates/run.sh" "$E2E/run.sh"; chmod +x "$E2E/run.sh" "$E2E/tools/gen-site.sh"
 cp "$SKILL/reference/DESIGN.md" "$E2E/DESIGN.md"
 [ -f "$E2E/README.md" ] || sed "s/@@NAME@@/$ARTIFACT/g" "$SKILL/templates/README.md.tpl" > "$E2E/README.md"
-# __pycache__ matters: pytest runs from tests/ and `git add -A` otherwise stages the compiled .pyc files.
+# The bench is a local tool, never committed with the plugin: ignore the whole folder at the project root
+# (idempotent; a .gitignore that does not end with a newline would glue the entry to its last line).
+if [ -d "$DIR/.git" ] || git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  [ -s "$DIR/.gitignore" ] && [ -n "$(tail -c1 "$DIR/.gitignore")" ] && echo >> "$DIR/.gitignore"
+  grep -qxF "e2e/" "$DIR/.gitignore" 2>/dev/null || echo "e2e/" >> "$DIR/.gitignore"
+fi
+# Inside the bench too, for a checkout where the root rule is missing.
 [ -f "$E2E/.gitignore" ] || printf '.venv/\n__pycache__/\n*.pyc\nartifacts/\nharness/site/target/\nharness/site/pom.xml\nharness/site/webapp/WEB-INF/plugins/plugins.dat\n' > "$E2E/.gitignore"
 if [ ! -f "$E2E/e2e.conf" ]; then
   sed -e "s/@@TARGET@@/$TARGET/" -e "s/@@NAME@@/$NAME/" -e "s/@@PORT@@/$PORT/" -e "s/@@DBPORT@@/$DBPORT/" \

@@ -59,7 +59,7 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 13. **Remove** any `<version>` on a dependency the parent already manages. Every 8.x parent: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, the EL implementation. From `8.0.2`: also `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
 14. **Stay on Jakarta EE 10.** Do not introduce EE 11 artifacts — `jakarta.annotation-api` 3.0.0, `weld-junit5` 5.x (Weld 6 / CDI 4.1), `jakarta.el-api` 6.x. They resolve fine and break at runtime
 15. **From parent `8.0.2` the enforcer checks dependencies.** `requireUpperBoundDeps` fails the build on a transitive downgrade (all scopes except `provided`, so test dependencies count); `dependencyConvergence` only reports. Align the versions, do not disable the rule with `-Denforcer.dependencyRules.fail=false` except to diagnose
-16. **An XSL portlet is ported to HTML, never kept on XSL.** The style tables left the core and the back office can no longer create an XSL portlet whose type is not `DOCUMENT*` — full explanation and the four moves of the port in `mvc-patterns.md` §10, which the Java Migrator applies. Your part in the POM: **do not add `plugin-xmltransformer`**. Add it only when the user explicitly asks for a stopgap on an existing install, and then say it does not restore back-office creation. Checked by `XS01`.
+16. **An XSL portlet is ported to HTML, never kept on XSL** — and `plugin-xmltransformer` is not added *to keep a portlet on XSL*. It **is** declared when the plugin's own code consumes `XmlTransformerService` (or another XSL service that moved there, `patterns/core-8x-moves.md`): that is the only correct dependency then, not a workaround. The style tables left the core and the back office can no longer create an XSL portlet whose type is not `DOCUMENT*` — full explanation and the four moves of the port in `mvc-patterns.md` §10, which the Java Migrator applies. Your part in the POM: **do not add `plugin-xmltransformer`**. Add it only when the user explicitly asks for a stopgap on an existing install, and then say it does not restore back-office creation. Checked by `XS01`.
 17. **Only add `library-lutece-unit-testing` when `src/test/` exists.** Declaring it on a project with no test adds a dependency that proves nothing, and `mvn test` reports `No tests to run` while looking green.
 
 ## Step 2: Create beans.xml
@@ -180,8 +180,10 @@ The core's own groups are the model: `src/java/fr/paris/lutece/portal/resources/
 
 ## Step 21: what the v8 core no longer carries, a plugin must now declare
 
-A plugin can compile in v7 against a library it never declared, because the **v7 core** depended on it.
-`library-jmx-api` is one: `lutece-core` 7.x listed it, `lutece-core` 8.x does not, so a plugin
+The full list of core APIs that moved or shrank is `patterns/core-8x-moves.md` (XSL services and `core_style*`
+tables to `plugin-xmltransformer`, `ContentService` without its cache, `Parser` in `library-core-utils`):
+read it once, it is short. A plugin can also compile in v7 against a library it never declared, because the
+**v7 core** depended on it. `library-jmx-api` is one: `lutece-core` 7.x listed it, `lutece-core` 8.x does not, so a plugin
 implementing `MBeanExporter` now has to add the dependency itself. When a class that used to resolve
 stops resolving and it belongs to no Jakarta package, look for it in the v7 core's pom before assuming
 the class is gone:
@@ -208,3 +210,12 @@ Check every `AppPropertiesService.getProperty( … )` whose key is shipped empty
 without the value: skip the feature (`StringUtils.isNotBlank` before building the model) or supply a default.
 The core says it in its own javadoc: "getProperty resolves a property declared with an empty value to null,
 exactly as it resolves a property that no source declares".
+
+## Before you finish
+
+- **Do not widen the diff.** Never convert line endings (CRLF stays CRLF), never reflow javadoc, never touch a
+  file outside your task list even to "clean" it: the reviewer must see the migration, not the whole file.
+  `verify-migration.sh` LE01 flags a converted file.
+- **Write `.migration/report-<your teammate name>.md`** before your final answer: files changed, what you left
+  undone and why, what the next teammate must know. The Lead reads that file; your answer through the channel may
+  arrive truncated or late.

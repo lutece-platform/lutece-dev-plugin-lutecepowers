@@ -76,9 +76,11 @@ def summary(rows, perf, disc, inv):
     if todo.exists():
         n = len(re.findall(r"^\| G\d{3} ", todo.read_text(), re.M))
         done = len(set(re.findall(r"\bG\d{3}\b", rv.read_text()))) if rv.exists() else 0
+        # No screen family captured (an artefact with no screen of its own): review.py check answers "nothing to
+        # judge" and passes, so the banner must not read "À FAIRE" against the gate.
         L += ["> **Revue visuelle : %s** — %d/%d familles d'écrans jugées (charte, mise en page, cohérence). "
               "Liste : `artifacts/review-todo.md`, verdicts : `artifacts/review.md`."
-              % ("faite" if done >= n and n else "À FAIRE", done, n), ""]
+              % ("sans objet (aucune famille capturée)" if not n else ("faite" if done >= n else "À FAIRE"), done, n), ""]
     if (A / "INVARIANT-BROKEN.txt").exists():
         L += ["> **INVARIANT DU BANC ROMPU** : " + (A / "INVARIANT-BROKEN.txt").read_text().strip(), ""]
     cov = js("coverage.json")
@@ -114,6 +116,9 @@ def summary(rows, perf, disc, inv):
     if cov:
         st = cov.get("stats_target") or cov["stats"]
         L += ["", "## Couverture de l'inventaire" + (" — périmètre : %s" % pathlib.Path(inv.get("root", "")).name if scoped else ""), ""]
+        if not st["screens"]["total"] and not st["actions"]["total"]:
+            L += ["**Surface mécanique nulle** : l'inventaire ne voit ni écran ni action pour cet artefact (un service, un indexeur, un composant "
+                  "enregistré par descripteur). La couverture ci-dessous est vide par construction, pas acquise : la preuve est portée par les scénarios seuls.", ""]
         L += ["", "| | Total | Prouvés (scénario vert) | Défaut (rouge, appel correct) | Robustesse seule (rouge sans paramètres) | Atteints sans preuve | Bloqués par un défaut testé | Inatteignables / hors banc | À faire |", "|---|---|---|---|---|---|---|---|---|"]
         for kind, label in (("screens", "Écrans"), ("actions", "Actions")):
             t = st[kind]

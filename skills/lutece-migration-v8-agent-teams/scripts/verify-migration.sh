@@ -449,21 +449,57 @@ COUNT=0; [ -n "$ST04_MATCHES" ] && COUNT=$(echo "$ST04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST04" "PASS" "Service classes have CDI scope" 0
 else emit "ST04" "WARN" "Service classes without CDI scope" "$COUNT" "$ST04_MATCHES"; fi
 
-# ST05: files created by the migration must be tracked by git.
-# ST01 only proves the file is on disk. `git commit -a` never picks up an untracked file,
-# so the migration ships without its CDI descriptor and the Home static initializer
-# fails with UnsatisfiedResolutionException at the next clone.
+# ST05: files created by the migration must be able to reach the repository. ST01 only proves the file is on
+# disk; a file that .gitignore excludes never will, and the plugin ships without its CDI descriptor (the Home
+# static initializer then fails with UnsatisfiedResolutionException at the next clone). Untracked is fine here:
+# the skill stages with `git add -A` at the very end, after this gate.
 ST05_MATCHES=""
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     for f in src/main/resources/META-INF/beans.xml src/test/resources/META-INF/microprofile-config.properties; do
         [ -f "$f" ] || continue
-        git ls-files --error-unmatch "$f" >/dev/null 2>&1 || ST05_MATCHES="$ST05_MATCHES$f: on disk but untracked by git"$'\n'
+        git check-ignore -q "$f" 2>/dev/null && ST05_MATCHES="$ST05_MATCHES$f: excluded by .gitignore, will never be committed"$'\n'
     done
     ST05_MATCHES=$(printf '%s' "$ST05_MATCHES")
 fi
 COUNT=0; [ -n "$ST05_MATCHES" ] && COUNT=$(echo "$ST05_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "ST05" "PASS" "Files created by the migration are tracked by git" 0
-else emit "ST05" "FAIL" "Files created by the migration are untracked (git add them)" "$COUNT" "$ST05_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "ST05" "PASS" "Files created by the migration are not ignored by git" 0
+else emit "ST05" "FAIL" "Files created by the migration are excluded by .gitignore" "$COUNT" "$ST05_MATCHES"; fi
+
+# LE01: a converted line ending widens the diff to the whole file and hides the migration in it.
+LE01_MATCHES=""
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    LE01_MATCHES=$(join -t $'\t' <(git diff HEAD --numstat 2>/dev/null | awk -F'\t' '{print $3"\t"$1+$2}' | sort) \
+                        <(git diff HEAD --ignore-cr-at-eol --numstat 2>/dev/null | awk -F'\t' '{print $3"\t"$1+$2}' | sort) 2>/dev/null \
+                   | awk -F'\t' '$2 > 3*$3+20 {print $1": "$2" changed lines, "$3" once line endings are ignored — endings were converted"}')
+fi
+COUNT=0; [ -n "$LE01_MATCHES" ] && COUNT=$(echo "$LE01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "LE01" "PASS" "No file had its line endings converted" 0
+else emit "LE01" "WARN" "Line endings converted (restore them: the diff must show the migration, not the whole file)" "$COUNT" "$LE01_MATCHES"; fi
+
+# XT01: the XSL machinery left the core (LUT-32172): XmlTransformerService and the core_style* tables live in
+# plugin-xmltransformer. Code or SQL that still uses them needs that dependency declared — or, for a portlet, the
+# port to HTML (XS01).
+XT01_MATCHES=""
+if ! grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null; then
+    XT01_MATCHES=$({ grep -rlE 'XmlTransformerService|XmlTransformer\b|XslExportService' src/ --include="*.java" 2>/dev/null || true; } | sed 's/$/: uses the XSL services that moved to plugin-xmltransformer, undeclared/')
+    SQL_XT=$({ grep -rliE 'INSERT INTO core_style|core_stylesheet|core_style_mode_stylesheet' src/sql 2>/dev/null || true; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
+    [ -n "$SQL_XT" ] && XT01_MATCHES="$XT01_MATCHES${XT01_MATCHES:+$'\n'}$SQL_XT"
+fi
+COUNT=0; [ -n "$XT01_MATCHES" ] && COUNT=$(echo "$XT01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "XT01" "PASS" "No use of the XSL services and tables that left the core" 0
+else emit "XT01" "FAIL" "XSL services or core_style* used without plugin-xmltransformer (patterns/core-8x-moves.md)" "$COUNT" "$XT01_MATCHES"; fi
+
+# CS02: ContentService no longer extends AbstractCacheableService in v8: initCache/getFromCache/putInCache on a
+# content service do not compile. The cache, if still wanted, is a service of its own (lutece-cache skill).
+CS02_MATCHES=""
+if [ -d "src/" ]; then
+    CS02_MATCHES=$({ grep -rl 'extends ContentService\b' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+        grep -qE '(^|[^.[:alnum:]_])(this\.)?(initCache|getFromCache|putInCache)[[:space:]]*\(' "$f" && echo "$f: content service using the cache methods v8 removed from ContentService"
+    done)
+fi
+COUNT=0; [ -n "$CS02_MATCHES" ] && COUNT=$(echo "$CS02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "CS02" "PASS" "No content service relies on the removed ContentService cache" 0
+else emit "CS02" "FAIL" "ContentService cache methods used (removed in v8, patterns/core-8x-moves.md)" "$COUNT" "$CS02_MATCHES"; fi
 echo ""
 
 # ─── v8 core changes ─────────────────────────────────────

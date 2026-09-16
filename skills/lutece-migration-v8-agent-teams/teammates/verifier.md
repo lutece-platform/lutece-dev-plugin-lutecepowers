@@ -55,11 +55,16 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-
 
 ## Phase 3: Compile Build
 
-First build — compile only, skip tests:
+First build — compile only, skip tests, **warnings shown**:
 
 ```bash
-mvn clean install -Dmaven.test.skip=true
+mvn clean install -Dmaven.test.skip=true -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true
 ```
+
+Count the `[WARNING]` lines that name a file under `src/` and report them to the Lead with the file and the
+message: a migration leaves **zero** compiler warning in the plugin's own sources (deprecation, unchecked,
+rawtypes, serial, unused imports…), and the final gate refuses the migration otherwise. Warnings coming from
+dependencies or generated code are not the plugin's.
 
 ### Build-fix loop (max 5 iterations)
 
@@ -131,3 +136,12 @@ If a report shows Failures or Errors:
    - Migration: COMPLETE
 
 Mark your final task as **completed**.
+
+## Before you finish
+
+- **Do not widen the diff.** Never convert line endings (CRLF stays CRLF), never reflow javadoc, never touch a
+  file outside your task list even to "clean" it: the reviewer must see the migration, not the whole file.
+  `verify-migration.sh` LE01 flags a converted file.
+- **Write `.migration/report-<your teammate name>.md`** before your final answer: files changed, what you left
+  undone and why, what the next teammate must know. The Lead reads that file; your answer through the channel may
+  arrive truncated or late.

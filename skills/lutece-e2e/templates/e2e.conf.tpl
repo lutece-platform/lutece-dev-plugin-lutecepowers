@@ -39,11 +39,11 @@ E2E_OAUTH2_PORT=@@OAUTH2PORT@@
 E2E_SEARCH=
 E2E_SOLR_PORT=@@SOLRPORT@@
 E2E_ES_PORT=@@ESPORT@@
-# Solr core created at startup, and the configset it is built from. The Lutece solr plugin ships its own schema:
-# point E2E_SOLR_CONF at a directory holding solrconfig.xml and schema.xml (path relative to harness/), else the
-# `_default` configset is used.
+# Solr core created at startup. Its schema is taken from the search plugin inside the assembled site
+# (WEB-INF/plugins/solr/conf) when it is there; E2E_SOLR_CONF (a directory holding solrconfig.xml and schema.xml,
+# path relative to harness/) overrides it; without either the `_default` configset is used.
 E2E_SOLR_CORE=lutece
-#E2E_SOLR_CONF=../../webapp/WEB-INF/plugins/solr/conf
+#E2E_SOLR_CONF=
 # Restart the application once after the seed. The seed runs on a healthy application, so whatever the target
 # cached from the tables at boot holds the state of an empty database for the whole run. Set to 1 when the
 # artefact reads such a cache (a form list, a type registry, a reference list).

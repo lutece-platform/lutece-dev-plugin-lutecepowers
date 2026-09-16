@@ -34,7 +34,7 @@ step( ) { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 bad( ) { printf '\033[0;31mFAIL\033[0m %s\n' "$1"; FAILED=1; }
 good( ) { printf '\033[0;32mOK\033[0m   %s\n' "$1"; }
 
-step "1/3 migration checks"
+step "1/4 migration checks"
 if bash "$SKILL_DIR/verify-migration.sh" . > /tmp/final-gate-verify.log 2>&1; then
     good "verify-migration.sh: 0 FAIL"
 else
@@ -42,7 +42,24 @@ else
     bad "verify-migration.sh reports failures (full log: /tmp/final-gate-verify.log)"
 fi
 
-step "2/3 unit tests"
+# A migration is the moment the compiler's warnings get fixed: deprecation, unchecked, rawtypes, serial, the
+# lot. Left in place they hide the next real one, and nobody comes back for them later. Only the plugin's own
+# sources count (src/), never the generated or the dependencies'.
+step "2/4 compiler warnings"
+mvn -B -s "$SETTINGS" clean compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true > /tmp/final-gate-compile.log 2>&1 || true
+WARNS=$(grep -E "^\[WARNING\] .*/src/.*\.java" /tmp/final-gate-compile.log | sed 's|^\[WARNING\] ||; s|^.*/src/|src/|' | sort -u)
+NW=$(printf '%s' "$WARNS" | grep -c . || true)
+if grep -q "BUILD FAILURE" /tmp/final-gate-compile.log; then
+    grep -E "^\[ERROR\]" /tmp/final-gate-compile.log | head -8
+    bad "the project does not compile (full log: /tmp/final-gate-compile.log)"
+elif [ "$NW" -eq 0 ]; then
+    good "compiler: 0 warning in the plugin's sources"
+else
+    printf '%s\n' "$WARNS" | head -12
+    bad "compiler: $NW warning(s) in the plugin's sources — fix them, a migration leaves none behind (full log: /tmp/final-gate-compile.log)"
+fi
+
+step "3/4 unit tests"
 if [ -d src/test/java ] && find src/test/java -name "*Test.java" | grep -q .; then
     # lutece:exploded only exists for a core, a plugin or a site: a library runs its tests plainly.
     if grep -q "<packaging>jar</packaging>" pom.xml 2>/dev/null; then
@@ -68,7 +85,7 @@ else
     good "unit tests: none in this project"
 fi
 
-step "3/3 e2e bench"
+step "4/4 e2e bench"
 if ! $RUN_E2E; then
     good "e2e: skipped on request"
 elif [ -x e2e/run.sh ]; then

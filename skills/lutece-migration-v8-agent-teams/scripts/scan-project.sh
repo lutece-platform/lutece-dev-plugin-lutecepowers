@@ -56,16 +56,31 @@ while IFS= read -r dep_line; do
     FIRST_DEP=false
 
     # Check if v8 version exists in references
-    V8_STATUS="unknown"
+    V8_STATUS="to-resolve"
     V8_BRANCH=""
     V8_VERSION=""
-    if [ -d "$HOME/.lutece-references/$DEP_AID" ]; then
+    V8_REL=""
+    V8_SNAP=""
+    DEP_GID=$(echo "$dep_line" | grep -oP '(?<=<groupId>)[^<]+' | tr -d '\r' | head -1 || true)
+    # A reference clone is named after the repository, not the artifact: look for a directory whose pom carries this artifactId.
+    REF_DIR=""
+    for rd in "$HOME"/.lutece-references/*/; do
+        [ -f "$rd/pom.xml" ] || continue
+        awk '/<\/parent>/{f=1} f && /<artifactId>/{print; exit}' "$rd/pom.xml" 2>/dev/null | grep -q ">$DEP_AID<" && { REF_DIR="${rd%/}"; break; }
+    done
+    if [ -n "$REF_DIR" ]; then
         V8_STATUS="available"
-        V8_BRANCH=$(cd "$HOME/.lutece-references/$DEP_AID" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-        V8_VERSION=$(grep -oP '(?<=<version>)[^<]+' "$HOME/.lutece-references/$DEP_AID/pom.xml" 2>/dev/null | head -1 | tr -d '\r' || true)
+        V8_BRANCH=$(cd "$REF_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+        V8_VERSION=$(awk '/<\/parent>/{f=1} f && /<version>/{print; exit}' "$REF_DIR/pom.xml" 2>/dev/null | grep -oP '(?<=<version>)[^<]+' | head -1 | tr -d '\r' || true)
     fi
+    # Published versions, release and snapshot, from the Lutece repositories: what the config-migrator will
+    # actually write in the pom. A dependency with none of the three is the blocker of phase A.4.
+    GPATH=$(echo "${DEP_GID:-fr.paris.lutece.plugins}" | tr . /)
+    V8_REL=$(curl -sf -m 8 "https://dev.lutece.paris.fr/maven_repository/$GPATH/$DEP_AID/maven-metadata.xml" 2>/dev/null | grep -oP '(?<=<version>)[^<]+' | tail -1 || true)
+    V8_SNAP=$(curl -sf -m 8 "https://dev.lutece.paris.fr/snapshot_repository/$GPATH/$DEP_AID/maven-metadata.xml" 2>/dev/null | grep -oP '(?<=<version>)[^<]+' | tail -1 || true)
+    [ "$V8_STATUS" = "to-resolve" ] && [ -n "$V8_REL$V8_SNAP" ] && V8_STATUS="published"
 
-    DEPS_JSON="$DEPS_JSON{\"artifactId\":\"$DEP_AID\",\"version\":\"${DEP_VER:-unspecified}\",\"type\":\"${DEP_TYPE:-jar}\",\"v8Status\":\"$V8_STATUS\",\"v8Branch\":\"$V8_BRANCH\",\"v8Version\":\"$V8_VERSION\"}"
+    DEPS_JSON="$DEPS_JSON{\"artifactId\":\"$DEP_AID\",\"version\":\"${DEP_VER:-unspecified}\",\"type\":\"${DEP_TYPE:-jar}\",\"v8Status\":\"$V8_STATUS\",\"latestRelease\":\"$V8_REL\",\"latestSnapshot\":\"$V8_SNAP\",\"v8Branch\":\"$V8_BRANCH\",\"v8Version\":\"$V8_VERSION\"}"
 done < <(
     # Extract dependency blocks for fr.paris.lutece
     awk '/<dependency>/{block=""} /<dependency>/,/<\/dependency>/{block=block $0 "\n"} /<\/dependency>/{if(block ~ /fr\.paris\.lutece/) print block}' pom.xml
@@ -129,11 +144,15 @@ while IFS= read -r file; do
     CLASS_TYPE="other"
     grep -q 'class.*DAO\b\|implements.*IDAO\|implements.*I[A-Z].*DAO' "$file" 2>/dev/null && CLASS_TYPE="dao"
     grep -q 'extends.*MVCAdminJspBean\|JspBean' "$file" 2>/dev/null && CLASS_TYPE="jspbean"
-    grep -q 'extends.*MVCApplication\|XPage' "$file" 2>/dev/null && CLASS_TYPE="xpage"
+    grep -q 'extends.*MVCApplication\|implements.*XPageApplication\|extends.*XPageApplication' "$file" 2>/dev/null && CLASS_TYPE="xpage"
     grep -q 'class.*Service\b' "$file" 2>/dev/null && [ "$CLASS_TYPE" = "other" ] && CLASS_TYPE="service"
     grep -q 'extends.*PluginDefaultImplementation' "$file" 2>/dev/null && CLASS_TYPE="plugin"
     grep -q 'extends.*AbstractEntryType' "$file" 2>/dev/null && CLASS_TYPE="entrytype"
     grep -q 'extends.*AbstractDaemonThread\|extends.*Daemon\b' "$file" 2>/dev/null && CLASS_TYPE="daemon"
+    # A class the plugin descriptor names in a *-class tag is instantiated by the core through reflection: it
+    # must never receive a CDI scope (cdi-patterns.md §2), whatever its name or its parent suggests.
+    FQCN="${PKG:+$PKG.}$(basename "$file" .java)"
+    [ -n "$PKG" ] && [ "$CLASS_TYPE" != "plugin" ] && grep -qF "$FQCN" webapp/WEB-INF/plugins/*.xml 2>/dev/null && CLASS_TYPE="reflection"
     # Test class detection
     $IS_TEST && CLASS_TYPE="test"
     # Interface detection
@@ -182,7 +201,7 @@ if [ -d "webapp/WEB-INF/plugins/" ]; then
             $FIRST_REFL || REFLECTION_JSON="$REFLECTION_JSON,"
             FIRST_REFL=false
             REFLECTION_JSON="$REFLECTION_JSON{\"class\":\"$class_name\",\"tag\":\"$tag\"}"
-        done < <(grep -h "<${tag}>" webapp/WEB-INF/plugins/*.xml 2>/dev/null | sed "s|.*<${tag}>||; s|</${tag}>.*||" | tr -d ' \r')
+        done < <(cat webapp/WEB-INF/plugins/*.xml 2>/dev/null | tr -d '\n\r\t ' | grep -oE "<${tag}>[^<]+</${tag}>" | sed 's/<[^>]*>//g')
     done
 fi
 REFLECTION_JSON="$REFLECTION_JSON]"
@@ -289,7 +308,7 @@ SPRING_LOOKUPS=$(gcount -rn 'SpringContextService' src/ --include="*.java" 2>/de
 GETINSTANCE_CALLS=$(gcount -rn '\.getInstance( )' src/ --include="*.java" 2>/dev/null)
 JAVAX_IMPORTS=$(gcount -rn 'import javax\.\(servlet\|validation\|annotation\.PostConstruct\|annotation\.PreDestroy\|inject\|enterprise\|ws\.rs\|xml\.bind\|persistence\)' src/ --include="*.java" 2>/dev/null)
 EVENT_LISTENERS=$(gcount -rln 'EventRessourceListener\|LuteceUserEventManager\|QueryListenersService\|AbstractEventManager' src/ --include="*.java" 2>/dev/null)
-CACHE_SERVICES=$(gcount -rln 'AbstractCacheableService\|net\.sf\.ehcache' src/ --include="*.java" 2>/dev/null)
+CACHE_SERVICES=$(gcount -rlE 'AbstractCacheableService|net\.sf\.ehcache|initCache\(|getFromCache\(|putInCache\(' src/ --include="*.java" 2>/dev/null)
 ADMIN_TEMPLATES=$({ find webapp/WEB-INF/templates/admin/ -name "*.html" 2>/dev/null || true; } | wc -l)
 SKIN_TEMPLATES=$({ find webapp/WEB-INF/templates/skin/ -name "*.html" 2>/dev/null || true; } | wc -l)
 JSP_COUNT=$({ find webapp/ -name "*.jsp" 2>/dev/null || true; } | wc -l)

@@ -346,3 +346,12 @@ The parent manages the versions; `library-lutece-unit-testing` in `test` scope i
 through no filter. A v7 test that forged a token with `SecurityTokenService.getInstance( ).getToken( … )` has
 nothing to replace it with — **delete the line**. What the token protects is proven by the e2e bench, which
 does go through the filter.
+
+## Before you finish
+
+- **Do not widen the diff.** Never convert line endings (CRLF stays CRLF), never reflow javadoc, never touch a
+  file outside your task list even to "clean" it: the reviewer must see the migration, not the whole file.
+  `verify-migration.sh` LE01 flags a converted file.
+- **Write `.migration/report-<your teammate name>.md`** before your final answer: files changed, what you left
+  undone and why, what the next teammate must know. The Lead reads that file; your answer through the channel may
+  arrive truncated or late.

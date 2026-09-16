@@ -317,6 +317,34 @@ the forms fuzzer stays off: it posts every form it finds. The scenarios still cr
 there, so run it on an instance meant to receive them. The inventory still comes from the sources, so the
 coverage is measured the same way.
 
+## An artefact with no screen of its own
+
+Some artefacts expose neither a back-office screen, nor an XPage, nor a library API a probe could call: a
+`ContentService`, an indexer, a component registered by the descriptor (`*-class` tags) or discovered by CDI.
+The inventory sees nothing, the screens/fo/forms suites have nothing to open, and `summary.md` says so
+("surface mécanique nulle"). The proof is then **scenarios only**, on the component's observable effects:
+
+- what it renders when the site calls it (the `Portal.jsp` parameters that route to a content service, a
+  portlet page that embeds it), asserted on the DOM it produces;
+- what it writes or indexes, read back where it lands (`sql`, `http` on the engine's own API with `poll`
+  for an asynchronous pass, an admin screen of the host plugin that lists the result);
+- what it refuses (unknown ids, non-numeric parameters, a call without its trigger) answered by a message,
+  never an internal error.
+
+A component with **no mutation at all** (no form, no action, no SQL write) has no CSRF scenario to write:
+record the proof of absence in `scenarios/coverage-exclusions.yaml` as prose (no `Do*`, no web bean, no
+write in its DAOs) instead of forcing one. The "0 à faire" of the coverage table is then a statement about the
+inventory, not about the artefact — read the scenarios.
+
+## Order between scenarios, and state they share
+
+Scenarios of the parallel pass run in any order, on several workers; `serial: true` ones run **after** the
+whole parallel pass, one at a time. A scenario never relies on the declaration order or on what another
+scenario created: it arranges its own state (`sql_exec` before its first mutation, `{{rand}}` keys) and
+carries its own proof. The application caches too: two scenarios sending the **same request parameters**
+share one cache entry, and the second asserts on what the first made the application render — give each
+scenario its own discriminating value (a different term, id or key).
+
 ## The bench protects itself
 
 `run.sh test` re-seeds before running (the forms fuzzer consumes keyed reference rows; the seed restores them),
@@ -484,8 +512,10 @@ Two traps this step exposes, each worth reporting on its own:
 
 ## PHASE 5 — Freeze and hand over
 
-- `baselines/aria/` is seeded from the first run (`run.sh report` copies the aria snapshots when it is empty):
-  commit it, so structural changes show up as diffs in later runs.
+- `baselines/aria/` is seeded from the first run at delivery scope (`run.sh report` copies the aria snapshots
+  when it is empty and `E2E_SCOPE` is not `all`), so later runs on the same workstation diff against it. The
+  visual review (`review.py`) judges the artefact's own screen families; a widened run's core screens are the
+  environment's and are not listed.
 - `artifacts/fingerprint.json` (also on the first line of `summary.md`) names what was tested: sources commit,
   war hash, image digests — a green run with no fingerprint is a green run of nothing in particular.
 - CI: `junit 'e2e/artifacts/junit-*.xml'`, publish `report.html`, archive `summary.md`, `compare.md`,
@@ -501,7 +531,9 @@ Two traps this step exposes, each worth reporting on its own:
   `summary.md` is unchanged and remains what scripts and the gate read. Rendering lives in `tools/report_page.py`;
   `tools/report.py` keeps the loading and the markdown summary.
   No Allure, no Node on agents; the runner is the pinned Playwright container.
-- Never commit `artifacts/`, `.venv/`, `harness/site/target/`.
+- **`e2e/` is never committed.** It is a local test tool of the migration, not a deliverable of the plugin:
+  `init-e2e.sh` adds `e2e/` to the project's `.gitignore`. Hand over what it produced (`summary.md`,
+  `compare.md`, `review.md`) as attachments to the migration report, not as files of the repository.
 
 ## What the harness already handles
 

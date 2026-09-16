@@ -75,12 +75,27 @@ def _digest(shot):
     return hashlib.md5(f.read_bytes()).hexdigest() if f.exists() else None
 
 
+def _in_scope():
+    """The bench's scope predicate (tests/lutece.py): the review judges the artefact's own screens, never the
+    hundreds of core screens a widened crawl (E2E_SCOPE=all) also captured — those are the environment's."""
+    try:
+        sys.path.insert(0, str(E2E / "tests"))
+        import lutece  # noqa: E402
+        return lutece.scope()
+    except Exception:  # noqa: BLE001 - no inventory, no scope: judge everything
+        return lambda u: True
+
+
 def groups():
-    """One review group per (url path, kind), with a representative screenshot and the urls it stands for."""
+    """One review group per (url path, kind) of the artefact under test, with a representative screenshot and
+    the urls it stands for. Scenario captures count as the artefact's whatever their url."""
     g = collections.OrderedDict()
+    in_scope = _in_scope()
     for r in rows():
         shot = r.get("screenshot")
         if not shot or r.get("suite") not in ("screens", "fo", "forms", "scenarios"):
+            continue
+        if r.get("suite") != "scenarios" and not in_scope(r.get("url") or r.get("screen") or ""):
             continue
         path = (r.get("url") or r.get("screen") or r["id"]).split("?")[0]
         key = (path, r.get("kind") or "?")

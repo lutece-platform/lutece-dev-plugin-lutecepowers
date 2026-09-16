@@ -26,6 +26,7 @@ REPOS=(
   lutece-wf-module-workflow-formstopdf
   lutece-wf-module-workflow-upload
   lutece-search-plugin-solr
+  lutece-cms-plugin-document
   lutece-search-module-forms-solr
   lutece-elk-library-elastic
   lutece-elk-plugin-elasticdata
