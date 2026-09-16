@@ -352,7 +352,9 @@ cmd_compare() {
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf artifacts/logs artifacts/logs7 artifacts/v7 artifacts/v8 artifacts/compare.md artifacts/compare.html
   mkdir -p artifacts/logs artifacts/logs7; chmod 777 artifacts/logs artifacts/logs7 2>/dev/null || true
-  "${COMPOSE[@]}" up -d db mail lutece7
+  # The artefact calls the same outside systems on both legs: the stand-ins and the search engines are part of
+  # the comparison, not of `run.sh all` only — without them the v8 leg fails on calls the v7 leg never made.
+  "${COMPOSE[@]}" up -d db mail lutece7 ${E2E_FAKES:+fakes oauth2} ${E2E_SEARCH:+solr elastic}
   wait_healthy "$APP7" || exit 1
   # --no-deps: dbinit normally waits for the v8 container to be healthy (Liquibase creates the schema there);
   # here the schema comes from the v7 Ant build and the v8 container must stay down until phase 4.
@@ -402,7 +404,7 @@ WARN
     echo ">> HAND-APPLIED (Liquibase will never see it, unparseable name): $rel"
     docker exec -i "$db" mariadb -ulutece -plutece lutece < "$exploded/WEB-INF/$rel" || echo ">> hand-apply of $rel reported errors (see above)"
   done
-  "${COMPOSE[@]}" up -d lutece
+  "${COMPOSE[@]}" up -d lutece ${E2E_FAKES:+fakes oauth2} ${E2E_SEARCH:+solr elastic}
   wait_healthy "$APP" || exit 1
   docker exec "$db" mariadb -ulutece -plutece lutece -N -e "SELECT CONCAT(entity_key,' = ',entity_value) FROM core_datastore WHERE entity_key LIKE 'core.plugins.status.%.version' ORDER BY 1" > artifacts/liquibase-versions-after.txt
   docker exec "$db" mariadb -ulutece -plutece lutece -N -e "SELECT CONCAT(EXECTYPE,' ',FILENAME) FROM DATABASECHANGELOG ORDER BY ORDEREXECUTED" > artifacts/liquibase-changesets.txt 2>/dev/null || true

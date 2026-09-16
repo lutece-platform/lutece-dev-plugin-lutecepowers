@@ -466,15 +466,29 @@ def console_allowed(text):
     return False
 
 
+# The v7 leg of run.sh compare runs the artefact inside a Lutece 7 site: its theme, its jQuery, its assets are
+# the environment of that run, not the artefact under test, and their console noise says nothing about the
+# migration. Failing a v7 screen on it turns every such screen into a false "corrigé" in the comparison.
+V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
+    r"Refused to apply style", r"MIME type \('text/html'\)", r"jquery", r"\$ is not defined",
+    r"Failed to load resource", r"favicon",
+))
+
+
 def console_noise(page, baseline=None):
-    """Console messages and JS errors worth failing on: everything the bench did not declare, minus a baseline."""
+    """Console messages and JS errors worth failing on: everything the bench did not declare, minus a baseline.
+    On the v7 leg, the surrounding site's own noise is excluded (see V7_ENV_NOISE)."""
     base = baseline or {}
-    errs = [e for e in page.obs["errors"] if e not in (base.get("errors") or []) and not console_allowed(e)]
+    if os.environ.get("E2E_VERSION") == "v7":
+        allowed = lambda t: console_allowed(t) or any(p.search(t or "") for p in V7_ENV_NOISE)
+    else:
+        allowed = console_allowed
+    errs = [e for e in page.obs["errors"] if e not in (base.get("errors") or []) and not allowed(e)]
     noise = [c["text"] for c in page.obs["console"]
-             if c["text"] not in (base.get("console") or []) and not console_allowed(c["text"])]
+             if c["text"] not in (base.get("console") or []) and not allowed(c["text"])]
     bad = [r for r in page.obs["requests"]
            if (r["status"] != 0 or "error" in r) and r["url"] not in (base.get("requests") or [])
-           and not console_allowed(r["url"])]
+           and not allowed(r["url"])]
     return errs, noise, bad
 
 
