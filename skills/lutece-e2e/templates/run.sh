@@ -58,10 +58,25 @@ cmd_build() {
   "${COMPOSE[@]}" build lutece
 }
 
+# Ports of this bench already taken, by another bench left running or by anything else: Docker answers with a
+# networking error naming an endpoint, which reads like a Docker problem and is not one. Say who holds the port.
+ports_free() {
+  local p busy=""
+  for p in "${E2E_PORT}" "${E2E_DB_PORT:-13306}" "${E2E_MAIL_PORT:-18025}" ${E2E_FAKES:+${E2E_FAKES_PORT:-19030} ${E2E_OAUTH2_PORT:-19080}} ${E2E_SEARCH:+${E2E_SOLR_PORT:-18983} ${E2E_ES_PORT:-19200}}; do
+    (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3<&- 3>&-; busy="$busy $p($(docker ps --format '{{.Names}} {{.Ports}}' | grep -m1 ":$p->" | cut -d' ' -f1))"; }
+  done
+  [ -z "$busy" ] && return 0
+  echo "ports already in use:$busy"
+  echo "another bench is probably still up — stop it with 'cd <its project> && ./e2e/run.sh down', or give this bench its own slot (e2e.conf: E2E_PORT, E2E_DB_PORT, E2E_MAIL_PORT)."
+  return 1
+}
+
 cmd_up() {
   # Every run starts from a clean slate: drop the database volume (schema recreated from scratch by the app's
   # Liquibase at boot) and wipe the previous run's logs, so results and the server-error analysis are per-run.
   step "up: fresh db + lutece (recreated from scratch each run)"
+  "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  ports_free || exit 1
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   # Keep the previous run's summary: a before/after claim (with volume against without, before a fix against
   # after) is only honest if the baseline still exists to be reread.
