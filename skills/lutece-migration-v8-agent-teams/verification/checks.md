@@ -81,7 +81,7 @@
 | CA01 | FAIL | EhCache direct usage | `net\.sf\.ehcache` | *.java |
 | CA02 | FAIL | Deprecated cache methods | `putInCache\|getFromCache\|removeKey` | *.java |
 | CA03 | FAIL | Raw AbstractCacheableService | `extends AbstractCacheableService[^<]` | *.java |
-| CA04 | WARN | Missing isCacheAvailable guard | (cross-file check) | *.java |
+| CA04 | WARN | Missing isCacheEnable guard | (cross-file check) | *.java |
 
 ## Deprecated API (DP)
 
@@ -144,9 +144,71 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | ST01 | FAIL | beans.xml exists | (file existence check) | META-INF/beans.xml |
-| ST02 | WARN | final on CDI classes | (cross-file check) | *.java |
+| ST02 | FAIL | final on a CDI class resolved by its concrete type | (cross-file check) | *.java |
 | ST03 | WARN | DAO without CDI scope | (cross-file check) | *.java |
 | ST04 | WARN | Service without CDI scope | (cross-file check) | *.java |
+| ST05 | FAIL | files created by the migration untracked by git | `git ls-files --error-unmatch` | beans.xml, test microprofile-config |
+
+**ST02** — `final` is legal and is the core's own pattern when the bean is resolved only
+through its interface (`@ApplicationScoped public final class XDAO implements IXDAO`, twelve
+such classes in lutece-core). The check only fails when the code injects or selects the
+**concrete** type, which is the case CDI cannot proxy. See `cdi-patterns.md` §1.
+
+**ST05** — ST01 only proves the file sits on disk. `git commit -a` never picks up an
+untracked file, so the plugin ships without its CDI descriptor; at the next clone the Home
+static initializer dies with `UnsatisfiedResolutionException` and every portlet call fails
+with `NoClassDefFoundError` — and the build still prints `BUILD SUCCESS` because the parent pom sets
+`testFailureIgnore`.
+
+## SQL (SQ)
+
+| ID | Severity | Description | Pattern | Files |
+|----|----------|-------------|---------|-------|
+| SQ01 | FAIL | SQL file without the Liquibase header (v8 installs only Liquibase changesets) | first non-empty line ≠ `-- liquibase formatted sql` | src/sql/**/*.sql |
+| SQ02 | FAIL | column or table gained by `create_db_*.sql` since the last commit with no upgrade script adding it | (cross-file check against `git show HEAD:`) | src/sql |
+
+**SQ02** — a fresh install runs the creation script and is green; an existing site runs only the
+`update_db_*` scripts newer than its recorded version. An older upgrade that (re)creates the table
+without the column does not count. Rules and model in `rules/sql-liquibase.md`.
+
+## v8 core changes (XS, TL)
+
+| ID | Severity | Description | Pattern | Files |
+|----|----------|-------------|---------|-------|
+| XS01 | FAIL | portlet still rendered by XSL | (cross-file check) | *.java, src/sql, *.xsl |
+| TL01 | FAIL | ThreadLocal not cleared with remove() | (cross-file check) | *.java |
+| CS01 | FAIL | portlet JspBean mutations without a CSRF token | (cross-file check) | *.java |
+| I18N01 | FAIL | i18n key repeating the plugin prefix | (cross-file check) | *_messages*.properties |
+
+**XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second
+option.** `core_style`, `core_style_mode_stylesheet` and `core_stylesheet` left the core for
+`plugin-xmltransformer`, the core's `PortletStyleDAO` is a stub returning `null` and an empty
+`ReferenceList`, and since `LUT-32172` the back office cannot even create an XSL portlet whose
+type is not `DOCUMENT*`: the style select is rendered under
+`<#if portletType.id?starts_with('DOCUMENT')>` so no `style` is posted, and
+`setPortletCommonData` returns `MANDATORY_FIELDS` — the `return` is outside the test for the
+xmltransformer plugin, so installing it changes nothing but a log line. Symptoms when nothing
+is done: the portlet renders an empty string with no error, the install fails on missing
+tables, and creating one from the back office is impossible. The check fails on a portlet class
+that still defines `getXml`/`getXmlDocument` without extending `PortletHtmlContent`, and on any
+`INSERT INTO core_style*` left in `src/sql`. The port is in `mvc-patterns.md` §10.
+
+**TL01** — always `ThreadLocal.remove()` in a `finally`, never a reassignment such as
+`set(false)`. A reassignment keeps one entry per pooled thread for the whole application
+lifetime (LUT-31201). The rule already existed in the scalability skill, which does not run
+during a migration, so it is enforced here too.
+
+**CS01** — the v8 automatic token filter only covers MVC controllers (`@Action` / `@View`), and
+the core's `create_portlet.html` / `modify_portlet.html` emit no token, so every `do*` of a
+`PortletJspBean` accepts a forged call. The plugin closes it alone: its `create_specific`
+template is included *inside* the core form and `getCreateTemplate` / `getModifyTemplate` take a
+model. The check fails on a class extending `PortletJspBean` that never calls
+`getSecurityTokenService( ).validate( request, … )`. Recipe and traps in `mvc-patterns.md` §11.
+
+**I18N01** — keys in `<plugin>_messages.properties` are relative to the bundle, so
+`childpages.message.x` written there resolves as `childpages.childpages.message.x` and renders
+as the raw key: nothing fails and nothing logs. The same grep catches a key appended without a
+trailing newline, glued to the value of the line above, which corrupts both entries.
 
 ## JSP (JS)
 
@@ -191,13 +253,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 
 ## Summary
 
-| Severity | Count |
-|----------|-------|
-| FAIL | 63 |
-| WARN | 23 |
-| **Total** | **86** |
-
-Counts taken from a `verify-migration.sh --json` run (`.migration/verify-latest.json`, field `total`).
+The counts come from `verify-migration.sh --json` (`.migration/verify-latest.json`, field `total`).
 
 ## verify-file.sh Check Mapping
 

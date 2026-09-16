@@ -83,7 +83,8 @@ If build fails:
 | `beans.xml not found` | Missing file | Config Migrator |
 | `duplicate import` | Mechanical script added duplicate | Java Migrator |
 | `private constructor in CDI bean` | Need to remove private constructor | Java Migrator |
-| `final class cannot be proxied` | Need to remove final keyword | Java Migrator |
+| `final class cannot be proxied` | Remove `final` **only on that class**: it is legal, and is the core's own pattern, when the bean is resolved through its interface (`cdi-patterns.md` §1) | Java Migrator |
+| `UnsatisfiedResolutionException` in a Home static initializer | `beans.xml` missing from the built archive, or on disk but untracked by git (`ST05`) | Config Migrator |
 
 ## Phase 4: Full Build with Tests
 

@@ -1,0 +1,14 @@
+# Tomcat 9 on Java 11: the runtime a Lutece 7 site actually runs on. Used by the before/after comparison
+# (`run.sh compare`): the v7 site is assembled by tools/gen-site7.sh, its schema is created the v7 way — the Ant
+# build the lutece-maven-plugin ships under WEB-INF/sql — then the v8 site starts on the same database.
+FROM tomcat:9.0-jdk11-temurin
+RUN apt-get update && apt-get install -y --no-install-recommends ant unzip && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/local/tomcat/webapps/*
+COPY site7/target/lutece.war /tmp/lutece.war
+# Exploded, not dropped as a war: the Ant build reads WEB-INF/sql and WEB-INF/conf before Tomcat starts.
+RUN mkdir -p /usr/local/tomcat/webapps/lutece && cd /usr/local/tomcat/webapps/lutece && unzip -q /tmp/lutece.war && rm /tmp/lutece.war
+COPY tomcat/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && mkdir -p /logs && chmod -R a+rwX /usr/local/tomcat /logs
+ENV CATALINA_OUT=/logs/catalina.out
+EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,5 +1,5 @@
 {
-  "description": "Lutecepowers bootstrap: injects the using-lutecepowers skill with the plugin root, syncs ~/.lutece-references and copies rules into .claude/rules/ on Lutece projects (Claude Code).",
+  "description": "Lutecepowers bootstrap: injects the using-lutecepowers skill with the plugin root, syncs ~/.lutece-references and copies rules into .claude/rules/ on Lutece projects (Claude Code). Stop hook: blocks the end of a turn while a migration marked .migration/gate-required has not passed final-gate.sh.",
   "hooks": {
     "SessionStart": [
       {
@@ -28,6 +28,17 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start\"",
+            "shell": "bash"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/migration-gate\"",
             "shell": "bash"
           }
         ]

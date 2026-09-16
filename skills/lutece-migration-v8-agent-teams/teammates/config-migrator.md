@@ -59,6 +59,8 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 13. **Remove** any `<version>` on a dependency the parent already manages. Every 8.x parent: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, the EL implementation. From `8.0.2`: also `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
 14. **Stay on Jakarta EE 10.** Do not introduce EE 11 artifacts — `jakarta.annotation-api` 3.0.0, `weld-junit5` 5.x (Weld 6 / CDI 4.1), `jakarta.el-api` 6.x. They resolve fine and break at runtime
 15. **From parent `8.0.2` the enforcer checks dependencies.** `requireUpperBoundDeps` fails the build on a transitive downgrade (all scopes except `provided`, so test dependencies count); `dependencyConvergence` only reports. Align the versions, do not disable the rule with `-Denforcer.dependencyRules.fail=false` except to diagnose
+16. **An XSL portlet is ported to HTML, never kept on XSL.** The style tables left the core and the back office can no longer create an XSL portlet whose type is not `DOCUMENT*` — full explanation and the four moves of the port in `mvc-patterns.md` §10, which the Java Migrator applies. Your part in the POM: **do not add `plugin-xmltransformer`**. Add it only when the user explicitly asks for a stopgap on an existing install, and then say it does not restore back-office creation. Checked by `XS01`.
+17. **Only add `library-lutece-unit-testing` when `src/test/` exists.** Declaring it on a project with no test adds a dependency that proves nothing, and `mvn test` reports `No tests to run` while looking green.
 
 ## Step 2: Create beans.xml
 
@@ -121,3 +123,88 @@ Mark all your tasks as **completed** when done. This unblocks the Java Migrators
 ## Step 9: Context XML Deletion (after the Java Migrators)
 
 When the Lead reports that ALL Java Migrators have completed, delete every `*_context.xml` under `webapp/` (they were cataloged in Step 3 and are now replaced by CDI). Report the deleted paths to the Lead. Do not touch anything else at this point.
+
+## Step 18: an i18n key never repeats the plugin prefix
+
+Keys in `<plugin>_messages.properties` are relative to the bundle: the Java constant
+`"childpages.message.portletNotFound"` is the line `message.portletNotFound=…`. Writing
+`childpages.message.portletNotFound=…` there resolves as `childpages.childpages.…` and the
+message silently renders as the raw key — nothing fails, nothing logs.
+
+Two rules when you add a key:
+
+- **Strip the plugin prefix**, and add it to the `_fr` file too, with `\uXXXX` escapes for
+  accents (several of these files are still ISO-8859-1).
+- **Check the file ends with a newline** before appending. A key glued to the value of the line
+  above corrupts both entries at once.
+
+Checked by `I18N01`.
+
+## Step 19: a range whose lower bound is a release finds no SNAPSHOT
+
+Most v8 plugins are published only as SNAPSHOTs. Maven orders `4.0.0-SNAPSHOT` **before** `4.0.0`,
+so `[4.0.0,5.0.0)` matches nothing at all and the build dies with
+`No versions available for … within specified range` — before compiling a single file.
+
+Check what the repository actually holds, then write the bound accordingly:
+
+```bash
+curl -sf "https://dev.lutece.paris.fr/nexus/repository/lutece_snapshots_repository/fr/paris/lutece/plugins/<artifact>/maven-metadata.xml" \
+  | grep -o '<version>[^<]*</version>' | tail -5
+```
+
+Only a SNAPSHOT: `[4.0.0-SNAPSHOT,)`. A release exists: `[4.0.0,)`. The upper bound is optional —
+`[8.0.0,)` is what the migrated references use for `lutece-core`.
+
+## Step 20: a plugin that declares site properties needs two new i18n keys per property
+
+The v8 back office lays the site properties out in named columns. `admin/system/modify_properties.html`
+reads, for every property of every group:
+
+- `<key>.group` — the column the property belongs to,
+- `<prefix>.site_property.<group>.group.title` — the column's heading.
+
+`I18nService.getLocalizedString` returns the **empty string** for a key it cannot find, and the
+template skips a column whose name is empty. A v7 plugin implementing `ILocalizedSitePropertiesGroup`
+therefore renders an **empty tab**: the bean is discovered, the properties are read, and nothing is
+shown. Nothing in the build or in the logs says so beyond a `Error localizing key : …group` warning.
+
+Add, to the plugin's default bundle (the other locales inherit from it):
+
+```properties
+site_property.<group>.group.title=<column heading>
+site_property.<key>.group=<group>
+```
+
+The core's own groups are the model: `src/java/fr/paris/lutece/portal/resources/site_messages.properties`.
+
+## Step 21: what the v8 core no longer carries, a plugin must now declare
+
+A plugin can compile in v7 against a library it never declared, because the **v7 core** depended on it.
+`library-jmx-api` is one: `lutece-core` 7.x listed it, `lutece-core` 8.x does not, so a plugin
+implementing `MBeanExporter` now has to add the dependency itself. When a class that used to resolve
+stops resolving and it belongs to no Jakarta package, look for it in the v7 core's pom before assuming
+the class is gone:
+
+```bash
+git -C ~/.lutece-references/lutece-core show origin/develop7.x:pom.xml | grep -A 3 "<artifactId>library-"
+```
+
+## Step 22: a property declared with an empty value now resolves to null
+
+`AppPropertiesService` reads MicroProfile Config in v8, and MicroProfile treats an **empty** value exactly like
+a key no source declares: `getProperty` returns `null`, where v7 returned `""`. Plugin `.properties` files are
+full of keys shipped empty for the site to fill in:
+
+```properties
+myplugin.includeUrl.webappBanner=
+```
+
+Every read of such a key is now a null to guard. The symptom is not a NullPointerException in the plugin but a
+FreeMarker failure further away — `The following has evaluated to null or missing: ==> url_banner` — and, when
+the template is a page include, **every front-office page of the site answers 500**.
+
+Check every `AppPropertiesService.getProperty( … )` whose key is shipped empty, and decide what the plugin does
+without the value: skip the feature (`StringUtils.isNotBlank` before building the model) or supply a default.
+The core says it in its own javadoc: "getProperty resolves a property declared with an empty value to null,
+exactly as it resolves a property that no source declares".

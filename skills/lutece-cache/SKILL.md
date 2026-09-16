@@ -21,7 +21,7 @@ CDI Events (@Observes)
 
 ## Step 1 — Cache Service Class
 
-> **IMPORTANT:** The `put()`/`get()`/`remove()` methods inherited from `AbstractCacheableService` delegate directly to `_cache` without null/closed checks. If the cache is disabled in the datastore (default state), `_cache` is `null` and these methods throw `NullPointerException`. You **MUST** override them with defensive guards.
+> **IMPORTANT:** The JCache methods inherited from `AbstractCacheableService` — `get()`, `put()`, `remove()`, `getAll()`, `putIfAbsent()`, … — dereference `_cache` with no check at all. While the cache is disabled in the datastore, which is the default state, `_cache` is `null` and every one of them throws `NullPointerException`. Override the ones you use and guard them with **`isCacheEnable( )`**, which in lutece-core already reads `_cache != null && !_cache.isClosed( )`. There is no `isCacheAvailable( )` method: do not write one, it does not compile.
 
 ```java
 import javax.cache.CacheException;
@@ -51,7 +51,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
     @Override
     public void put( String key, Object value )
     {
-        if ( isCacheEnable( ) && isCacheAvailable( ) )
+        if ( isCacheEnable( ) )
         {
             try
             {
@@ -67,7 +67,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
     @Override
     public Object get( String key )
     {
-        if ( isCacheEnable( ) && isCacheAvailable( ) )
+        if ( isCacheEnable( ) )
         {
             try
             {
@@ -84,7 +84,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
     @Override
     public boolean remove( String key )
     {
-        if ( isCacheEnable( ) && isCacheAvailable( ) )
+        if ( isCacheEnable( ) )
         {
             try
             {
@@ -98,7 +98,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
         return false;
     }
 
-    private boolean isCacheAvailable( )
+    private boolean isCacheEnable( )
     {
         return _cache != null && !_cache.isClosed( );
     }
@@ -110,7 +110,7 @@ public class EntityCacheService extends AbstractCacheableService<String, Object>
 - `@PostConstruct` calls `initCache( name, keyClass, valueClass )` — registers the cache with `CacheService`
 - Cache name convention: `pluginName.entityCacheService`
 - Generic types: `<String, Object>` is the standard — key is always String, value is the cached object
-- **Override `put`/`get`/`remove`** with `isCacheEnable() && isCacheAvailable()` guards + try/catch — the core `AbstractCacheableService` does NOT check for null/closed cache in these methods
+- **Override `put`/`get`/`remove`** with `isCacheEnable()` guards + try/catch — the core `AbstractCacheableService` does NOT check for null/closed cache in these methods
 
 ## Step 2 — Cache Key Builders
 

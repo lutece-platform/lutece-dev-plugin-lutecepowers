@@ -59,7 +59,7 @@ Read `${PATTERNS}/events-patterns.md` and apply all relevant transformations.
 
 **Only if your files have `cachePatterns: true`.**
 
-Read `${PATTERNS}/cache-patterns.md` and apply. Key: override `put`/`get`/`remove` with `isCacheEnable() && isCacheAvailable()` guards.
+Read `${PATTERNS}/cache-patterns.md` and apply. Key: override `put`/`get`/`remove` with `isCacheEnable()` guards.
 
 ## Step 6b: JPA (conditional)
 
@@ -80,6 +80,68 @@ For MVC patterns (@RequestParam, CSRF auto-filter, @ModelAttribute): Read `${PAT
 
 Per `${PATTERNS}/cdi-patterns.md` **§10**: replace `daoUtil.free()` with try-with-resources.
 
+## Step 8a: XSL portlet → HTML portlet (MANDATORY when the file is a portlet)
+
+A portlet class that still defines `getXml` / `getXmlDocument` must be ported: extend
+`PortletHtmlContent`, implement `getHtmlContent(HttpServletRequest)`, write the skin template,
+delete the XSL files and every `INSERT INTO core_style*` from `src/sql`. The four moves, the
+core reason and the reference implementation are in `${PATTERNS}/mvc-patterns.md` **§10**.
+
+Not optional and not replaceable by a dependency on `plugin-xmltransformer`: the back office
+cannot create such a portlet at all when its type does not start with `DOCUMENT`. Checked by
+`XS01`.
+
+## Step 8a-bis: a catch block only guards what v8 still throws
+
+v7 code often detects a missing row by catching an exception the v8 core no longer raises, so the guard silently
+stops working and the plugin accepts what it used to refuse. Check every `catch` in the files you touch against the
+current core source, and replace the ones that are now dead with the explicit test.
+
+```java
+// Before — PageHome.getPage threw AppException in v7
+try { PageHome.getPage( nId ); } catch ( AppException e ) { return errorMessage; }
+// After — v8 returns the row, or nothing
+if ( !PageHome.checkPageExist( nId ) ) { return errorMessage; }
+```
+
+The opposite trap exists too: `PortletHome.findByPrimaryKey` dereferences the row it loaded without checking it
+exists, so an **unknown identifier raises a NullPointerException inside the core** instead of returning null. Any
+lookup driven by a request parameter needs its own guard, and an e2e bench will find it on the first unknown id.
+
+## Step 8a-ter: a portlet JspBean has no CSRF protection until you add it (MANDATORY)
+
+The v8 automatic token filter only covers MVC controllers, and the core's portlet forms emit no
+token, so every `do*` of a `PortletJspBean` accepts a forged call. The plugin closes it alone:
+its specific template sits inside the core form and `getCreateTemplate` / `getModifyTemplate`
+take a model. Recipe, traps and the GET-that-writes case: `${PATTERNS}/mvc-patterns.md` **§11**.
+Checked by `CS01`.
+
+## Step 8b: ThreadLocal cleanup (MANDATORY when the file has a ThreadLocal)
+
+Clear every `ThreadLocal` with `remove()` in a `finally`, never with a reassignment
+(`set(false)`, `set(null)`). A reassignment keeps one entry per pooled thread for the whole
+application lifetime (LUT-31201). Checked by `TL01`.
+
+```java
+finally { reentrancyGuard.remove( ); }   // not reentrancyGuard.set( Boolean.FALSE );
+```
+
+Same rule in tests: call `LocalVariables.remove( )` in `@AfterEach` when the test calls
+`LocalVariables.setLocal(...)`.
+
+## Step 8c: Do not widen the diff
+
+The migration diff is read by a human. Change what v8 requires, nothing else.
+
+- **Never convert line endings.** Converting some files and not others multiplies the diff and makes it
+  unreviewable.
+- **Never rewrite javadoc or delete comments** that the migration does not invalidate.
+- **Do not "modernize" what compiles.** `XmlUtil.beginElement`/`addElement` take a
+  `StringBuffer`: turning it into `StringBuilder` breaks the build. Raw types and
+  `new Integer(...)` are worth fixing, wording is not.
+- Check yourself with `git diff --ignore-cr-at-eol --shortstat` against `git diff --shortstat`:
+  a large gap means the diff carries noise.
+
 ## Step 9: REST (conditional)
 
 **Only if your files have `restPatterns: true`.**
@@ -91,6 +153,8 @@ Read `${PATTERNS}/rest-patterns.md` and apply.
 **Only if your files use manual pagination** (`_strCurrentPageIndex`, `_nItemsPerPage`, `new LocalizedPaginator`, `new Paginator`, `AbstractPaginator.getPageIndex()`).
 
 Per `${PATTERNS}/cdi-patterns.md` **§20**: replace manual pagination with `@Inject @Pager IPager`. This also allows JspBeans to be `@RequestScoped` instead of `@SessionScoped` (the pager manages its own state).
+
+**A bean with two paginated lists must give each `@Pager` a distinct `name`** — an unnamed pager takes the name of its declaring class and `PaginatorHandler` caches one per name for the whole session, so the two share an instance and the second list lands under the first one's bookmark. Details and the scenario that catches it: §20.
 
 ## Step 11: JSON Library (conditional)
 

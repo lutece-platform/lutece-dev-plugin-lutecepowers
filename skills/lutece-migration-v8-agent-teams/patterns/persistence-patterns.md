@@ -1,6 +1,6 @@
 # Persistence Patterns (to v8)
 
-How a plugin that already uses JPA (or Spring JDBC) reaches Lutece 8. New code uses `DAOUtil` (`rules/dao-patterns.md`, `/lutece-dao`); an existing JPA model stays on JPA and takes the provider the container ships. Rules validated on `plugin-tvvist3` (46 entities, 32 DAOs, 60 queries) against Open Liberty 26 / EclipseLink 4.0.9.
+How a plugin that already uses JPA (or Spring JDBC) reaches Lutece 8. New code uses `DAOUtil` (`rules/dao-patterns.md`, `/lutece-dao`); an existing JPA model stays on JPA and takes the provider the container ships. Target: Open Liberty 26 / EclipseLink 4.0.9.
 
 > **Reference-First Principle:** search `~/.lutece-references/` for `persistence.xml` and `@Entity` before writing any mapping.
 

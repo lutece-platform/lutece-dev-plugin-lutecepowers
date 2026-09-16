@@ -46,6 +46,13 @@ while read -r file; do
         continue
     fi
 
+    # `sed 1i` inserts before an existing line 1, so on an empty file it silently writes nothing while the script
+    # still counted the file as modified. An empty script has no changeset to declare anyway: say so and move on.
+    if [ ! -s "$file" ]; then
+        echo "  EMPTY: $file (no statement to declare, left untouched)"
+        continue
+    fi
+
     SCRIPT_NAME=$(basename "$file")
     sed -i "1i\\-- liquibase formatted sql\\n-- changeset ${PLUGIN_NAME}:${SCRIPT_NAME}\\n-- preconditions onFail:MARK_RAN onError:WARN" "$file"
 

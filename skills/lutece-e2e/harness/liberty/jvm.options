@@ -1,0 +1,4 @@
+-Xms512m
+-Xmx1536m
+-XX:StartFlightRecording=filename=/logs/lutece.jfr,dumponexit=true,settings=profile
+-XX:FlightRecorderOptions=stackdepth=128

@@ -234,6 +234,69 @@ The EL implementation depends on the parent: `org.glassfish.expressly:expressly`
 
 Versions are managed by the Lutece global POM — do not specify `<version>`.
 
+## Step 8b: Test config source (when Weld fails to start)
+
+A plugin test starts a real CDI container, and the core's producers read `@ConfigProperty`
+keys that only exist in a deployed webapp (`WEB-INF/conf`). Outside `lutece:exploded` they are
+missing and Weld aborts before any test runs, with four `SRCFG02000` deployment exceptions and
+`Tests run: 1, Errors: 1` at class level. Create
+`src/test/resources/META-INF/microprofile-config.properties`:
+
+```properties
+mp.config.profile=test
+daemon.zoneId=Europe/Paris
+lutece.defaultFileServiceProvider.fileStoreService=localDatabaseFileService
+lutece.defaultFileServiceProvider.downloadService=defaultDownloadService
+lutece.defaultFileServiceProvider.rbacService=defaultRBACService
+```
+
+Add any other key the deployment exceptions name. This file is new, so it must be staged with
+`git add`; `ST05` fails while it is untracked.
+
+## Step 8c: Clear the thread context
+
+When a test calls `LocalVariables.setLocal(...)`, call `LocalVariables.remove( )` in
+`@AfterEach`. Same rule as production code (`TL01`): never leave a `ThreadLocal` set on a
+pooled thread.
+
+## Step 8d: a test that asserts on rendering must control the page template
+
+A unit test that renders a page to check a portlet appears in it depends on the page's
+template. The root page of a fresh install uses a template that renders **no portlet column**,
+so the portlet is never in the output and the assertion fails for a reason that has nothing to
+do with the code under test. Create the host page with a column template (`One column`, id 2)
+and render that one:
+
+```java
+Page host = new Page( );
+host.setParentPageId( PortalService.getRootPageId( ) );
+host.setPageTemplateId( 2 );
+_pageService.createPage( host );
+```
+
+Same rule as the e2e bench (`lutece-e2e`, section on front-office proofs). And when the code
+under test changes how it renders — an XSL portlet ported to HTML, for instance — **re-read
+every assertion written against the old output before trusting the result either way**.
+
+## Step 8e: PluginService has no cache in the test container
+
+`PluginService.getPlugin( ... )` fails in a unit test with
+`NullPointerException: ... PluginService._pluginCache is null`: the cache is created by
+`PluginService.init( )`, which only the portal startup calls. A static field initializer makes it
+worse — the class fails to load and every test of the class errors at once.
+
+Pass `null` as the `Plugin` to the Home and DAO methods that still take one. `DAOUtil` falls back on
+the portal pool, which is the pool those queries use anyway. Keep the explanation in the field's
+javadoc so the next reader does not "fix" it back.
+
+```java
+/**
+ * The unit-test container never runs the portal startup, so PluginService has no cache.
+ * DAOUtil falls back on the portal pool when the plugin is null.
+ */
+private final Plugin _plugin = null;
+```
+
 ## Step 9: No build
 
 You never run Maven. The project does not compile until every teammate is done, and only the Verifier builds (Phase 4 of `verifier.md`). When the Verifier reports a failing test in your files, fix it (most common issues: missing `@Inject`, wrong assertion order, missing import) and mark the task for a new run. A test that fails because of production code goes back to the Lead.
@@ -246,3 +309,40 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-
 ```
 
 Mark each file task as **completed** when verification passes.
+
+## Step 8f: a JspBean test that renders a v8 admin template needs two things the pom does not give it
+
+`processController` on a `@Controller` bean renders the screen, and a v8 admin template opens on
+`<@pageContainer>`. Two failures come one after the other in a fresh test container:
+
+1. **`The following has evaluated to null or missing: ==> pageContainer`.** The design-system macros are
+   auto-included by `AppTemplateService.init( )`, which only the portal startup calls. Activate them in the
+   test:
+
+```java
+@BeforeEach
+protected void setUp( ) throws Exception
+{
+    super.setUp( );
+    CommonsService.activateCommons( CommonsService.getCurrentCommonsKey( ) );
+}
+```
+
+2. **`WELD-000049: Unable to invoke … BeanValidationProducer.init( )`.** The MVC layer builds a real bean
+   validator, which needs an implementation on the test classpath:
+
+```xml
+<dependency><groupId>org.glassfish.jaxb</groupId><artifactId>jaxb-runtime</artifactId><scope>test</scope></dependency>
+<dependency><groupId>org.hibernate.validator</groupId><artifactId>hibernate-validator</artifactId><scope>test</scope></dependency>
+<dependency><groupId>org.glassfish</groupId><artifactId>jakarta.el</artifactId><scope>test</scope></dependency>
+```
+
+The parent manages the versions; `library-lutece-unit-testing` in `test` scope is needed too.
+
+## Step 8g: the security token is not validated in a unit test
+
+`@Controller( securityTokenEnabled = true )` does not make `processController` check anything by itself:
+`SecurityTokenHandler` only acts when `SecurityTokenFilter` has marked the request, and a unit test goes
+through no filter. A v7 test that forged a token with `SecurityTokenService.getInstance( ).getToken( … )` has
+nothing to replace it with — **delete the line**. What the token protects is proven by the e2e bench, which
+does go through the filter.

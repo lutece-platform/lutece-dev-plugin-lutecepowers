@@ -273,20 +273,24 @@ check_grep "CA01" 'net\.sf\.ehcache' "src/" "FAIL" "EhCache -> JCache"
 check_grep "CA02" 'putInCache\|getFromCache\|removeKey' "src/" "FAIL" "Deprecated cache methods"
 check_grep "CA03" 'extends AbstractCacheableService[^<]' "src/" "FAIL" "Raw AbstractCacheableService (needs type params)"
 
-# CA04: AbstractCacheableService without isCacheAvailable guard
+# CA04: AbstractCacheableService whose overrides do not guard on isCacheEnable( ).
+# The JCache methods it inherits (get, put, remove, ...) dereference _cache, which is null while the cache is
+# disabled — the default state. isCacheEnable( ) is the guard: in lutece-core it already reads
+# `_cache != null && !_cache.isClosed( )`. There is no isCacheAvailable( ): an earlier version of this check
+# asked for one, and a cache written to satisfy it did not compile.
 CA04_MATCHES=""
 if [ -d "src/" ]; then
     CA04_MATCHES=$(grep -rln 'extends AbstractCacheableService' src/ --include="*.java" 2>/dev/null | while read -r f; do
-        if ! grep -q 'isCacheAvailable' "$f" 2>/dev/null; then
-            echo "$f: extends AbstractCacheableService without isCacheAvailable guard"
+        if ! grep -q 'isCacheEnable' "$f" 2>/dev/null; then
+            echo "$f: extends AbstractCacheableService without an isCacheEnable( ) guard on its overrides"
         fi
     done) || CA04_MATCHES=""
 fi
 COUNT=0; [ -n "$CA04_MATCHES" ] && COUNT=$(echo "$CA04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then
-    emit "CA04" "PASS" "CacheService missing isCacheAvailable guard" 0
+    emit "CA04" "PASS" "CacheService guards its overrides with isCacheEnable( )" 0
 else
-    emit "CA04" "WARN" "CacheService missing isCacheAvailable guard" "$COUNT" "$CA04_MATCHES"
+    emit "CA04" "WARN" "CacheService guards its overrides with isCacheEnable( )" "$COUNT" "$CA04_MATCHES"
 fi
 echo ""
 
@@ -392,24 +396,34 @@ echo ""
 # ─── Structure ───────────────────────────────────────────
 echo "CATEGORY: Structure"
 
-# ST02: final on CDI-managed classes
+# ST02: final on a CDI-managed class that is resolved by its concrete type
+# final is legal when the bean is only resolved through its interface (cdi-patterns.md §1):
+# core DAOs are @ApplicationScoped public final class. Only flag a class the code injects
+# or selects by its concrete type, which is the case that cannot be proxied.
 ST02_MATCHES=""
 if [ -d "src/" ]; then
     ST02_MATCHES=$(grep -rn 'public final class' src/ --include="*.java" 2>/dev/null | while read -r line; do
         FILE=$(echo "$line" | cut -d: -f1)
-        if grep -q '@ApplicationScoped\|@RequestScoped\|@SessionScoped\|@Dependent' "$FILE" 2>/dev/null; then
-            echo "$line"
+        grep -q '@ApplicationScoped\|@RequestScoped\|@SessionScoped\|@Dependent' "$FILE" 2>/dev/null || continue
+        CLS=$(echo "$line" | sed 's/.*public final class \([A-Za-z0-9_]*\).*/\1/')
+        [ -z "$CLS" ] && continue
+        if grep -rq "select( *${CLS}\.class" src/ --include="*.java" 2>/dev/null \
+           || { grep -rA2 '@Inject' src/ --include="*.java" 2>/dev/null | grep -q "[[:space:]]${CLS}[[:space:]]\+[_a-zA-Z]"; }; then
+            echo "$line -> resolved by concrete type, not proxyable"
         fi
     done) || ST02_MATCHES=""
 fi
 COUNT=0; [ -n "$ST02_MATCHES" ] && COUNT=$(echo "$ST02_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "ST02" "PASS" "No final keyword on CDI-managed classes" 0
-else emit "ST02" "WARN" "final keyword on CDI-managed classes" "$COUNT" "$ST02_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "ST02" "PASS" "No final keyword on a CDI class resolved by its concrete type" 0
+else emit "ST02" "FAIL" "final keyword on a CDI class resolved by its concrete type" "$COUNT" "$ST02_MATCHES"; fi
 
 # ST03: DAO classes without @ApplicationScoped
 ST03_MATCHES=""
 if [ -d "src/" ]; then
-    ST03_MATCHES=$(grep -rln 'class.*DAO\b' src/ --include="*.java" 2>/dev/null | while read -r f; do
+    # Only a file that DECLARES a DAO class. The former pattern, `class.*DAO`, also matched any line mentioning
+    # a DAO after the word class — `select( ICityDAO.class, NamedLiteral.of( "myplugin.cityDAO" ) )` in a Home,
+    # for instance — and reported Home facades, which are static by design and carry no scope.
+    ST03_MATCHES=$(grep -rlE '^[[:space:]]*(public|final|abstract|public final|public abstract)[[:space:]]+class[[:space:]]+[A-Za-z0-9_]*DAO\b' src/ --include="*.java" 2>/dev/null | while read -r f; do
         grep -q 'public interface\|protected interface' "$f" 2>/dev/null && continue
         if ! grep -q '@ApplicationScoped\|@RequestScoped\|@SessionScoped\|@Dependent' "$f" 2>/dev/null; then
             echo "$f: DAO class without CDI scope annotation"
@@ -434,6 +448,135 @@ fi
 COUNT=0; [ -n "$ST04_MATCHES" ] && COUNT=$(echo "$ST04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST04" "PASS" "Service classes have CDI scope" 0
 else emit "ST04" "WARN" "Service classes without CDI scope" "$COUNT" "$ST04_MATCHES"; fi
+
+# ST05: files created by the migration must be tracked by git.
+# ST01 only proves the file is on disk. `git commit -a` never picks up an untracked file,
+# so the migration ships without its CDI descriptor and the Home static initializer
+# fails with UnsatisfiedResolutionException at the next clone.
+ST05_MATCHES=""
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    for f in src/main/resources/META-INF/beans.xml src/test/resources/META-INF/microprofile-config.properties; do
+        [ -f "$f" ] || continue
+        git ls-files --error-unmatch "$f" >/dev/null 2>&1 || ST05_MATCHES="$ST05_MATCHES$f: on disk but untracked by git"$'\n'
+    done
+    ST05_MATCHES=$(printf '%s' "$ST05_MATCHES")
+fi
+COUNT=0; [ -n "$ST05_MATCHES" ] && COUNT=$(echo "$ST05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "ST05" "PASS" "Files created by the migration are tracked by git" 0
+else emit "ST05" "FAIL" "Files created by the migration are untracked (git add them)" "$COUNT" "$ST05_MATCHES"; fi
+echo ""
+
+# ─── v8 core changes ─────────────────────────────────────
+echo "CATEGORY: v8 core changes"
+
+# XS01: a portlet still rendered by XSL. Must be ported to HTML, there is no second option:
+# the style tables left the core for plugin-xmltransformer, PortletStyleDAO in the core is a
+# stub, and since LUT-32172 the back office cannot create an XSL portlet whose type is not
+# DOCUMENT* (MANDATORY_FIELDS, whatever is installed). Port per mvc-patterns.md §10:
+# extend PortletHtmlContent, implement getHtmlContent(), delete the XSL and the core_style rows.
+XS01_MATCHES=""
+if [ -d "src/" ]; then
+    XS01_MATCHES=$({ grep -rln 'getXmlDocument\|public String getXml(' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+        grep -q 'extends PortletHtmlContent' "$f" 2>/dev/null && continue
+        grep -q 'class .*Portlet\b' "$f" 2>/dev/null || continue
+        echo "$f: portlet still rendered by XSL, port it to PortletHtmlContent"
+    done) || XS01_MATCHES=""
+fi
+if [ -d "src/sql" ]; then
+    SQL_STYLES=$(grep -rli 'INSERT INTO core_style\|INSERT INTO core_stylesheet\|core_style_mode_stylesheet' src/sql 2>/dev/null | while read -r f; do
+        echo "$f: inserts into style tables that no longer exist in the core"
+    done)
+    [ -n "$SQL_STYLES" ] && XS01_MATCHES="$XS01_MATCHES${XS01_MATCHES:+$'\n'}$SQL_STYLES"
+fi
+COUNT=0; [ -n "$XS01_MATCHES" ] && COUNT=$(echo "$XS01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "XS01" "PASS" "No portlet left on XSL rendering" 0
+else emit "XS01" "FAIL" "Portlet still rendered by XSL (port to HTML, mvc-patterns.md 10)" "$COUNT" "$XS01_MATCHES"; fi
+
+# SQ01: every SQL file must start with the Liquibase header. v7 installed through Ant and ran headerless files;
+# v8 installs through plugin-liquibase only, which drops them without a log line (sql-liquibase.md).
+SQ01_MATCHES=""
+if [ -d "src/sql" ]; then
+    SQ01_MATCHES=$(find src/sql -name '*.sql' -size +0 | sort | while read -r f; do
+        grep -m1 -v '^[[:space:]]*$' "$f" | grep -q 'liquibase formatted sql' || echo "$f: no '-- liquibase formatted sql' first line"
+    done)
+fi
+COUNT=0; [ -n "$SQ01_MATCHES" ] && COUNT=$(echo "$SQ01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ01" "PASS" "Every SQL file carries the Liquibase header" 0
+else emit "SQ01" "FAIL" "SQL files Liquibase will ignore (sql-liquibase.md)" "$COUNT" "$SQ01_MATCHES"; fi
+
+# SQ02: what the creation script gained since the last commit, an existing site never gets. A column or a table
+# added to create_db_*.sql is green on every fresh bench and breaks the first migrated site (seen with a v8
+# DAO writing a new column into a history table the v7 base did not have). Each addition needs an
+# upgrade script under src/sql/**/upgrade/ that creates it, with a real precondition (sql-liquibase.md).
+SQ02_MATCHES=""
+if [ -d "src/sql" ] && git rev-parse -q --verify HEAD >/dev/null 2>&1; then
+    columns() { awk 'BEGIN{IGNORECASE=1} /CREATE TABLE/{t=$0; sub(/.*CREATE TABLE[[:space:]]+(IF NOT EXISTS[[:space:]]+)?/,"",t); sub(/[[:space:]]*\(.*/,"",t); gsub(/`/,"",t); in_t=1; next}
+        in_t && /^[[:space:]]*\)/{in_t=0} in_t{c=$1; gsub(/[`,]/,"",c); if (c!="" && c !~ /^(PRIMARY|KEY|CONSTRAINT|UNIQUE|INDEX|FOREIGN|\)|\()$/) print tolower(t)"."tolower(c)}' "$@" 2>/dev/null | sort -u; }
+    SQ02_MATCHES=$(find src/sql -path '*/plugin/*' -name 'create_db_*.sql' | sort | while read -r f; do
+        git cat-file -e "HEAD:$f" 2>/dev/null || continue
+        comm -13 <(columns <(git show "HEAD:$f")) <(columns "$f") | while IFS=. read -r table col; do
+            # Covered when an upgrade script adds the column, or (re)creates the table WITH it — an older
+            # upgrade that created the table without the column proves nothing, it is how the first case broke.
+            if grep -rqiE "ALTER TABLE \`?$table\`?.*ADD (COLUMN )?\`?$col\`?\b" src/sql --include='update_db_*.sql' 2>/dev/null; then continue; fi
+            if grep -rliE "CREATE TABLE (IF NOT EXISTS )?\`?$table\`?\b" src/sql --include='update_db_*.sql' 2>/dev/null | xargs -r cat | columns | grep -qx "$table.$col"; then continue; fi
+            echo "$f: $table.$col is new here and no upgrade script under src/sql/**/upgrade/ adds it"
+        done
+    done)
+fi
+COUNT=0; [ -n "$SQ02_MATCHES" ] && COUNT=$(echo "$SQ02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ02" "PASS" "Every column or table the creation script gained has its upgrade script" 0
+else emit "SQ02" "FAIL" "Schema gained by create_db without an upgrade script for existing sites (sql-liquibase.md)" "$COUNT" "$SQ02_MATCHES"; fi
+
+# TL01: ThreadLocal must be cleared with remove() in a finally block, never reassigned.
+# Reassigning keeps one entry per pooled thread for the whole application lifetime
+# (LUT-31201, see the scalability skill). Applies to migration, not only to scaling work.
+TL01_MATCHES=""
+if [ -d "src/" ]; then
+    TL01_MATCHES=$({ grep -rln 'ThreadLocal' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+        grep -q '\.remove( *)' "$f" 2>/dev/null && continue
+        echo "$f: ThreadLocal never cleared with remove()"
+    done) || TL01_MATCHES=""
+fi
+COUNT=0; [ -n "$TL01_MATCHES" ] && COUNT=$(echo "$TL01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TL01" "PASS" "ThreadLocal cleared with remove()" 0
+else emit "TL01" "FAIL" "ThreadLocal not cleared with remove()" "$COUNT" "$TL01_MATCHES"; fi
+
+# CS01: a portlet JspBean must carry its own CSRF token. The platform filter only protects MVC actions
+# (@Action / @View on MVCAdminJspBean or XPage); a PortletJspBean is the one legacy path outside it, and the
+# core's create_portlet.html / modify_portlet.html emit no token. The plugin can still do it: its specific
+# template is included INSIDE the core form and getCreateTemplate/getModifyTemplate take a model.
+# Pattern: model.put( SecurityTokenService.MARK_TOKEN, getSecurityTokenService( ).getToken( request, ACTION ) )
+# in getCreate/getModify, a hidden input in the specific template, validate( request, ACTION ) in every do*.
+CS01_MATCHES=""
+if [ -d "src/" ]; then
+    CS01_MATCHES=$({ grep -rln 'extends PortletJspBean' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+        grep -q 'SecurityTokenService' "$f" 2>/dev/null && grep -q '\.validate( *request' "$f" 2>/dev/null && continue
+        echo "$f: portlet JspBean mutations are not token-protected (no SecurityTokenService.validate)"
+    done) || CS01_MATCHES=""
+fi
+COUNT=0; [ -n "$CS01_MATCHES" ] && COUNT=$(echo "$CS01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "CS01" "PASS" "Portlet JspBean mutations carry a CSRF token" 0
+else emit "CS01" "FAIL" "Portlet JspBean without CSRF token (mvc-patterns.md 11)" "$COUNT" "$CS01_MATCHES"; fi
+
+# I18N01: a key of <plugin>_messages.properties is relative to the bundle, so it never repeats the plugin name.
+# Writing childpages.message.x in childpages_messages.properties resolves as childpages.childpages.message.x and
+# the message silently renders as the raw key. The same grep catches a key appended without a newline, glued to
+# the value of the line above, which corrupts both entries at once.
+I18N01_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N01_MATCHES=$(find src/java -name "*_messages*.properties" 2>/dev/null | while read -r f; do
+        PLUGIN=$(basename "$f" | sed 's/_messages.*//')
+        [ -n "$PLUGIN" ] || continue
+        # The plugin name must be followed by a key and an '=': without that, a value ending with a sentence
+        # such as "CSS style to apply to the links." is flagged as a key, which it is not.
+        grep -nE "(^|[^A-Za-z0-9_.])$PLUGIN\.[A-Za-z0-9_.]*[A-Za-z0-9_] *=" "$f" 2>/dev/null | while read -r line; do
+            echo "$f:$line"
+        done
+    done) || I18N01_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N01_MATCHES" ] && COUNT=$(echo "$I18N01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N01" "PASS" "No i18n key repeating the plugin prefix" 0
+else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the line above): it never resolves" "$COUNT" "$I18N01_MATCHES"; fi
 echo ""
 
 # ─── JSP ─────────────────────────────────────────────────
@@ -447,6 +590,17 @@ fi
 COUNT=0; [ -n "$JS02_MATCHES" ] && COUNT=$(echo "$JS02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS02" "PASS" "No JSP scriptlets" 0
 else emit "JS02" "WARN" "Old JSP scriptlets -> EL expressions" "$COUNT" "$JS02_MATCHES"; fi
+
+# JS03: an EL call written with the class name resolves only static methods (StaticFieldELResolver), so an
+# instance method fails at runtime with MethodNotFoundException while everything compiled. A JspBean called
+# from a JSP is @Named and called by its bean name, the decapitalized class name.
+JS03_MATCHES=""
+if [ -d "webapp/" ]; then
+    JS03_MATCHES=$(grep -rnE '\$\{[^}]*\b[A-Z][A-Za-z0-9_]*(JspBean|Bean)\.[a-z][A-Za-z0-9_]*\(' webapp/ --include="*.jsp" 2>/dev/null) || JS03_MATCHES=""
+fi
+COUNT=0; [ -n "$JS03_MATCHES" ] && COUNT=$(echo "$JS03_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JS03" "PASS" "EL calls a bean by its CDI name" 0
+else emit "JS03" "FAIL" "EL call by class name resolves only static methods (use the bean name)" "$COUNT" "$JS03_MATCHES"; fi
 echo ""
 
 # ─── Templates ───────────────────────────────────────────

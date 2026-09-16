@@ -1,0 +1,9 @@
+# Inventory elements this bench cannot reach, each with a written reason (read by tools/coverage.py).
+# The agent fills this while working the "à couvrir" list of summary.md down to zero: a defect found by the suites,
+# a feature that needs a plugin the bench does not assemble, a dead template. Exclusions stay visible as debt.
+# Example:
+# exclusions:
+#   - pattern: 'jsp/admin/plugins/foo/DoBar.jsp'
+#     reason: reached only from the Baz screen, which needs module-qux (not assembled here)
+#     blocked_by: 'jsp/admin/plugins/foo/Baz.jsp'
+exclusions: []

@@ -10,6 +10,11 @@ set -euo pipefail
 # ─── Parse arguments ─────────────────────────────────────
 
 FILES=()
+# `migrate-java-mechanical.sh .` reads as a single file argument and reports "Processing 1 files, 0 replacements":
+# a green that means nothing was migrated. A directory can only mean --all.
+if [ $# -eq 1 ] && [ -d "$1" ]; then
+    set -- --all "$1"
+fi
 if [ "$1" = "--all" ]; then
     PROJECT_ROOT="${2:-.}"
     while IFS= read -r f; do
@@ -24,6 +29,13 @@ else
     # Direct file arguments
     FILES=("$@")
 fi
+
+for f in "${FILES[@]}"; do
+    case "$f" in
+        *.java) [ -f "$f" ] || { echo "{\"error\": \"no such java file: $f\"}" >&2; exit 1; } ;;
+        *) echo "{\"error\": \"not a java file nor a file list: $f (a directory means --all <dir>)\"}" >&2; exit 1 ;;
+    esac
+done
 
 if [ ${#FILES[@]} -eq 0 ]; then
     echo '{"error": "No files to process"}' >&2
@@ -58,7 +70,9 @@ for file in "${FILES[@]}"; do
     do
         PATTERN="${pair%%:*}"
         REPLACEMENT="${pair##*:}"
-        COUNT=$(grep -c "$PATTERN" "$file" 2>/dev/null || echo "0")
+        # `grep -c` already prints 0 and exits 1 when nothing matches: an `|| echo 0` would append a second
+        # line and the integer test below would fail.
+        COUNT=$(grep -c "$PATTERN" "$file" 2>/dev/null) || COUNT=0
         if [ "$COUNT" -gt 0 ]; then
             sed -i "s/$PATTERN/$REPLACEMENT/g" "$file"
             REPLACEMENTS=$((REPLACEMENTS + COUNT))

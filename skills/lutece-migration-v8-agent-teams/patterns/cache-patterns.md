@@ -51,7 +51,7 @@ public class MyCacheService extends AbstractCacheableService<String, Object> {
 }
 ```
 
-Then apply the target shape from `lutece-cache` Step 1: override `put`/`get`/`remove` with `isCacheEnable() && isCacheAvailable()` guards (the inherited methods dereference `_cache`, which is `null` while the cache is disabled).
+Then apply the target shape from `lutece-cache` Step 1: override `put`/`get`/`remove` with `isCacheEnable()` guards (the inherited methods dereference `_cache`, which is `null` while the cache is disabled).
 
 ## 4. Cache Method Renames
 

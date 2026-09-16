@@ -141,3 +141,27 @@ bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-
 ```
 
 Mark each file task as **completed** when verification passes.
+
+## A JSP calling a bean in EL needs a CDI name, not a class name
+
+`${ MyJspBean.method( pageContext.request ) }` with a `<%@page import%>` resolves through
+`StaticFieldELResolver`, which only finds **static** methods. On an instance method it fails at
+runtime with `jakarta.el.MethodNotFoundException: No matching public static method named [...]`,
+and the screen answers an internal error while everything compiled.
+
+A JspBean called from a JSP therefore carries `@Named` and is called by its **bean name**, the
+decapitalized class name:
+
+```jsp
+<%@page import="fr.paris.lutece.plugins.myplugin.web.MyJspBean"%>
+${ myJspBean.getSelectorUI( pageContext.request ) }
+```
+
+Pick the scope from the state: a bean whose public methods each start with `init( request )` holds
+per-call state, so `@RequestScoped`. Being instantiated elsewhere by reflection (insert services are)
+does not prevent it from also being a CDI bean.
+
+**And check the reference before copying it.** `lutece-cms-plugin-blog` ships two JSPs calling
+`BlogUrlInsertServiceJspBean.doInsertBlogLink(...)` and `.doSearchBlogLink(...)` — by class name, and
+neither method exists in that class. A reference shows what was done, not that it works: verify the
+symbol exists and that the mechanism can resolve it.

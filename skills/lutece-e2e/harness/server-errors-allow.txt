@@ -1,0 +1,4 @@
+# Exceptions raised BY THE ARTEFACT UNDER TEST that are expected and must not fail the run (Python regex, matched
+# on the normalized message). Exceptions of the platform the artefact runs inside are already excluded: an exception
+# only counts when the artefact's own package appears in its stack (surface.package of artifacts/inventory.json).
+# Most benches keep this file empty. Add a line only to acknowledge a refusal your own negative scenarios provoke.

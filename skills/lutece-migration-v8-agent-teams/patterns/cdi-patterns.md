@@ -326,6 +326,27 @@ myplugin.myBean.propertyA=valueA
 myplugin.myBean.propertyB=valueB
 ```
 
+**Declare an optional value as `Optional<T>`.** A bare `@ConfigProperty( name = … ) String` whose key is absent
+from every configuration source makes the **deployment** fail, not the call — Weld reports an unsatisfied
+dependency at boot and the whole application refuses to start. Most Spring `<property>` values were defaults a
+site could leave alone, so they belong in an `Optional` with the default applied in the producer:
+
+```java
+@Produces
+@ApplicationScoped
+@Named( "myplugin.myBeanName" )
+public MyType produce( @ConfigProperty( name = "myplugin.myBean.uri" ) Optional<String> uri )
+{
+    MyType bean = new MyType( );
+    bean.setUri( uri.orElse( "https://default.example/api" ) );
+    return bean;
+}
+```
+
+This is what `Oauth2DataClientBeansProducer` does in `module-mylutece-oauth2`, the reference for a Spring bean
+that carried a handful of configured values, a token method and a set of scopes. A `Set<String>` written as a
+`<set>` in Spring becomes one comma-separated key, split in the producer.
+
 ### Producers referencing other named CDI beans (bean refs)
 
 **CRITICAL PATTERN.** When a Spring XML bean's constructor-args or properties reference **other named beans** (`<constructor-arg ref="otherBean" />`), you MUST:
@@ -783,6 +804,37 @@ Replaces `AbstractPaginatorJspBean` and manual pagination (`_nItemsPerPage`, `_s
 
 `IPager` API (core `web/util/IPager.java`): `withBaseUrl`, `withItemsPerPage`, `withIdList`, `withListItem`, `populateModels( request, models, locale )`, `populateModels( request, models, delegate, locale )`, `getPaginator()`. Full JspBean + template example: `lutece-patterns` skill §5.
 
+### Two pagers in one bean must be named apart
+
+`PagerProducer` reads the qualifier from the injection point, but when `name()` is empty it falls back to
+**the declaring class name**, and `PaginatorHandler` is `@SessionScoped` and caches one pager per name:
+
+```java
+// core/web/util/PaginatorHandler.java
+if ( !paginators.containsKey( strName ) )
+{
+    paginators.put( strName, new SimplePager<>( strName, strListBookmark, strBaseUrl, nDefaultItemsPerPage ) );
+}
+return getPaginator( strName );
+```
+
+So a bean declaring two lists gets **one shared pager** whose `listBookmark` is whichever injection point was
+produced first — for the whole session. The second list is then written under the first one's bookmark and its
+template renders the empty branch. Name them:
+
+```java
+@Inject @Pager( name = "myplugin.parents", listBookmark = MARK_PARENT_LIST )
+private IPager<Parent, Parent> _parentPager;
+
+@Inject @Pager( name = "myplugin.children", listBookmark = MARK_CHILD_LIST )
+private IPager<Child, Child> _childPager;
+```
+
+Every member of `@Pager` is `@Nonbinding`, so CDI sees the two injection points as the same qualifier: nothing
+warns, nothing fails, the screen is simply empty. It is also **order- and session-dependent**, which is why it
+survives a unit test that exercises a single view and only shows up on a bench that opens both screens in one
+session. Pin it with a scenario that opens list A, then list B, then list A again.
+
 ## 21. @LutecePriority for CDI Alternatives
 
 When multiple implementations of an interface exist, use @Alternative + @LutecePriority.
@@ -795,6 +847,29 @@ public class MyImplA implements IMyService { }
 ```
 
 The positional value is the configuration key holding the priority (core usage: `@LutecePriority( "multipart.handler.TemporaryFileMultipartHandler" )` in `TemporaryFileMultipartHandler.java`). Higher value wins.
+
+`library-priority-extension` reads that key through MicroProfile Config and adds a CDI `@Priority` when the value
+is **strictly positive**; an absent key or a value ≤ 0 leaves the alternative **disabled**. So the consumer stays
+plain — `CDI.current( ).select( IMyService.class ).get( )`, no qualifier — and the site chooses by configuration.
+
+**The v7 shape to replace.** A v7 plugin picked its implementation by putting a *bean name* in a property and
+looking it up:
+
+```java
+// v7
+String strBean = AppPropertiesService.getProperty( "myplugin.provider" );
+return SpringContextService.getBean( strBean );
+```
+
+Translating that literally to `CDI.current( ).select( IMyService.class, NamedLiteral.of( strBean ) ).get( )` is a
+trap: when the property is gone from the plugin's own `.properties` — which is exactly what happens when the
+configuration moves to priority keys — `strBean` is `null` and every call throws
+`IllegalArgumentException: Annotation member value jakarta.enterprise.inject.literal.NamedLiteral.value must not
+be null`, with a stack that names Weld and not the plugin. Whenever a property feeds a
+`NamedLiteral`, check that the property still exists in the shipped configuration.
+
+`@Named` remains right for the other case: several implementations that are **all** used, each at its own call
+site (four DAOs behind one interface, one per entry type). Priority is for "the site picks one".
 
 ## 22. Eager CDI Bean Initialization (Constructor Self-Registration)
 

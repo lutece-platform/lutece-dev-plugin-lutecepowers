@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<server description="Lutece e2e bench">
+    <featureManager>
+        <feature>persistence-3.1</feature>
+        <feature>beanValidation-3.0</feature>
+        <feature>jndi-1.0</feature>
+        <feature>jdbc-4.2</feature>
+        <feature>localConnector-1.0</feature>
+        <feature>cdi-4.0</feature>
+        <feature>servlet-6.0</feature>
+        <feature>pages-3.1</feature>
+        <feature>mpConfig-3.1</feature>
+        <feature>mail-2.1</feature>
+        <feature>xmlBinding-4.0</feature>
+        <feature>concurrent-3.0</feature>
+        <feature>restfulWS-3.1</feature>
+        <feature>jsonb-3.0</feature>
+        <feature>mpHealth-4.0</feature>
+        <feature>mpMetrics-5.1</feature>
+        <feature>monitor-1.0</feature>
+    </featureManager>
+
+    <variable defaultValue="9090" name="http.port"/>
+    <variable defaultValue="9443" name="https.port"/>
+    <variable defaultValue="lutece" name="context.root"/>
+    <variable defaultValue="lutece" name="portal.user"/>
+    <variable defaultValue="lutece" name="portal.password"/>
+    <variable defaultValue="3306" name="portal.port"/>
+    <variable defaultValue="lutece" name="portal.dbname"/>
+    <variable defaultValue="db" name="portal.serverName"/>
+
+    <applicationManager autoExpand="true"/>
+    <applicationMonitor dropinsEnabled="false" updateTrigger="disabled"/>
+
+    <!-- Server-side timing of every request: %D = elapsed microseconds. Parsed by tools/perf.py. -->
+    <httpEndpoint host="*" httpPort="${http.port}" httpsPort="${https.port}" id="defaultHttpEndpoint">
+        <accessLogging filePath="/logs/http_access.log" logFormat="%t %m %U%q %s %b %D"/>
+    </httpEndpoint>
+
+    <!-- /metrics in Prometheus text format, unauthenticated: JVM, servlet, connection pool, thread pool. -->
+    <mpMetrics authentication="false"/>
+    <monitor filter="JVM,ThreadPool,WebContainer,Session,ConnectionPool"/>
+
+    <application context-root="${context.root}" location="lutece.war" name="lutece" type="war"/>
+
+    <library id="jdbcLib">
+        <fileset dir="${shared.resource.dir}/jdbc" includes="*.jar"/>
+    </library>
+    <dataSource jndiName="jdbc/portal">
+        <jdbcDriver libraryRef="jdbcLib"
+            javax.sql.DataSource="org.mariadb.jdbc.MariaDbDataSource"
+            javax.sql.ConnectionPoolDataSource="org.mariadb.jdbc.MariaDbDataSource"
+            javax.sql.XADataSource="org.mariadb.jdbc.MariaDbDataSource"/>
+        <properties url="jdbc:mariadb://${portal.serverName}:${portal.port}/${portal.dbname}" user="${portal.user}" password="${portal.password}"/>
+        <connectionManager maxPoolSize="50"/>
+    </dataSource>
+</server>

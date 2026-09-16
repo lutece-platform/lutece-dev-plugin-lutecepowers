@@ -114,3 +114,113 @@ See `fileupload-patterns.md` for complete migration guide.
 ## 9. Pagination
 
 `@Inject @Pager IPager` and the `paginationAdmin` / `paginationAjax` macros: `/lutece-patterns` §5 (single source). List layout choice (`@manageFeature` vs `@table`): `rules/template-back-office.md`.
+
+## 10. XSL portlet → HTML portlet (MANDATORY, no exception)
+
+**Any portlet still rendered by XSL must be ported to HTML during the migration.** This is not
+a choice between two options: since `LUT-32172` (core commit `0a0be84cc`) an XSL
+portlet whose type does not start with `DOCUMENT` **cannot be created or modified from the back
+office at all**. `create_portlet.html` and `modify_portlet.html` render the style select under
+`<#if portletType.id?starts_with('DOCUMENT')>`, so no `style` parameter is posted, and
+`PortletJspBean.setPortletCommonData` returns `MANDATORY_FIELDS` for any XSL portlet without a
+style. The `return` sits outside the `if` that looks for the xmltransformer plugin, so
+installing that plugin changes nothing but a log line. Proven on an e2e bench: creating a
+`LINK_PAGES` portlet fails with `MANDATORY_FIELDS`.
+
+Depending on `plugin-xmltransformer` is a stopgap for an existing install, never the migration
+target. The port is four moves:
+
+**1. Extend the core base class.** `PortletHtmlContent` forces the HTML path: it makes
+`getHtmlContent` abstract, neutralises `getXml`/`getXmlDocument` (both return `null`) and
+returns `false` from `isContentGeneratedByXmlAndXsl()`. Never override that method by hand.
+
+```java
+// Before
+public class MyPortlet extends Portlet
+{
+    public String getXml( HttpServletRequest request ) { StringBuffer b = new StringBuffer( ); … }
+    public String getXmlDocument( HttpServletRequest request ) { return XmlUtil.getXmlHeader( ) + getXml( request ); }
+}
+// After
+public class MyPortlet extends PortletHtmlContent
+{
+    @Override
+    public String getHtmlContent( HttpServletRequest request )
+    {
+        Map<String, Object> model = new HashMap<>( );
+        model.put( MARK_ITEMS, MyPortletHome.getItems( getId( ) ) );
+        if ( getDisplayPortletTitle( ) == 0 ) { model.put( MARK_PORTLET_NAME, getName( ) ); }
+        return AppTemplateService.getTemplate( TEMPLATE_PORTLET, request.getLocale( ), model ).getHtml( );
+    }
+}
+```
+
+**2. Write the skin template**, one per XSL it replaces, under
+`webapp/WEB-INF/templates/skin/plugins/<plugin>/portlet/`. Reference:
+`lutece-cms-plugin-blog/webapp/WEB-INF/templates/skin/plugins/blog/portlet/default_portlet_blog.html`.
+Port the XSL structure, do not invent a new markup: the XSL is the specification of what the
+page looked like.
+
+**3. Delete the XSL and its rows.** Remove `webapp/WEB-INF/xsl/**` for that portlet and every
+`INSERT INTO core_style`, `core_style_mode_stylesheet` and `core_stylesheet` from
+`src/sql/**`. Those tables left the core, so the inserts fail at install time anyway.
+
+**4. Drop the xmltransformer dependency** if it was only there for this portlet.
+
+What the port also fixes: the style column of `core_portlet` stops mattering, and tests no
+longer need `PortletHome.getStylesList(...)`, which returns an empty list as soon as
+xmltransformer is absent.
+
+## 11. Portlet JspBean — the plugin carries its own CSRF token
+
+The automatic filter of §7 only sees MVC controllers. A `PortletJspBean` has no `@Controller`,
+no `@Action`, no `@View`, so nothing protects its mutations, and the core's own
+`create_portlet.html` / `modify_portlet.html` render a bare `<form>` with no token. Most v7
+portlet plugins therefore have none at all, and a bench proves it in one line: a GET on
+`DoCreatePortletXxx.jsp` with the right parameters creates the portlet.
+
+**The plugin can close it alone.** Its `create_specific` / `modify_specific` template is
+included *inside* the core form, and `getCreateTemplate( pageId, typeId, model )` /
+`getModifyTemplate( portlet, model )` take a model. Checked by `CS01`.
+
+```java
+private static final String ACTION_CREATE_PORTLET = "myplugin.createPortlet";
+private static final String MESSAGE_INVALID_TOKEN = "myplugin.message.invalidToken";
+
+public String getCreate( HttpServletRequest request )
+{
+    model.put( SecurityTokenService.MARK_TOKEN, getSecurityTokenService( ).getToken( request, ACTION_CREATE_PORTLET ) );
+    ...
+}
+
+public String doCreate( HttpServletRequest request )
+{
+    if ( !getSecurityTokenService( ).validate( request, ACTION_CREATE_PORTLET ) )
+    {
+        return AdminMessageService.getMessageUrl( request, MESSAGE_INVALID_TOKEN, AdminMessage.TYPE_STOP );
+    }
+    ...
+}
+```
+
+```html
+<@input type='hidden' name='token' value='${token}' />
+```
+
+`getSecurityTokenService( )` is inherited from `AdminFeaturesPageJspBean`; never
+`SecurityTokenService.getInstance( )`. `doCreate` / `doModify` are abstract **without**
+`throws`, so report the refusal with an `AdminMessage`, not an `AccessDeniedException`.
+
+Four traps:
+
+- **One action name per operation**, and the same one on both sides. A token is one-shot:
+  `validate` removes it from the session, so a page showing N rows needs N tokens for the same
+  action — that works, the session holds a set per action.
+- **Every mutation, not only creation.** A row deletion reached by `<@aButton href='…Do…?id=1'>`
+  is a GET that writes: it needs `&token=${token_x}` and its own `validate`. Give each its own
+  mark (`token_order`, `token_unselect`) so one template can carry several.
+- **A specific template that opens with `</form>`** (a v7 habit to nest its own forms) closes
+  the core form early: the hidden field must come *before* that tag, or it lands outside.
+- **The bench's own scenarios break.** Any scenario that drove a mutation by a forged URL now
+  gets refused, and one that only asserted "an error is shown" turns green for the wrong
+  reason. Rewrite them to submit the real form, which is the real user path anyway.

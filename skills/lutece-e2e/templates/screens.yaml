@@ -1,0 +1,48 @@
+# Per-bench screen rules read by the suites (regex fragments, case-insensitive, added to the generic defaults).
+# fragment:  answers without the surrounding layout: back-office popup bodies and insert services (no admin
+#            menu bar), and front-office pages served as their own complete document (XPage.setStandalone,
+#            an embedded viewer, a print view). Judged on the negative: never an error page, a blank body,
+#            a lost session or an HTTP error.
+# confirm:   screens whose normal answer is a Lutece confirmation question
+# protected: screens the forms fuzzer must never submit (they edit what the bench itself relies on).
+#            End-of-string is (&|$): `[&$]` is a character class and lets `id=1` at the end of a url through — the
+#            fuzzer then deletes the reference row and every later test fails on it.
+# deny:      action urls the forms fuzzer must never post (destructive for the run: install, indexing, exports)
+fragment: []
+#           Portlet screens (Create/ModifyPortlet*.jsp) render without the admin menu bar: list them here.
+confirm: []
+protected: []
+deny: []
+# params:   screens that cannot be opened bare. `inventory.json` lists what each screen reads in `needs_params`;
+#           declare a query for every one of them, or the suite records an internal error instead of the screen.
+#           Example, for a portlet creation screen:
+#             params:
+#               - match: 'CreatePortlet[A-Za-z]*\.jsp'
+#                 query: 'page_id=1&portlet_type_id=MY_PORTLET'
+#               - match: 'ModifyPortlet[A-Za-z]*\.jsp'
+#                 query: 'portlet_id=9001'
+params: []
+
+# Screens the bench must not open standalone, each with a written reason. For a screen that is a step inside
+# another artefact's flow and has no standalone entry point: an XPage reached from a calendar with the chosen
+# slot already in its parameters, for instance. The reason is printed in the summary, so a skipped screen stays
+# visible instead of quietly disappearing from the coverage.
+#   skip:
+#     - match: 'page=myxpage'
+#       reason: 'step of the appointment booking flow: needs starting_date_time from a real slot'
+skip: []
+
+# Rendering findings the bench accepts, as regexes, each with its reason in a comment. For a screen that shows a
+# template expression or an i18n-looking string on purpose — a plugin telling the user which tag to paste into a
+# template. Everything else stays a defect.
+#   render_allow:
+#     - 'unresolved template expression: \$\{myplugin_'   # the tag the user copies, shown on purpose
+render_allow: []
+
+# console_allow: console messages and failed sub-requests the bench accepts, as regexes, each with its reason in
+# a comment beside it. For noise the artefact cannot remove and the migration did not introduce: a third-party
+# asset the deployment has to allow in the site's Content-Security-Policy, a host an offline bench cannot reach.
+# Never for an error the artefact is responsible for — that one is a defect to report, not to declare.
+#   console_allow:
+#     - 'violates the following Content Security Policy directive'   # external image host, site configuration
+console_allow: []

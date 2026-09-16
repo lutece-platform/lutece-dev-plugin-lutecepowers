@@ -24,6 +24,17 @@ mkdir -p .migration
 bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh . > .migration/scan.json
 ```
 
+Keep the migration's own scratch out of the diff, once, now — a reviewer should never see it, and
+`git add -A` at the end would otherwise stage it:
+
+```bash
+# a file not ending with a newline would glue the first entry to its last line, silently
+[ -s .gitignore ] && [ -n "$(tail -c1 .gitignore)" ] && echo >> .gitignore
+for p in 'target/' 'logs/' 'java.io.tmpdir/' '.migration/' '*.log' 'e2e/artifacts/'; do
+  grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore
+done
+```
+
 ### A.3 — Display summary
 Read `.migration/scan.json` and show the user:
 - Project type, artifact, version
@@ -156,12 +167,59 @@ Process the reviewer's findings:
 
 ---
 
-## PHASE G — Final Gate
+## PHASE G — e2e bench (Lead, through the `lutece-e2e` skill)
 
-When ALL of the following are true:
+A migration that compiles and whose unit tests pass has proved nothing about the screens. Unit tests cover almost
+none of a Lutece plugin, and the defects that hurt are the ones they cannot see: a portlet rendering an empty
+string, a form the browser closes because it is nested where HTML forbids it, a screen answering 500 on an unknown
+id.
+
+**Invoke the `lutece-e2e` skill on the project** and follow it. It materialises `e2e/`, runs the stack, inventories
+every screen and action, and reports. One command afterwards: `KEEP=1 ./e2e/run.sh`.
+
+Read its report with the migration in mind:
+
+- **Every red scenario is attributed** — to the plugin, or to the core, with the evidence. A red nobody explains is
+  a red nobody keeps.
+- **A green suite is not a proof.** Check that the front-office assertion targets the portlet's own markup and not a
+  text the site menu also carries, and that screens are opened with the parameters they require. Both traps produce
+  green runs that prove nothing; `lutece-e2e` documents them.
+- **A fix the bench forced you to make inside `e2e/` is a defect of `lutece-e2e`**, not of the plugin. Report it so
+  it goes back into that skill.
+
+Then fix what it found, and go to Phase H. The gate runs the bench again.
+
+---
+
+## PHASE H — Fix and re-verify until the gate passes
+
+**This phase is a loop, not a checkpoint.** Run the gate, fix what is red, run it again. Keep going until it
+passes. A migration is done when the gate says so, never when someone judges the remaining red acceptable.
+
+```bash
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh .
+```
+
+Each turn of the loop:
+
+1. **Read what is red**, and only that. The gate names the check, the failing test or the failing suite.
+2. **Fix it at the source.** Never silence it: an allowlist entry, a deleted assertion or a scenario rewritten to
+   expect the defect all turn the gate green while the defect stays.
+3. **Run the gate again, in full.** A fix invalidates more than it touches: a ported portlet breaks the tests that
+   asserted on its old rendering, a fixed defect turns the scenario pinning it red.
+
+**The only way out other than green** is a red you attribute, with evidence, to something the plugin cannot fix: a
+core defect, or a missing capability of the container. Name it, prove it, and carry it into the hand-over as an open
+item.
+
+**Stop the loop and ask** when the same red comes back a third time after three different fixes. That is a sign the
+diagnosis is wrong, not the fix, and another round will not find it.
+
+The gate passes when ALL of the following are true:
 - Compile **BUILD SUCCESS** and surefire reports with 0 failures and 0 errors
 - **verify-migration.sh**: 0 FAIL
 - **Reviewer agent**: all FAIL items resolved
+- **e2e bench** (Phase G): every suite green, or every red attributed to a defect outside the plugin
 
 Then:
 1. Ask the Config Migrator to delete the remaining `*_context.xml` files, then the Verifier to run the final sweep and remove `.migration/`
@@ -170,9 +228,12 @@ Then:
    - Compile result (`mvn clean install -Dmaven.test.skip=true`)
    - Test result (`mvn clean lutece:exploded antrun:run -Dlutece-test-hsql test`): tests run, failures, errors, skipped from `target/surefire-reports/*.txt`
    - Reviewer agent verdict (PASS/FAIL/WARN counts)
+   - e2e bench: suite counts and what each remaining red is attributed to
    - List of files modified
-3. Clean up the team
-4. **STOP.** Do NOT commit. The user decides when and how to commit.
+3. **Run the gate, do not hand-check.** `bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh .` re-measures the checks, the unit tests read from surefire and the e2e bench, and refuses the migration while any of them is red. Run it after **every** batch of fixes, not once at the end: a fix to a portlet invalidates the tests that asserted on its old rendering, and a fix to a defect turns the scenario pinning it red. Drop `.migration/gate-required` in the project at the start of the migration and the plugin's Stop hook will not let a turn end while the gate is red.
+4. **List the files the migration created and that git does not track yet** (`git status --porcelain | grep '^??'`), and tell the user to stage them with `git add -A`, never `git commit -a`. `beans.xml` and the test `microprofile-config.properties` are new files: `commit -a` silently leaves them out, and the plugin then fails at the next clone with `UnsatisfiedResolutionException` in the Home static initializer. `ST05` fails while they are untracked.
+5. Clean up the team
+6. **STOP.** Do NOT commit. The user decides when and how to commit.
 
 ---
 
@@ -219,8 +280,9 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI + net.sf.json imports | Java Migrators |
 | `migrate-template-mechanical.sh` | BO macros + null-safety (`--no-webxml` for the Template Migrator) | Template Migrator |
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
-| `verify-migration.sh` | 86 checks (see `verification/checks.md`), optional --json mode | Verifier |
+| `verify-migration.sh` | every check of `verification/checks.md`, optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
+| `final-gate.sh` | Postcondition: checks + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase G, after every fix) |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |
 

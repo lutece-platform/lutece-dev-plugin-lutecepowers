@@ -1,0 +1,10 @@
+<%@ page contentType="text/html; charset=UTF-8" %>
+<%@ page import="fr.paris.lutece.plugins.myplugin.service.MyService" %>
+<%@ page import="fr.paris.lutece.portal.service.admin.AdminAuthenticationService" %>
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>e2e probe myplugin</title></head>
+<body data-e2e-probe="myplugin">
+<h1>Sonde e2e : MyService</h1>
+${ AdminAuthenticationService.getInstance().getRegisteredUser(pageContext.request) == null ? '<p id="denied">denied</p>' : '' }
+<pre id="my-value">${ AdminAuthenticationService.getInstance().getRegisteredUser(pageContext.request) == null ? '' : MyService.compute(param.id) }</pre>
+</body></html>

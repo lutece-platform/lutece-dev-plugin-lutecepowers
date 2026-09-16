@@ -1,0 +1,236 @@
+name: ${E2E_NAME:-lutece-e2e}
+
+services:
+  db:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: lutece
+      MARIADB_USER: lutece
+      MARIADB_PASSWORD: lutece
+    volumes:
+      - ./db/my.cnf:/etc/mysql/conf.d/e2e.cnf:ro
+      - ./db/00-grants.sql:/docker-entrypoint-initdb.d/00-grants.sql:ro
+      - dbdata:/var/lib/mysql
+    ports:
+      - "${E2E_DB_PORT:-13306}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks: [e2e]
+
+  # Service name matters: `app` is a Chromium HSTS-preloaded TLD, the browser would force https on http://app:9090.
+  lutece:
+    build: { context: ., dockerfile: Dockerfile.app }
+    image: ${E2E_NAME:-lutece-e2e}-server:local
+    # Runs as the host user so the logs, access log and JFR dump under artifacts/ are readable on the host.
+    user: "${E2E_UID:-1000}:0"
+    environment:
+      portal.serverName: db
+      portal.dbname: lutece
+      portal.port: "3306"
+      portal.user: lutece
+      portal.password: lutece
+      context.root: ${E2E_CONTEXT:-lutece}
+      LIQUIBASE_ENABLED_AT_STARTUP: "true"
+      # run.sh compare: one start in migration mode records the installed versions before the upgrades run.
+      LIQUIBASE_MIGRATION_MODE: "${LIQUIBASE_MIGRATION_MODE:-false}"
+      # MicroProfile Config: environment overrides mail.server / mail.server.port of config.properties
+      MAIL_SERVER: mail
+      MAIL_SERVER_PORT: "1025"
+    # Per-bench application properties. In v8 AppPropertiesService reads MicroProfile Config, whose environment
+    # source outranks every .properties file, so a bench overrides a plugin property by writing it here as
+    # MY_PLUGIN_SOME_PROPERTY (the key upper-cased, every non-alphanumeric character replaced by an underscore).
+    # Shipped empty; harness/app.env is the only file a bench edits to change how the application is configured.
+    env_file:
+      - app.env
+    ports:
+      - "${E2E_PORT:-18080}:9090"
+    volumes:
+      - ../artifacts/logs:/logs
+    depends_on:
+      db: { condition: service_healthy }
+      mail: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:9090/${E2E_CONTEXT:-lutece}/jsp/admin/AdminLogin.jsp"]
+      interval: 5s
+      timeout: 5s
+      retries: 90
+      start_period: 40s
+    networks: [e2e]
+
+  # The artefact BEFORE its migration, on Tomcat 9 / Java 11 (profile v7, `run.sh compare`): same database as
+  # `lutece`, so the v8 site can start on the rows the v7 one created. Its schema is built the v7 way by the Ant
+  # build under WEB-INF/sql at the container's first start (harness/tomcat/entrypoint.sh).
+  lutece7:
+    build: { context: ., dockerfile: Dockerfile.tomcat }
+    image: ${E2E_NAME:-lutece-e2e}-server7:local
+    profiles: [v7]
+    user: "${E2E_UID:-1000}:0"
+    environment:
+      E2E_V7_INIT_DB: "${E2E_V7_INIT_DB:-1}"
+    ports:
+      - "${E2E_PORT7:-18081}:8080"
+    volumes:
+      - ../artifacts/logs7:/logs
+    depends_on:
+      db: { condition: service_healthy }
+      mail: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8080/${E2E_CONTEXT:-lutece}/jsp/admin/AdminLogin.jsp"]
+      interval: 5s
+      timeout: 5s
+      retries: 90
+      start_period: 40s
+    networks: [e2e]
+
+  # SMTP sink: every mail the application sends lands here; scenarios assert on it (step `mail`), the UI is on E2E_MAIL_PORT.
+  mail:
+    image: axllent/mailpit:v1.31.1
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "${E2E_MAIL_PORT:-18025}:8025"
+    networks: [e2e]
+
+  # Stand-ins for the external systems a Lutece site calls (E2E_FAKES=1, compose profile `fakes`):
+  # CAS, OIDC, identitystore, notifygru, CRM, TIPI/PayFiP, ANTS, plus an organisation's own (fakes/extra/), all
+  # served by one Python process on port 9030. Every call is logged as
+  # JSON lines in artifacts/fakes/<channel>.log, so scenarios assert on them like on mail. See SKILL.md § Fakes.
+  fakes:
+    build: ./fakes
+    profiles: [fakes]
+    environment:
+      PRO_GUID: ${E2E_PRO_GUID:-e2e-pro-guid}
+    volumes:
+      - ../artifacts/fakes:/data
+      # the organisation's own stand-ins, ignored by git (fakes/extra/README.md)
+      - ./fakes/extra:/app/extra:ro
+    ports:
+      - "${E2E_FAKES_PORT:-19030}:9030"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:9030/health')\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [e2e]
+
+  # OpenID Connect provider with an interactive login page, two issuers: `paris` (Mon compte / mylutece-oauth2)
+  # and `franceconnect`. Any username logs in; claims come from fakes/oauth2.json. Reachable by the browser
+  # on E2E_OAUTH2_PORT, by the application as http://oauth2:8080/<issuer>.
+  oauth2:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    profiles: [fakes]
+    environment:
+      SERVER_PORT: "8080"
+      JSON_CONFIG_PATH: /config/oauth2.json
+    volumes:
+      - ./fakes/oauth2.json:/config/oauth2.json:ro
+    ports:
+      - "${E2E_OAUTH2_PORT:-19080}:8080"
+    networks: [e2e]
+
+  # Search engines, real ones: a stand-in cannot answer a query the way an index does (E2E_SEARCH=1,
+  # compose profile `search`). The application reaches them as http://solr:8983/solr/<core> and
+  # http://elastic:9200. Started empty; the bench indexes through the application's own indexer.
+  # Solr 9.10.1 matches the solr-solrj the plugin depends on.
+  solr:
+    image: solr:9.10.1-slim
+    profiles: [search]
+    environment:
+      SOLR_CORE: ${E2E_SOLR_CORE:-lutece}
+    # The Lutece solr plugin ships its own schema (webapp/WEB-INF/plugins/solr/conf): point E2E_SOLR_CONF at it,
+    # otherwise the core is created from the `_default` configset, enough to prove the site boots and connects.
+    command: ["sh", "-c", "if [ -f /solr-conf/solrconfig.xml ]; then exec solr-precreate \"$$SOLR_CORE\" /solr-conf; else exec solr-precreate \"$$SOLR_CORE\"; fi"]
+    volumes:
+      - ${E2E_SOLR_CONF:-./search/solr-conf}:/solr-conf:ro
+    ports:
+      - "${E2E_SOLR_PORT:-18983}:8983"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8983/solr/admin/info/system >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [e2e]
+
+  # Single node, security off: a test index, never a production shape.
+  elastic:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.3
+    profiles: [search]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.license.self_generated.type: basic
+      ES_JAVA_OPTS: ${E2E_ES_HEAP:--Xms1g -Xmx1g}
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    ports:
+      - "${E2E_ES_PORT:-19200}:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    networks: [e2e]
+
+  # One-shot: post-schema fixes + synthetic volume (E2E_VOLUME=small|large). Idempotent.
+  dbinit:
+    image: mariadb:11.8
+    restart: "no"
+    environment:
+      E2E_VOLUME: ${E2E_VOLUME:-small}
+      E2E_VERSION: ${E2E_VERSION:-v8}
+    volumes:
+      - ./db:/db:ro
+    entrypoint: ["sh", "-c", "mariadb -h db -ulutece -plutece lutece < /db/post-init.sql && E2E_VOLUME=$$E2E_VOLUME E2E_VERSION=$$E2E_VERSION sh /db/seed.sh && echo 'dbinit done'"]
+    depends_on:
+      lutece: { condition: service_healthy }
+    networks: [e2e]
+
+  # Test runner: pinned Playwright Python image, the e2e folder mounted at /e2e. It shares the network
+  # namespace of the application container so the browser reaches it as localhost: Chromium treats
+  # localhost as a trustworthy origin (no https upgrade from the core's CSP, no HSTS-preload surprises).
+  tests:
+    image: mcr.microsoft.com/playwright/python:v1.62.0-noble
+    profiles: [tests]
+    # E2E_APP=lutece7 (run.sh compare) points the runner at the v7 container instead.
+    network_mode: "service:${E2E_APP:-lutece}"
+    # Host user, so every artifact it writes stays editable from the host and from RUNNER=local.
+    user: "${E2E_UID:-1000}:0"
+    working_dir: /e2e
+    environment:
+      E2E_BASE: http://localhost:${E2E_APP_PORT:-9090}/${E2E_CONTEXT:-lutece}
+      E2E_DB_HOST: db
+      E2E_SCOPE: ${E2E_SCOPE:-target}
+      E2E_VERSION: ${E2E_VERSION:-v8}
+      E2E_MAIL_API: http://mail:8025
+      HOME: /tmp
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /e2e/artifacts/.pydeps
+    volumes:
+      - ..:/e2e
+    # Python deps installed once per requirements.txt hash into artifacts/.pydeps (host-owned, cached across runs).
+    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || (pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H); exec \"$$@\"", "--"]
+
+  # Load generator (run.sh perf).
+  k6:
+    image: grafana/k6:1.5.0
+    profiles: [perf]
+    network_mode: "service:lutece"
+    user: "${E2E_UID:-1000}:0"
+    environment:
+      E2E_BASE: http://localhost:9090/${E2E_CONTEXT:-lutece}
+    volumes:
+      - ..:/e2e
+    working_dir: /e2e
+
+volumes:
+  dbdata:
+
+networks:
+  e2e:
+    driver: bridge

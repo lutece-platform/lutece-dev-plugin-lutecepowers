@@ -1,0 +1,78 @@
+# Business scenarios of this artefact's back office. One CRUD lifecycle per admin feature; the database is the
+# oracle. `req` = the Lutece right (see artifacts/inventory.md). Vocabulary: tests/test_scenarios.py header.
+scenarios:
+
+  - id: example_entry_screens
+    title: Les écrans d'entrée de la fonctionnalité s'affichent sans erreur
+    # Optional: shown in the report under the title. A `>-` block, because a `: ` in a bare scalar breaks the YAML.
+    description: >-
+      Pourquoi ce scénario existe, ce qu'il épingle, ce qu'un relecteur doit savoir avant de lire les étapes.
+    req: MYPLUGIN_MANAGEMENT
+    steps:
+      - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp
+      - expect_ok:
+
+  # - id: myentity_crud
+  #   title: Entités — créer, retrouver, modifier, supprimer
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     # A step value may be {v7: ..., v8: ...} where the migration changed the url or the selector: run.sh compare
+  #     # then plays the same parcours on both legs (E2E_VERSION picks the value).
+  #     - goto: {v7: jsp/admin/plugins/myplugin/CreateMyEntity.jsp, v8: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=createMyEntity}
+  #     - fill_form:
+  #         form: 'form[action*="ManageMyEntities.jsp"]'
+  #         values: {title: 'E2E {{rand}}'}
+  #     - submit: 'form[action*="ManageMyEntities.jsp"]'
+  #     - expect_ok:
+  #     - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE title='E2E {{rand}}'", expect: 1}
+  #     - sql_set: {var: id, query: "SELECT id_myentity FROM myplugin_myentity WHERE title='E2E {{rand}}'"}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=modifyMyEntity&id={{id}}
+  #     - fill: {'input[name="title"]': 'Modifie {{rand}}'}
+  #     - submit: 'form[action*="ManageMyEntities.jsp"]'
+  #     - sql: {query: "SELECT title FROM myplugin_myentity WHERE id_myentity={{id}}", expect: 'Modifie {{rand}}'}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=confirmRemoveMyEntity&id={{id}}
+  #     - expect_message: confirmation
+  #     - confirm:
+  #     - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity={{id}}", expect: 0}
+
+  # Ordering actions (Do*Up / Do*Down / Do*In / Do*Out): never assert against a shared reference row — moving your
+  # element past it drifts the reference and breaks idempotence. Create two siblings of your own, assert their
+  # relative order flips, remove both. `serial: true` because the order column is shared.
+  # - id: myentity_order
+  #   title: Entités — deux entités créées permutent leur ordre, la référence n'est pas touchée
+  #   req: MYPLUGIN_MANAGEMENT
+  #   serial: true
+  #   steps:
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=createMyEntity
+  #     - fill: {'input[name="title"]': 'A {{rand}}'}
+  #     - submit: 'form[action*="ManageMyEntities.jsp"]'
+  #     - sql_set: {var: a, query: "SELECT id_myentity FROM myplugin_myentity WHERE title='A {{rand}}'"}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=createMyEntity
+  #     - fill: {'input[name="title"]': 'B {{rand}}'}
+  #     - submit: 'form[action*="ManageMyEntities.jsp"]'
+  #     - sql_set: {var: b, query: "SELECT id_myentity FROM myplugin_myentity WHERE title='B {{rand}}'"}
+  #     - sql_set: {var: sgn0, query: "SELECT SIGN((SELECT id_order FROM myplugin_myentity WHERE id_myentity={{b}}) - (SELECT id_order FROM myplugin_myentity WHERE id_myentity={{a}}))"}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=doMoveUp&id={{b}}
+  #     - sql: {query: "SELECT SIGN((SELECT id_order FROM myplugin_myentity WHERE id_myentity={{b}}) - (SELECT id_order FROM myplugin_myentity WHERE id_myentity={{a}}))", expect: '-{{sgn0}}'}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=confirmRemoveMyEntity&id={{a}}
+  #     - confirm:
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=confirmRemoveMyEntity&id={{b}}
+  #     - confirm:
+
+  # A step blocked by a real defect of the artefact goes in its own scenario, so the lifecycle beside it stays
+  # green and the defect is reported once, under its own title.
+  # - id: myentity_visible_in_front_office
+  #   title: Une entité publiée apparaît sur la page du site
+  #   req: MYPLUGIN_MANAGEMENT
+  #   anonymous: true            # front office, no back-office session
+  #   steps:
+  #     - goto: jsp/site/Portal.jsp?page=myplugin
+  #     - expect_kind: fo
+  #     - expect_dom: {selector: '.myplugin-list li', min: 1}
+
+  # A REST endpoint is called as a client, not as a browser: `http` sends the Accept header the client would.
+  # - id: myplugin_api_serves_the_list
+  #   title: L'API sert la liste
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - http: {url: rest/myplugin/api/v1/entities, accept: application/json, expect_status: 200, contains: '"id"'}

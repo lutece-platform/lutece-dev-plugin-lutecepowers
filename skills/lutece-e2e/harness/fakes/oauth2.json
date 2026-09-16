@@ -1,0 +1,46 @@
+{
+  "interactiveLogin": true,
+  "httpServer": "NettyWrapper",
+  "tokenCallbacks": [
+    {
+      "issuerId": "paris",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "scope",
+          "match": "*",
+          "claims": {
+            "sub": "e2e-citoyen",
+            "preferred_username": "e2e-citoyen",
+            "given_name": "Test",
+            "family_name": "E2E",
+            "gender": "female",
+            "email": "citoyen@e2e.local",
+            "birthdate": "1980-01-01",
+            "acr": "eidas1"
+          }
+        }
+      ]
+    },
+    {
+      "issuerId": "franceconnect",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "scope",
+          "match": "*",
+          "claims": {
+            "sub": "e2e-fc-sub",
+            "preferred_username": "e2e-citoyen",
+            "given_name": "Test",
+            "family_name": "E2E",
+            "gender": "female",
+            "email": "citoyen@e2e.local",
+            "birthdate": "1980-01-01",
+            "acr": "eidas1"
+          }
+        }
+      ]
+    }
+  ]
+}

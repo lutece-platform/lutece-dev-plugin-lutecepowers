@@ -42,6 +42,7 @@ REPOS=(
   lutece-tech-library-core-utils
   tech-module-rest-healthcheck
   lutece-secteur-public/gru-plugin-appointment
+  lutece-secteur-public/gru-library-grubusiness
 )
 
 command -v git >/dev/null 2>&1 || exit 0

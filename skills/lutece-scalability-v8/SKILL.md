@@ -13,7 +13,7 @@ Unlike migration (largely mechanical), scalability is mostly **semantic** — it
 
 **Prerequisites:** subagent or teammate dispatch, or the sequential fallback (`using-lutecepowers`, section Subagents and teams). Also required: Docker + Compose; JDK 21; Maven; access to the Lutece Maven repos (or a populated `~/.m2`).
 
-The 7 scalability axes (observed in core/forms, the architect's work) are documented under `patterns/`. Reference-first rule: `using-lutecepowers`, Mandatory reads.
+The 7 scalability axes are documented under `patterns/`. Reference-first rule: `using-lutecepowers`, Mandatory reads.
 
 ---
 
@@ -60,7 +60,7 @@ A finding count is a **review pointer**, not an auto-fix list — scalability fi
 **The scanner over-reports. Most findings are false positives.** Never plan a fix on a raw count. For **every** finding, first read the real code and assign a verdict; then, for each *genuine* defect, **observe it failing** before anyone touches it. No fix on an unobserved bug.
 
 ### A.4.1 — Triage: drop false positives (with a stated reason)
-Common false positives (all observed in real plugins) — classify and discard, recording the reason in the report:
+Common false positives — classify and discard, recording the reason in the report:
 
 | Axis | Looks like | Why it is usually a FALSE POSITIVE |
 |------|-----------|-------------------------------------|

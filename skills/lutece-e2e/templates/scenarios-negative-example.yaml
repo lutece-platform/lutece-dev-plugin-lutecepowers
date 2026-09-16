@@ -1,0 +1,50 @@
+# What this artefact must refuse. Mandatory file (`<artefact>-negative.yaml`): a mutation without its CSRF token,
+# one empty-mandatory-field and one duplicate-key refusal per main entity, an unknown id answered gracefully, and,
+# when the artefact enforces rights of its own, a restricted account seeded in harness/db/seed-<target>.sql.
+# The oracle is `expect_message: error` (a Lutece AdminMessage, never an internal error) plus the row unchanged.
+scenarios:
+
+  - id: myentity_csrf_remove_without_token_refused
+    title: Une suppression appelée sans jeton CSRF est refusée et la ligne reste en base
+    req: MYPLUGIN_MANAGEMENT
+    steps:
+      - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=doRemoveMyEntity&id=9001
+      - expect_message: error
+      - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9001", expect: 1}
+
+  # - id: myentity_empty_title_refused
+  #   title: Une entité sans titre est refusée, rien n'est créé
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=createMyEntity
+  #     - fill: {'input[name="title"]': ''}
+  #     - submit_novalidate: 'form[action*="ManageMyEntities.jsp"]'   # bypasses the HTML5 check to reach the server
+  #     - expect_message: error
+  #     - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE title=''", expect: 0}
+
+  # - id: myentity_duplicate_key_refused
+  #   title: Une clé déjà prise est refusée
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=createMyEntity
+  #     - fill: {'input[name="key"]': 'seeded_key'}     # a key the seed already holds
+  #     - submit_novalidate: 'form[action*="ManageMyEntities.jsp"]'
+  #     - expect_message: error
+  #     - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE entity_key='seeded_key'", expect: 1}
+
+  # - id: myentity_unknown_id_answered
+  #   title: Une entité inconnue est refusée proprement, sans erreur interne
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?view=modifyMyEntity&id=999999
+  #     - expect_message: error
+
+  # Rights of the artefact itself: the restricted account is seeded by THIS bench (harness/db/seed-<target>.sql),
+  # the generic harness seeds none — who is restricted from what is a property of the target.
+  # - id: myentity_restricted_account_denied
+  #   title: Un compte sans le droit de gestion se voit refuser l'écran
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - login: {user: e2e_restricted, password: adminadmin}
+  #     - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp
+  #     - expect_message: error

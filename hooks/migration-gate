@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# migration-gate — Stop hook: refuses to end the turn while a migration in progress is not re-verified.
+#
+# Opt-in by design. It does nothing unless the project carries the marker `.migration/gate-required`, which the
+# migration skill drops at the start and removes once the gate passes. Without that marker every other session ends
+# normally.
+#
+# Why a hook and not a rule in the skill: a rule is skipped by whoever is convinced their last edit was harmless.
+# On the first campaign a portlet was ported to HTML and the unit tests asserting on its old rendering were not
+# re-run until the very end; they had been failing the whole time. Exit 2 blocks the stop and hands the reason back
+# to the agent, which is the only deterministic way to make "I re-measured after my last edit" true.
+set -uo pipefail
+
+MARKER=".migration/gate-required"
+[ -f "$MARKER" ] || exit 0
+
+# Never loop: a second stop in the same turn lets the agent through with the failure reported.
+STAMP=".migration/.gate-ran"
+if [ -f "$STAMP" ] && [ "$(find "$STAMP" -mmin -2 2>/dev/null)" ]; then
+    exit 0
+fi
+mkdir -p .migration && touch "$STAMP"
+
+GATE="${CLAUDE_PLUGIN_ROOT:-}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh"
+[ -x "$GATE" ] || exit 0
+
+if OUT=$(bash "$GATE" . --no-e2e 2>&1); then
+    rm -f "$MARKER" "$STAMP"
+    exit 0
+fi
+
+{
+    echo "The migration gate is red, so this migration is not done."
+    echo "$OUT" | grep -E "^(FAIL|OK)|GATE" | tail -12
+    echo
+    echo "Fix what is red, then run the gate again:"
+    echo "  bash \${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh ."
+    echo "Remove .migration/gate-required only when it passes."
+} >&2
+exit 2
