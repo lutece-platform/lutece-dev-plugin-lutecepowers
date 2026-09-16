@@ -56,7 +56,11 @@ NAME=${NAME:-"lutece-${ARTIFACT#plugin-}-e2e"}
 E2E="$DIR/e2e"
 mkdir -p "$E2E"/{harness,tools,tests,scenarios,baselines/aria,artifacts}
 
-cp -a "$SKILL/harness/." "$E2E/harness/"
+# The harness is refreshed from the skill, except what a bench owns and fills in itself: the application
+# environment (app.env), its seeds and the organisation's stand-ins.
+rsync -a --exclude app.env --exclude 'db/seed*.sql' --exclude 'db/post-init.sql' --exclude 'fakes/extra' "$SKILL/harness/" "$E2E/harness/"
+[ -f "$E2E/harness/app.env" ] || cp "$SKILL/harness/app.env" "$E2E/harness/app.env"
+[ -f "$E2E/harness/db/post-init.sql" ] || cp "$SKILL/harness/db/post-init.sql" "$E2E/harness/db/post-init.sql"
 cp -a "$SKILL/tools/." "$E2E/tools/"
 cp -a "$SKILL/tests/." "$E2E/tests/"
 cp "$SKILL/templates/run.sh" "$E2E/run.sh"; chmod +x "$E2E/run.sh" "$E2E/tools/gen-site.sh"
