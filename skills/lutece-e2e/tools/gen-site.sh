@@ -36,6 +36,16 @@ case "$E2E_TARGET" in
     case ",$E2E_ENABLE," in *,"$AUTO_PLUGIN",*) ;; *) E2E_ENABLE="$E2E_ENABLE,$AUTO_PLUGIN" ;; esac ;;
   *) echo "E2E_TARGET=$E2E_TARGET: only core and plugin are generated; a site builds with its own pom" >&2; exit 2 ;;
 esac
+# Front-office authentication comes with the bench: plugin-mylutece and its database module, enabled, with the
+# account harness/db/post-init-mylutece.sql seeds (test / testtest). E2E_MYLUTECE=0 leaves them out; a bench
+# that names another version in E2E_PLUGINS keeps its own. Snapshots by default because the 5.0.0 release still
+# writes core_style* at install, tables the v8 core no longer has (its 5.0.0-5.0.1 upgrade deletes those rows):
+# on a v8 core the site never turns healthy with it.
+if [ "${E2E_MYLUTECE:-1}" != 0 ]; then
+  case ",${E2E_PLUGINS:-}," in *plugin-mylutece:*) ;; *) E2E_PLUGINS="${E2E_PLUGINS:+$E2E_PLUGINS,}fr.paris.lutece.plugins:plugin-mylutece:${E2E_MYLUTECE_VERSION:-5.0.1-SNAPSHOT}:lutece-plugin" ;; esac
+  case ",${E2E_PLUGINS:-}," in *module-mylutece-database:*) ;; *) E2E_PLUGINS="$E2E_PLUGINS,fr.paris.lutece.plugins:module-mylutece-database:${E2E_MYLUTECE_DATABASE_VERSION:-7.0.1-SNAPSHOT}:lutece-plugin" ;; esac
+  for n in mylutece mylutece-database; do case ",${E2E_ENABLE:-}," in *,"$n",*) ;; *) E2E_ENABLE="${E2E_ENABLE:+$E2E_ENABLE,}$n" ;; esac; done
+fi
 IFS=',' read -ra EXTRA <<< "${E2E_PLUGINS:-}"
 for p in "${EXTRA[@]}"; do
   [ -n "$p" ] || continue

@@ -35,9 +35,17 @@ def test_scenario_rule_rejects_unproven_mutation():
     """The collection rule must reject a submit that is only followed by expect_ok, and accept one followed by sql."""
     import test_scenarios
     bad = {"id": "x", "steps": [{"goto": "a"}, {"submit": "form"}, {"expect_ok": None}, {"goto": "b"}]}
+    weak = {"id": "w", "steps": [{"submit": "form"}, {"expect_message": "error"}]}
+    urlish = {"id": "u", "steps": [{"goto": "a"}, {"expect_text": "AdminMessage.jsp"}]}
+    late = {"id": "l", "steps": [{"submit": "form"}, {"sql_exec": "UPDATE t SET x=1"}, {"sql": {"query": "SELECT 1", "expect": 1}}]}
     good = {"id": "y", "steps": [{"submit": "form"}, {"expect_ok": None}, {"sql": {"query": "SELECT 1", "expect": 1}}]}
+    refusal = {"id": "r", "steps": [{"submit_novalidate": "form"}, {"expect_message": "error"}, {"sql": {"query": "SELECT COUNT(*) FROM t", "expect": 0}}]}
     assert test_scenarios.validate(bad), "unproven mutation accepted"
+    assert test_scenarios.validate(weak), "a screen-only oracle after a mutation accepted"
+    assert test_scenarios.validate(urlish), "expect_text on a JSP name accepted"
+    assert test_scenarios.validate(late), "sql_exec after a mutation accepted"
     assert not test_scenarios.validate(good), test_scenarios.validate(good)
+    assert not test_scenarios.validate(refusal), test_scenarios.validate(refusal)
 
 
 def test_classifier_requires_footer(bo):

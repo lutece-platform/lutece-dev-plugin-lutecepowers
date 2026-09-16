@@ -76,7 +76,9 @@ def test_screen(bo, record, target):
         diff = list(difflib.unified_diff(base.read_text().splitlines(), snap.splitlines(), lineterm="", n=0))
         record["aria_changed"] = len(diff) > 0
         record["aria_diff_lines"] = len(diff)
-    bare = "?" not in target
+    # Judged on the url really opened: a screen given its declared query is a parametrised call, and an error
+    # there is a defect, not a robustness finding.
+    bare = "?" not in opened
     record["bare"] = bare
     if CONFIRM_SCREENS.search(target):
         expected = ("confirmation", "error", "warning", "info")

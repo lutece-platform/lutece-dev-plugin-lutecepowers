@@ -62,14 +62,17 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 6. **Pas de no-op** : `fill_form`, `submit`, `click`, `fill` échouent sur un élément absent, résolvent l'élément par
    le locator Playwright (jamais `document.querySelector` avec `:has()` / `:text-is()`).
 7. **Couverture par élément d'inventaire** (`tools/coverage.py`) : chaque écran/action est atteint, exclu avec une
-   raison écrite (`scenarios/coverage-exclusions.yaml`), ou listé « à couvrir ». Prouvé ≠ atteint : seule une action
-   atteinte par un scénario réussi compte ; le reste est une dette listée, jamais soustraite.
+   raison écrite (`scenarios/coverage-exclusions.yaml`), ou listé « à couvrir ». Prouvé ≠ atteint : ne sont prouvées
+   que les pages qu'un oracle réussi a couvertes (`record.proven`) ; le reste est une dette listée, jamais soustraite.
 8. **Cause serveur par échec** (`tools/causes.py`) : exceptions de `messages.log` corrélées par fenêtre de temps et
    confirmées par le nom de la JSP/du bean.
 9. **Bare vs paramétré** : un écran appelé sans ses paramètres peut répondre un message Lutece, jamais une erreur
    interne ; le rapport sépare les deux populations.
-10. **Une mutation sans oracle d'état** dans les pas suivants rend le scénario invalide (test rouge nommant le pas).
-    Oracles : `sql`, `expect_dom`, `expect_text`, `expect_message`, `mail`, `fake_log`, `http`.
+10. **Une mutation sans oracle d'état** dans les trois pas suivants rend le scénario invalide (test rouge nommant le
+    pas). Oracles d'état : `sql`, `expect_dom`, `mail`, `fake_log`, `http`, `download` ; `expect_text`, `expect_message`,
+    `expect_kind`, `expect_html` lisent l'écran, pas l'état : faibles, jamais suffisants seuls après une mutation.
+    `expect_text` sur une URL ou un nom de JSP est refusé ; `sql_exec` n'est permis qu'avant la première mutation ou
+    après le dernier oracle.
 11. **Négatif et droits obligatoires** : refus d'accès, CSRF sans jeton, doublons, champs obligatoires vides
     (`submit_novalidate` contourne le HTML5 pour atteindre le contrôle serveur).
 12. **Trois populations d'échecs** : fonctionnels (écran paramétré, scénario, formulaire), front (JS, console) et
@@ -82,6 +85,11 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
     des valeurs neutres ou passe en `serial`.
 16. **Un constat doit survivre à une base propre** : le seed de référence se rejoue avant chaque `test`, et un constat
     sur une donnée seedée n'est retenu qu'après vérification de sa présence.
+17. **Un saut ne prouve rien** : une suite qui avait quelque chose à prouver et dont tous les tests sont ignorés fait
+    échouer le run (code 8) ; le résumé la marque.
+18. **Le rapport dit ce qui a été testé** (`artifacts/fingerprint.json`) : commit des sources, hash du war, digests des
+    images. Les codes de retour distinguent les causes (3 oracle, 4 invariant, 5 erreurs serveur,
+    6 smoke, 7 revue, 8 suite ignorée) ; `compare` propage le code de la jambe v8.
 
 ## Pièges rencontrés (à conserver dans le skill)
 

@@ -259,6 +259,14 @@ def get_form_urls(page):
     }).filter(u => u)""")
 
 
+def nav_key(u):
+    """Coverage key of a navigated url: the path plus its routing parameters (page=, view=, action=) only."""
+    import urllib.parse
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)
+    parts = ["%s=%s" % (k, q[k][0]) for k in ("page", "view", "action") if k in q]
+    return normalize(u).split("?")[0] + ("?" + "&".join(parts) if parts else "")
+
+
 def normalize(u):
     """Webapp-relative form of an admin url with its query, without the session and cache-busting noise."""
     u = u.split("#")[0]
@@ -372,10 +380,23 @@ def scope():
         e.get("origin") == "env" for k in ("screens", "actions") for e in inv.get(k, []))
     if not scoped:
         return lambda u: True
-    paths = {e["url"].split("?")[0] for k in ("screens", "actions") for e in inv.get(k, []) if e.get("origin", "target") == "target"}
+    target = [e for k in ("screens", "actions") for e in inv.get(k, []) if e.get("origin", "target") == "target"]
+    # Portal.jsp is every front office's path: an XPage is in scope by its page= name, never by the path alone,
+    # or the bench's own mylutece pages would be judged as the artefact's. A portal page (page_id=) hosting a
+    # portlet stays in scope: that is how a portlet is proven.
+    paths = {e["url"].split("?")[0] for e in target if "Portal.jsp" not in e["url"]}
+    pages = {re.search(r"[?&]page=([\w-]+)", e["url"]).group(1) for e in target if re.search(r"[?&]page=([\w-]+)", e["url"])}
     names = {f.get("plugin") for f in inv.get("features", []) if f.get("origin", "target") == "target"} - {None, "core"}
-    marks = ["/plugins/%s/" % n for n in names] + ["page=%s" % n for n in names]
-    return lambda u: bool(u) and (u.split("?")[0] in paths or any(m in u for m in marks))
+    marks = ["/plugins/%s/" % n for n in names]
+
+    def in_scope(u):
+        if not u:
+            return False
+        if "Portal.jsp" in u or "jsp/site/" in u:
+            m = re.search(r"[?&]page=([\w-]+)", u)
+            return (m.group(1) in pages | names) if m else ("page_id=" in u)
+        return u.split("?")[0] in paths or any(m in u for m in marks)
+    return in_scope
 
 
 def render_check(page, kind=None):

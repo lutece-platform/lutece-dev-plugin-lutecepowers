@@ -44,18 +44,14 @@ Then edit `e2e/e2e.conf`:
 - `E2E_ENABLE` plugin names to mark installed in `plugins.dat` (v8 default is *not installed*).
 - Ports when several benches run on the same machine.
 
-FO authentication (a flow behind mylutece): add `plugin-mylutece` + `module-mylutece-database` to
-`E2E_PLUGINS`, enable them (`mylutece,mylutece-database`), and seed the FO user in `harness/db/post-init.sql`:
-
-```sql
-INSERT IGNORE INTO mylutece_database_user
-  (mylutece_database_user_id, login, password, name_given, name_family, email, is_active)
-VALUES (1000, 'test', 'PLAINTEXT:testtest', 'Test', 'User', 'test@example.com', 1);
-INSERT IGNORE INTO mylutece_database_user_role (mylutece_database_user_id, role_key) VALUES (1000, 'role1');
-```
-
-The scenario signs in with `goto: jsp/site/Portal.jsp?page=mylutece&action=login&auth_provider=mylutece-database`,
-then `fill` on `input[name="username"]` / `input[name="password"]` and `submit: form`. The module brings its own
+**Front-office authentication comes with the bench.** `plugin-mylutece` and `module-mylutece-database` are
+assembled and enabled by default (`E2E_MYLUTECE=1`; 5.0.1-SNAPSHOT / 7.0.1-SNAPSHOT, because the 5.0.0 release
+still installs `core_style*` rows the v8 core has no table for and the site never turns healthy; the v7 side of
+`compare` gets the last v7 releases), the plugin's own `mylutece.properties` turns authentication on without making the
+site private, and `harness/db/post-init-mylutece.sql` seeds the account **test / testtest** (role `e2e_user`).
+A scenario signs in with one step, `login_fo: {user: test, password: testtest, provider: mylutece-database}`
+(it fails when the login form is still there afterwards), under `anonymous: true`. A bench that needs another
+version names it in `E2E_PLUGINS` and keeps it; `E2E_MYLUTECE=0` leaves authentication out. The module brings its own
 XPage `page=mylutecedatabase`, which answers its "access denied" site message to an anonymous visitor: declare it
 under `skip` with that reason, it is the module's behaviour and not the artefact's.
 
@@ -313,6 +309,14 @@ migrated base, the finding goes to the core.
 the plugin as shipped actually runs, and read `artifacts/v7/logs7/ant-dbinit.log` — the Ant build continues on
 SQL errors.
 
+## An instance already deployed
+
+`./e2e/run.sh external` runs the suites against a site that runs elsewhere — a recette, a preprod — from
+`E2E_BASE_URL`, with `E2E_DB_*` when the sql oracles may reach its database. No build, no stack, no seed, and
+the forms fuzzer stays off: it posts every form it finds. The scenarios still create their `{{rand}}` rows
+there, so run it on an instance meant to receive them. The inventory still comes from the sources, so the
+coverage is measured the same way.
+
 ## The bench protects itself
 
 `run.sh test` re-seeds before running (the forms fuzzer consumes keyed reference rows; the seed restores them),
@@ -344,16 +348,21 @@ Harness-side causes (fix them in the bench, not in the app):
 ## PHASE 3 — Scenarios (the only code the agent writes)
 
 **Mechanical rule, enforced at collection:** every mutation (`submit`, `submit_novalidate`, `confirm`,
-`confirm_if`, a `click` on a Do*/action control) must be followed by a state oracle — `sql` (`expect`,
-`not_expect`, `expect_var`, `not_expect_var`, `min`), `expect_dom`, `expect_text`, `expect_not_text` or
-`expect_message`. A scenario without it is collected as a failing test that names the step. "The next screen
+`confirm_if`, a `click` on a Do*/action control) must be followed, within the next three steps, by a **state**
+oracle — `sql` (`expect`, `not_expect`, `expect_var`, `not_expect_var`, `min`), `expect_dom`, `mail`, `fake_log`,
+`http`, `download`. `expect_text`, `expect_message`, `expect_kind` and `expect_html` read the screen that
+followed, not what the application did: alone after a mutation they are a *weak* oracle and the scenario is
+rejected. A refusal is written `expect_message: error` **then** `sql` counting that nothing was created.
+`expect_text` on a url or a JSP name is rejected too (assert on what the page says, not where it is), and
+`sql_exec` is allowed before the first mutation or after the last oracle, never in between. "The next screen
 looked normal" (`expect_ok`) is navigation, not proof. Prefer deterministic values (a named group, a fixed
 column) so the oracle can state the expected value; use `sql_set` before and `not_expect_var` after when the
 value cannot be chosen. State that lives outside the database (a badge, a datastore key) is read where it is.
 
-Coverage counts two things, and only the first is reported as achieved: **proven** (reached by a passing
-scenario, hence with an oracle) and merely **reached** (a GET by the screens suite, a fuzzed form). Reached but
-not proven is listed as debt in `summary.md`.
+Coverage counts two things, and only the first is reported as achieved: **proven** — the pages a passing
+oracle stood behind (the navigations since the previous oracle are credited when the next one passes; what
+comes after the last oracle is never proven) — and merely **reached** (a GET by the screens suite, a fuzzed
+form, a page a scenario crossed without asserting). Reached but not proven is listed as debt in `summary.md`.
 
 Flags: `isolated: true` (own session: logout, own password), `anonymous: true` (public screens, no session),
 `serial: true` (changes settings shared by every session — security parameters, e-mail pattern, feature groups,
@@ -475,8 +484,14 @@ Two traps this step exposes, each worth reporting on its own:
 
 ## PHASE 5 — Freeze and hand over
 
-- Copy `artifacts/aria/*.yaml` into `baselines/aria/` to make structural changes visible in later runs.
-- Jenkins: `junit 'e2e/artifacts/junit-*.xml'`, `publishHTML` on `report.html`, archive `summary.md`.
+- `baselines/aria/` is seeded from the first run (`run.sh report` copies the aria snapshots when it is empty):
+  commit it, so structural changes show up as diffs in later runs.
+- `artifacts/fingerprint.json` (also on the first line of `summary.md`) names what was tested: sources commit,
+  war hash, image digests — a green run with no fingerprint is a green run of nothing in particular.
+- CI: `junit 'e2e/artifacts/junit-*.xml'`, publish `report.html`, archive `summary.md`, `compare.md`,
+  `fingerprint.json`; `run.sh` exit codes tell the cause apart (see its header).
+- **A skip is not a proof.** A suite with something to prove (the fo suite when the inventory has a front
+  office, the scenarios, the screens) whose every test is skipped fails the run with code 8.
 - `report.html` is written for the person who reviews the bench without having run it: the
   verdict and one tile per suite; the failures first, each with its readable title, its suite, its reason and the
   confirmed server-side cause; the scenarios by title, right and description with **their steps in plain words**

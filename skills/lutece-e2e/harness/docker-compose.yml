@@ -216,6 +216,32 @@ services:
     # Python deps installed once per requirements.txt hash into artifacts/.pydeps (host-owned, cached across runs).
     entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || (pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H); exec \"$$@\"", "--"]
 
+  # Same runner, own network: for `run.sh external`, against an instance that runs elsewhere. The host's
+  # network is used so a database on the host or on the LAN is reachable with the E2E_DB_* of e2e.conf.
+  tests-ext:
+    image: mcr.microsoft.com/playwright/python:v1.62.0-noble
+    profiles: [tests]
+    network_mode: host
+    user: "${E2E_UID:-1000}:0"
+    working_dir: /e2e
+    environment:
+      E2E_BASE: ${E2E_BASE_URL:-http://localhost:8080/lutece}
+      E2E_DB_HOST: ${E2E_DB_HOST:-127.0.0.1}
+      E2E_DB_PORT: ${E2E_DB_PORT:-3306}
+      E2E_DB_USER: ${E2E_DB_USER:-lutece}
+      E2E_DB_PASSWORD: ${E2E_DB_PASSWORD:-lutece}
+      E2E_DB_NAME: ${E2E_DB_NAME:-lutece}
+      E2E_ADMIN: ${E2E_ADMIN:-admin}
+      E2E_ADMIN_PASSWORD: ${E2E_ADMIN_PASSWORD:-adminadmin}
+      E2E_SCOPE: ${E2E_SCOPE:-target}
+      E2E_VERSION: ${E2E_VERSION:-v8}
+      HOME: /tmp
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /e2e/artifacts/.pydeps
+    volumes:
+      - ..:/e2e
+    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || (pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H); exec \"$$@\"", "--"]
+
   # Load generator (run.sh perf).
   k6:
     image: grafana/k6:1.5.0

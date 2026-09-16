@@ -47,6 +47,9 @@ Step vocabulary (one key per step):
   upload: {selector: ..., file: ...}   set a file input (path relative to e2e/)
   download: <form selector>        submit a form that answers with a file; records its name and size
   login: {user: ..., password: ...}    log out then sign in as another admin (use with isolated: true)
+  login_fo: {user: ..., password: ..., provider: mylutece-database}
+                                   sign a front-office user in through mylutece (use with anonymous: true); the
+                                   step fails when the login form is still there afterwards
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
 Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), steps.
@@ -77,26 +80,40 @@ SCENARIOS = lutece.E2E / "scenarios"
 
 MUTATION = ("submit", "submit_novalidate", "confirm", "confirm_if")
 """download proves itself (non-empty file), so it is not listed."""
-ORACLE = ("sql", "expect_dom", "expect_text", "expect_not_text", "expect_html", "expect_message", "expect_kind", "mail", "fake_log", "http")
+STATE_ORACLE = ("sql", "expect_dom", "mail", "fake_log", "http", "download")
+"""Reads the state the mutation was meant to change: a row, the DOM of the listing, a mail, a call, a file."""
+WEAK_ORACLE = ("expect_text", "expect_not_text", "expect_html", "expect_message", "expect_kind")
+"""Reads the screen that followed: it says the application answered, not what it did. Never enough alone after a mutation."""
+ORACLE = STATE_ORACLE + WEAK_ORACLE
 NEUTRAL = ("goto", "expect_ok", "shot", "expect_url", "sql_set", "set", "wait", "dom_set")
 CLICK_MUTATION = re.compile(r"Do[A-Z]|action|button|submit|Unassign|Remove|Move", re.I)
+URL_LIKE = re.compile(r"\.jsp\b|https?://|[?&][a-z_]+=", re.I)
 
 
 def validate(sc):
     """Returns the list of rule violations of a scenario (empty when it is acceptable)."""
     steps = [(list(st)[0], st[list(st)[0]]) for st in sc.get("steps", [])]
     errors = []
+    unproven = False
     for i, (k, arg) in enumerate(steps):
+        if k == "expect_text" and isinstance(arg, str) and URL_LIKE.search(arg):
+            errors.append("step %d expect_text asserts on a url or a JSP name (%r): assert on what the page says, not where it is" % (i, arg))
+        if k in STATE_ORACLE:
+            unproven = False
+        if k == "sql_exec" and unproven:
+            errors.append("step %d sql_exec between a mutation and its proof: arrange data before the mutation or after its state oracle, never in between" % i)
         is_mut = k in MUTATION or (k in ("click", "click_if") and isinstance(arg, str) and CLICK_MUTATION.search(arg))
         if not is_mut:
             continue
+        unproven = True
         window, j = [], i + 1
-        while j < len(steps) and len(window) < 2:
+        while j < len(steps) and len(window) < 3:
             if steps[j][0] not in NEUTRAL:
                 window.append(steps[j][0])
             j += 1
-        if not any(w in ORACLE for w in window):
-            errors.append("step %d %s has no state oracle (%s) within the next steps" % (i, k, "/".join(ORACLE)))
+        if not any(w in STATE_ORACLE for w in window):
+            what = "only a weak oracle (%s)" % "/".join(w for w in window if w in WEAK_ORACLE) if any(w in WEAK_ORACLE for w in window) else "no oracle"
+            errors.append("step %d %s: %s within the next steps; a mutation is proven by its state (%s)" % (i, k, what, "/".join(STATE_ORACLE)))
     return errors
 
 
@@ -367,6 +384,16 @@ def run_step(page, step, vars_, record):
         d.save_as(str(path))
         record.setdefault("downloads", []).append({"name": d.suggested_filename, "bytes": path.stat().st_size})
         assert path.stat().st_size > 0, "empty download %s" % d.suggested_filename
+    elif key == "login_fo":
+        provider = arg.get("provider", "mylutece-database")
+        page.goto(lutece.url("jsp/site/Portal.jsp?page=mylutece&action=login&auth_provider=" + provider), wait_until="domcontentloaded")
+        assert page.locator('input[name="username"]').count(), "no mylutece login form for provider %s on %s" % (provider, lutece.normalize(page.url))
+        page.fill('input[name="username"]', str(arg["user"]))
+        page.fill('input[name="password"]', str(arg["password"]))
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.locator('form:has(input[name="username"]) button[type="submit"], form:has(input[name="username"]) input[type="submit"]').first.click()
+        txt = lutece.page_text(page)
+        assert not page.locator('input[name="username"]').count(), "front-office login as %s refused: %s" % (arg["user"], txt[:160])
     elif key == "login":
         page.goto(lutece.url("jsp/admin/DoAdminLogout.jsp"), wait_until="domcontentloaded")
         ok = lutece.bo_login(page, arg["user"], arg["password"])
@@ -415,10 +442,17 @@ def test_scenario(bo, browser, request, record, sc):
              "base": lutece.BASE}
     # Every page the scenario lands on is photographed: the before/after report puts the v7 and v8 pictures of
     # the same parcours side by side, and a green scenario without a picture proves nothing to a reader.
+    # Coverage counts as proven only the pages an oracle stood behind: the navigations made since the last
+    # oracle are credited when the next one passes, the ones after the last oracle never are.
+    pending = []
     for i, step in enumerate(sc["steps"]):
         lutece.reset_obs(bo)
         try:
             run_step(bo, step, vars_, record)
+            pending += [lutece.nav_key(n["url"]) for n in bo.obs.get("nav", []) if n["status"] < 400]
+            if list(step)[0] in ORACLE:
+                record.setdefault("proven", []).extend(pending)
+                pending = []
             if list(step)[0] in ("goto", "submit", "submit_novalidate", "confirm", "click"):
                 record.setdefault("screenshots", []).append(lutece.shot(bo, "%s_%d" % (sc["id"], i), "jpg"))
         except AssertionError as e:

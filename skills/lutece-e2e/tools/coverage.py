@@ -25,7 +25,12 @@ def main():
     for r in rows:
         for v in r.get("visited", []):
             hits.setdefault(v, set()).add(r["id"])
-            if r["status"] == "passed" and r["suite"] == "scenarios":
+            # A scenario proves the pages an oracle stood behind (record.proven); a record without that list
+            # (older run) falls back on every page it visited.
+            if r["status"] == "passed" and r["suite"] == "scenarios" and "proven" not in r:
+                proven_hits.setdefault(v, set()).add(r["id"])
+        if r["status"] == "passed" and r["suite"] == "scenarios":
+            for v in r.get("proven", []):
                 proven_hits.setdefault(v, set()).add(r["id"])
             if r["status"] != "passed" and not r.get("bare"):
                 red_hits.setdefault(v, set()).add(r["id"])

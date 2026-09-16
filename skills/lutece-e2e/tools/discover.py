@@ -101,7 +101,8 @@ def crawl_fo(base):
     follows front-office links only. No login: the FO is public. Do*/action urls are not followed (scenarios own
     the mutations). Output mirrors crawl(): {screens, forms, skipped}."""
     inv = lutece.load_json("artifacts/inventory.json", {"screens": []})
-    starts = [s["url"] for s in inv.get("screens", []) if s.get("surface") == "fo"]
+    in_scope = lutece.scope()
+    starts = [s["url"] for s in inv.get("screens", []) if s.get("surface") == "fo" and in_scope(s["url"])]
     if not starts:
         return {"screens": [], "forms": [], "skipped": [], "stats": {"screens": 0, "forms": 0, "skipped": 0}}
     app_ids = {re.search(r"page=([\w-]+)", u).group(1) for u in starts if "page=" in u}

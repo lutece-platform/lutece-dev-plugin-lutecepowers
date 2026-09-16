@@ -22,16 +22,19 @@ def _with_params(u):
 
 
 def _fo_targets():
+    """The front-office pages of the artefact under test: the site's other XPages (the bench's own mylutece login
+    and account pages, for instance) belong to the environment and are not this bench's to judge."""
+    in_scope = lutece.scope()
     seen, out = set(), []
     disc = lutece.load_json("artifacts/discovered.json", {})
     for s in disc.get("fo_screens", []):
         u = _with_params(s["url"])
-        if u not in seen:
+        if u not in seen and in_scope(u):
             seen.add(u); out.append(u)
     inv = lutece.load_json("artifacts/inventory.json", {"screens": []})
     for s in inv.get("screens", []):
         u = _with_params(s.get("url", ""))
-        if s.get("surface") == "fo" and u not in seen:
+        if s.get("surface") == "fo" and u not in seen and in_scope(u):
             seen.add(u); out.append(u)
     return out
 

@@ -37,7 +37,13 @@ G=$(eval_pom "$WT/pom.xml" project.groupId); A=$(eval_pom "$WT/pom.xml" project.
 V=$(eval_pom "$WT/pom.xml" project.version); T=$(eval_pom "$WT/pom.xml" project.packaging)
 DEPS="        <dependency><groupId>$G</groupId><artifactId>$A</artifactId><version>$V</version><type>$T</type></dependency>"
 # Extra artefacts at their v7 versions: the v8 list (E2E_PLUGINS) names v8 versions and does not apply here.
-IFS=',' read -ra EXTRA <<< "${E2E_V7_PLUGINS:-}"
+# Front-office authentication travels with the bench on this side too (tools/gen-site.sh): the last v7 releases.
+V7_PLUGINS="${E2E_V7_PLUGINS:-}"
+if [ "${E2E_MYLUTECE:-1}" != 0 ]; then
+  case ",$V7_PLUGINS," in *plugin-mylutece:*) ;; *) V7_PLUGINS="${V7_PLUGINS:+$V7_PLUGINS,}fr.paris.lutece.plugins:plugin-mylutece:${E2E_V7_MYLUTECE_VERSION:-4.0.8}:lutece-plugin" ;; esac
+  case ",$V7_PLUGINS," in *module-mylutece-database:*) ;; *) V7_PLUGINS="$V7_PLUGINS,fr.paris.lutece.plugins:module-mylutece-database:${E2E_V7_MYLUTECE_DATABASE_VERSION:-6.0.5}:lutece-plugin" ;; esac
+fi
+IFS=',' read -ra EXTRA <<< "$V7_PLUGINS"
 for p in "${EXTRA[@]}"; do
   [ -n "$p" ] || continue
   IFS=':' read -r XG XA XV XT <<< "$p"
@@ -49,7 +55,10 @@ AUTO_PLUGIN=$(sed -n 's:.*<name>\([^<]*\)</name>.*:\1:p' "$PLUGIN_XML" 2>/dev/nu
 [ -n "$AUTO_PLUGIN" ] || AUTO_PLUGIN=$(basename "$PLUGIN_XML" .xml)
 ENABLE="${E2E_ENABLE:-}"
 case ",$ENABLE," in *,"$AUTO_PLUGIN",*) ;; *) ENABLE="${ENABLE:+$ENABLE,}$AUTO_PLUGIN" ;; esac
-echo ">> v7 site: lutece-site-pom $SITE_POM, core $CORE, $A $V ; extra: ${E2E_V7_PLUGINS:-none} ; enabled: $ENABLE"
+if [ "${E2E_MYLUTECE:-1}" != 0 ]; then
+  for n in mylutece mylutece-database; do case ",$ENABLE," in *,"$n",*) ;; *) ENABLE="$ENABLE,$n" ;; esac; done
+fi
+echo ">> v7 site: lutece-site-pom $SITE_POM, core $CORE, $A $V ; extra: ${V7_PLUGINS:-none} ; enabled: $ENABLE"
 
 awk -v core="$CORE" -v sp="$SITE_POM" -v deps="$DEPS" '{gsub(/@@CORE_VERSION@@/, core); gsub(/@@SITE_POM_VERSION@@/, sp); if ($0 ~ /^[[:space:]]*@@DEPENDENCIES@@[[:space:]]*$/) print deps; else print}' \
     "$SITE/pom.xml.tpl" > "$SITE/pom.xml"

@@ -70,6 +70,17 @@ scenarios:
   #     - expect_kind: fo
   #     - expect_dom: {selector: '.myplugin-list li', min: 1}
 
+  # A front-office flow behind mylutece: `login_fo` signs the seeded user in (see SKILL.md, FO authentication).
+  # - id: myplugin_signed_in_user_sees_the_page
+  #   title: Un usager connecté voit sa page
+  #   req: MYPLUGIN_MANAGEMENT
+  #   anonymous: true
+  #   steps:
+  #     - login_fo: {user: test, password: testtest, provider: mylutece-database}
+  #     - goto: jsp/site/Portal.jsp?page=myplugin
+  #     - expect_kind: fo
+  #     - expect_dom: {selector: '.myplugin-user', contains: 'test'}
+
   # A REST endpoint is called as a client, not as a browser: `http` sends the Accept header the client would.
   # - id: myplugin_api_serves_the_list
   #   title: L'API sert la liste

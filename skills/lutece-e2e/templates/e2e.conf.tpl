@@ -19,6 +19,10 @@ E2E_PLUGINS=
 #E2E_CORE_VERSION=
 # Plugin names to mark installed in plugins.dat (comma-separated; the plugin under test is added automatically).
 E2E_ENABLE=
+# Front-office authentication: plugin-mylutece + module-mylutece-database are assembled and enabled, with the
+# account test/testtest (harness/db/post-init-mylutece.sql). 0 leaves them out. Versions: v8 side, and v7 side for compare.
+E2E_MYLUTECE=1
+#E2E_MYLUTECE_VERSION=5.0.1-SNAPSHOT  E2E_MYLUTECE_DATABASE_VERSION=7.0.1-SNAPSHOT  E2E_V7_MYLUTECE_VERSION=4.0.8  E2E_V7_MYLUTECE_DATABASE_VERSION=6.0.5
 # Scope of the screens/forms suites and of the crawl: target (the artefact under test only, default) | all (whole site).
 E2E_SCOPE=target
 # Mailpit UI (every mail sent by the application): http://localhost:<port>
@@ -52,6 +56,10 @@ E2E_V7_SITE_POM=7.0.8
 E2E_V7_CORE=7.1.9
 E2E_V7_PLUGINS=
 E2E_PORT7=18081
+# Instance already deployed (run.sh external): its url, and its database when the sql oracles may reach it.
+# The forms fuzzer never runs there; the scenarios do, and they create rows.
+#E2E_BASE_URL=https://recette.example.org/lutece
+#E2E_DB_HOST= E2E_DB_USER= E2E_DB_PASSWORD= E2E_DB_NAME=
 # Synthetic volume loaded by dbinit: small (fast) | large (bottleneck hunting).
 E2E_VOLUME=none
 # pytest workers.

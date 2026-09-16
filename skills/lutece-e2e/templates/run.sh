@@ -8,6 +8,7 @@
 #   ./run.sh discover     dynamic crawl of the running back office (artifacts/discovered.json)
 #   ./run.sh test [args]  screens + scenarios + forms, in the Playwright runner container (pytest args pass through)
 #   ./run.sh compare      the artefact in v7 (Tomcat) then in v8 on the same database, the suites both times, before/after report
+#   ./run.sh external     the suites against an instance already deployed (E2E_BASE_URL, optional E2E_DB_*): no build, no seed, no fuzzer
 #   ./run.sh perf         server timings, DB digests, JFR hot methods (artifacts/perf.json); E2E_PERF=1 adds the k6 load
 #   ./run.sh report       artifacts/summary.md + report.html from the run artifacts
 #   ./run.sh down         stop everything and drop the database volume
@@ -15,6 +16,9 @@
 #
 # Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n, RUNNER=local (host venv instead of the container),
 # KEEP=1 (do not stop the stack after a full run). Everything else lives in e2e.conf.
+# Exit codes: 1 stack, 2 usage, 3 the bench's own oracle fails, 4 bench invariant broken, 5 unexpected server
+# errors, 6 smoke test, 7 visual review missing, 8 a suite with something to prove was entirely skipped;
+# otherwise pytest's code (1 = a red test).
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")" && pwd)
 cd "$E2E"
@@ -69,7 +73,10 @@ cmd_up() {
   step "waiting for the application"
   until [ "$(health)" != starting ]; do sleep 3; done
   if [ "$(health)" != healthy ]; then
-    echo "application unhealthy, last log lines:"; docker logs --tail 40 "$APP"; exit 1
+    echo "application unhealthy, last log lines:"; docker logs --tail 40 "$APP"
+    # Never leave a dead stack holding the ports: the next bench on this slot would fail to bind for no reason of its own.
+    [ "${KEEP:-}" = 1 ] || cmd_down
+    exit 1
   fi
   step "seed ($E2E_VOLUME)"
   "${COMPOSE[@]}" run --rm dbinit
@@ -99,8 +106,56 @@ cmd_discover() {
   runner tools/discover.py
 }
 
+# What exactly was tested, written where the report reads it: the war's hash, the image digests, the commit of the
+# sources. A green run means nothing when nobody can say which build it was.
+fingerprint() {
+  python3 - "$E2E_SRC" <<'PY'
+import hashlib, json, os, pathlib, subprocess, sys
+src = sys.argv[1]
+def run(*a):
+    try: return subprocess.check_output(a, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception: return ""
+war = pathlib.Path("harness/site/target/lutece.war")
+fp = {"source_commit": run("git", "-C", src, "rev-parse", "--short", "HEAD"),
+      "source_dirty": bool(run("git", "-C", src, "status", "--porcelain")),
+      "war_sha256": hashlib.sha256(war.read_bytes()).hexdigest()[:16] if war.exists() else None,
+      "base_url": os.environ.get("E2E_BASE_URL") or None,
+      "images": {}}
+name = os.environ.get("E2E_NAME", "")
+for img in (name + "-server:local", "mariadb:11.8", "mcr.microsoft.com/playwright/python:v1.62.0-noble"):
+    d = run("docker", "image", "inspect", "-f", "{{index .RepoDigests 0}}|{{.Id}}", img)
+    if d: fp["images"][img] = d.split("|")[0] or d.split("|")[1][:19]
+pathlib.Path("artifacts").mkdir(exist_ok=True)
+pathlib.Path("artifacts/fingerprint.json").write_text(json.dumps(fp, indent=1))
+print("fingerprint: sources %s%s, war %s" % (fp["source_commit"] or "?", " (uncommitted changes)" if fp["source_dirty"] else "", fp["war_sha256"] or "-"))
+PY
+}
+
+# A suite that had something to prove and proved nothing: every test skipped while the inventory lists elements
+# for that surface. A skip costs nothing in pytest; here it fails the run (code 8).
+skipped_suites() {
+  python3 - <<'PY'
+import json, pathlib, sys, xml.etree.ElementTree as ET
+inv = json.loads(pathlib.Path("artifacts/inventory.json").read_text()) if pathlib.Path("artifacts/inventory.json").exists() else {}
+tgt = [s for s in inv.get("screens", []) if s.get("origin", "target") == "target"]
+fo = any(s.get("surface") == "fo" for s in tgt)
+bo = any(s.get("surface", "bo") == "bo" for s in tgt)
+scen = any(p.name != "screens.yaml" and not p.name.startswith("coverage-") for p in pathlib.Path("scenarios").glob("*.yaml"))
+bad = []
+for suite, needed in (("fo", fo), ("scenarios", scen), ("screens", bo)):
+    f = pathlib.Path("artifacts/junit-%s.xml" % suite)
+    if not f.exists() or not needed: continue
+    r = ET.parse(f).getroot(); ts = r if r.tag == "testsuite" else r.find("testsuite")
+    n, sk = int(ts.get("tests", 0)), int(ts.get("skipped", 0))
+    if n and sk == n: bad.append("%s (%d/%d skipped)" % (suite, sk, n))
+if bad:
+    print("SUITE ENTIRELY SKIPPED with something to prove: " + ", ".join(bad) + " — a skip is not a proof"); sys.exit(1)
+PY
+}
+
 cmd_test() {
   step "tests: screens + scenarios + forms ($E2E_WORKERS workers)"
+  fingerprint || true
   "${COMPOSE[@]}" run --rm dbinit > /dev/null 2>&1 || true
   rm -rf artifacts/results artifacts/shots artifacts/aria artifacts/state; mkdir -p artifacts/results
   runner tools/metrics.py snapshot before
@@ -113,7 +168,32 @@ cmd_test() {
   pyrun -m pytest tests/test_forms.py -n "$E2E_WORKERS" -q --tb=line --suite forms --junitxml=artifacts/junit-forms.xml "$@" || rc=$?
   runner tools/metrics.py snapshot after
   invariants || rc=4
+  skipped_suites || { [ "$rc" -eq 0 ] && rc=8; }
   return $rc
+}
+
+# The suites against an instance that already runs somewhere (a recette, a preprod): E2E_BASE_URL, and
+# E2E_DB_HOST/PORT/USER/PASSWORD/NAME when the scenarios' sql oracles may reach its database. No build, no
+# stack, no seed, and the forms fuzzer stays off: it posts every form it finds, which a shared instance
+# does not want. Scenarios that create rows still create them there — run it on an instance meant for that.
+cmd_external() {
+  [ -n "${E2E_BASE_URL:-}" ] || { echo "external: set E2E_BASE_URL=https://host/context (and E2E_DB_* for the sql oracles)"; exit 2; }
+  step "external: $E2E_BASE_URL"
+  mkdir -p artifacts; rm -rf artifacts/results artifacts/shots artifacts/aria artifacts/state; mkdir -p artifacts/results
+  cmd_inventory
+  fingerprint || true
+  local rc=0
+  ext() { "${COMPOSE[@]}" run --rm -T tests-ext python "$@"; local c=$?; [ "$c" = 5 ] && return 0 || return $c; }
+  ext tools/discover.py || true
+  ext -m pytest tests/test_harness.py -q --tb=line --suite harness --junitxml=artifacts/junit-harness.xml || { echo "the bench's own oracle fails on this instance"; exit 3; }
+  ext -m pytest tests/test_screens.py -n "$E2E_WORKERS" -q --tb=line --suite screens --junitxml=artifacts/junit-screens.xml || rc=$?
+  ext -m pytest tests/test_fo.py -n "$E2E_WORKERS" -q --tb=line --suite fo --junitxml=artifacts/junit-fo.xml || rc=$?
+  ext -m pytest tests/test_scenarios.py -n "$E2E_WORKERS" -q --tb=line --suite scenarios -m "not serial" --junitxml=artifacts/junit-scenarios.xml || rc=$?
+  ext -m pytest tests/test_scenarios.py -q --tb=line --suite scenarios -m serial --junitxml=artifacts/junit-scenarios-serial.xml || rc=$?
+  skipped_suites || { [ "$rc" -eq 0 ] && rc=8; }
+  python3 tools/coverage.py | head -3; python3 tools/report.py; echo; cat artifacts/summary.md
+  step "external done in $((SECONDS - START))s, tests rc=$rc"
+  exit $rc
 }
 
 # The bench must still be usable after a run: the admin and the restricted account exist with their access codes.
@@ -196,6 +276,10 @@ cmd_perf() {
 
 cmd_report() {
   step "report"
+  # The structural baseline is taken on the first run, so the next ones have something to diff against.
+  if [ -d artifacts/aria ] && [ -z "$(ls -A baselines/aria 2>/dev/null)" ]; then
+    mkdir -p baselines/aria && cp artifacts/aria/*.yaml baselines/aria/ 2>/dev/null && echo "baselines/aria seeded from this run ($(ls baselines/aria | wc -l) screens): commit it"
+  fi
   python3 tools/coverage.py | head -3
   python3 tools/causes.py > /dev/null
   python3 tools/report.py
@@ -293,7 +377,9 @@ cmd_compare() {
   local rcc=0; python3 tools/compare.py || rcc=$?
   [ "${KEEP:-}" = 1 ] || cmd_down
   step "compare done in $((SECONDS - START))s — v7 rc=$rc7, v8 rc=$rc8, compare rc=$rcc"
-  exit $rcc
+  # The v7 leg is informative (its reds are the plugin's v7 defects); the v8 leg and the comparison decide.
+  local rc=$rcc; [ "$rc8" -ne 0 ] && rc=$rc8
+  exit $rc
 }
 
 cmd_down() {
@@ -311,6 +397,7 @@ case "${1:-all}" in
   report)    cmd_report ;;
   review)    python3 tools/review.py "${2:-check}" ;;
   compare)   cmd_compare ;;
+  external)  cmd_external ;;
   down)      cmd_down ;;
   logs)      shift; docker logs "${@:---tail 100}" "$APP" ;;
   status)    "${COMPOSE[@]}" ps ;;

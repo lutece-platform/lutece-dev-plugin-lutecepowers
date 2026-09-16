@@ -81,15 +81,34 @@ def summary(rows, perf, disc, inv):
               % ("faite" if done >= n and n else "À FAIRE", done, n), ""]
     if (A / "INVARIANT-BROKEN.txt").exists():
         L += ["> **INVARIANT DU BANC ROMPU** : " + (A / "INVARIANT-BROKEN.txt").read_text().strip(), ""]
-    L.append("Inventaire : %d fonctionnalités, %d écrans, %d actions (statique) ; %d écrans concrets découverts, %d formulaires."
-             % (inv.get("stats", {}).get("features", 0), inv.get("stats", {}).get("screens", 0), inv.get("stats", {}).get("actions", 0),
-                disc.get("stats", {}).get("screens", 0), disc.get("stats", {}).get("forms", 0)))
+    cov = js("coverage.json")
+    fp = js("fingerprint.json")
+    if fp:
+        L.append("Testé : sources `%s`%s, war `%s`%s." % (fp.get("source_commit") or "?", " (modifications non commitées)" if fp.get("source_dirty") else "",
+                 fp.get("war_sha256") or "-", (", instance `%s`" % fp["base_url"]) if fp.get("base_url") else ""))
+    # The perimeter first, the whole site after: the reader must not carry away the site's count as the plugin's.
+    st_t = (cov.get("stats_target") or {}) if cov else {}
+    if st_t and any(x.get("origin") == "env" for k in ("screens", "actions") for x in cov.get(k, [])):
+        L.append("Périmètre %s : %d écrans, %d actions (le site assemblé en compte %d et %d, hors périmètre). %d écrans concrets découverts, %d formulaires."
+                 % (pathlib.Path(inv.get("root", "")).name, st_t["screens"]["total"], st_t["actions"]["total"],
+                    inv.get("stats", {}).get("screens", 0), inv.get("stats", {}).get("actions", 0),
+                    disc.get("stats", {}).get("screens", 0), disc.get("stats", {}).get("forms", 0)))
+    else:
+        L.append("Inventaire : %d fonctionnalités, %d écrans, %d actions (statique) ; %d écrans concrets découverts, %d formulaires."
+                 % (inv.get("stats", {}).get("features", 0), inv.get("stats", {}).get("screens", 0), inv.get("stats", {}).get("actions", 0),
+                    disc.get("stats", {}).get("screens", 0), disc.get("stats", {}).get("forms", 0)))
     L += ["", "| Suite | Tests | OK | Échecs | Durée |", "|---|---|---|---|---|"]
     for s, rs in by_suite.items():
         ko = [r for r in rs if r["status"] not in ("passed", "skipped")]
         sk = [r for r in rs if r["status"] == "skipped"]
-        L.append("| %s | %d | %d | %d | %.0f s |" % (s, len(rs), len(rs) - len(ko) - len(sk), len(ko), sum(r["duration_ms"] for r in rs) / 1000) + (" %d ignorés" % len(sk) if sk else ""))
-    cov = js("coverage.json")
+        note = (" %d ignorés" % len(sk)) if sk else ""
+        if sk and len(sk) == len(rs):
+            # Same rule as run.sh skipped_suites: a fully skipped suite is a hole only when the inventory gave it something to prove.
+            tgt = [x for x in inv.get("screens", []) if x.get("origin", "target") == "target"]
+            needed = {"fo": any(x.get("surface") == "fo" for x in tgt), "screens": any(x.get("surface", "bo") == "bo" for x in tgt),
+                      "forms": any(x.get("surface", "bo") == "bo" for x in tgt)}.get(s, True)
+            note = " **suite entièrement ignorée : rien de prouvé**" if needed else " (rien à prouver pour ce périmètre)"
+        L.append("| %s | %d | %d | %d | %.0f s |" % (s, len(rs), len(rs) - len(ko) - len(sk), len(ko), sum(r["duration_ms"] for r in rs) / 1000) + note)
     is_target = target_matcher(cov, inv)
     scoped = bool(cov) and any(x.get("origin") == "env" for k in ("screens", "actions") for x in cov.get(k, []))
     if cov:
@@ -135,9 +154,14 @@ def summary(rows, perf, disc, inv):
                 L.append("- %s inatteignables ou hors banc (%d) : %s" % (kind, len(unreachable), "; ".join("`%s` — %s" % (x["url"], (x["excluded"] or "")[:90]) for x in unreachable)))
     kinds = {}
     for r in rows:
-        if r["status"] == "passed":
+        # The harness suite visits a 404 and an error page on purpose: its kinds would trip the guard below.
+        # A scenario made of http steps only never navigates: its page stays blank by construction.
+        if r["status"] == "passed" and r["suite"] != "harness" and not (r["suite"] == "scenarios" and not r.get("nav")):
             kinds[r.get("kind") or "?"] = kinds.get(r.get("kind") or "?", 0) + 1
-    L += ["", "## Ce que montrent les tests réussis (classification DOM de la dernière page)", ""]
+    L += ["", "## Ce que montrent les tests réussis (classification DOM de la dernière page, hors auto-tests du harnais)", ""]
+    blind = {k: n for k, n in kinds.items() if k in ("auth", "error-page", "blank", "login", "truncated") or k.startswith("http-")}
+    if blind:
+        L.append("**ALARME : des tests réussis se terminent sur %s — l'oracle est aveugle sur ces écrans.**" % ", ".join("%s ×%d" % kv for kv in blind.items()))
     L.append(", ".join("%s ×%d" % (k, n) for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])) or "aucun test réussi")
     groups = {}
     for r in rows:

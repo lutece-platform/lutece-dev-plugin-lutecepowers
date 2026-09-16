@@ -13,6 +13,11 @@ run() {
   mariadb -h db -ulutece -plutece lutece \
     -e "SET @users=$USERS, @groups=$GROUPS, @roles=$ROLES, @lists=$LISTS, @pages=$PAGES; SOURCE $1;"
 }
+# The bench's front-office account, when the mylutece database module is part of the site (E2E_MYLUTECE, gen-site.sh).
+if mariadb -h db -ulutece -plutece lutece -N -e "SELECT 1 FROM mylutece_database_user LIMIT 0" >/dev/null 2>&1; then
+  echo ">> mylutece account test/testtest (post-init-mylutece.sql)"
+  mariadb -h db -ulutece -plutece lutece < /db/post-init-mylutece.sql
+fi
 found=0
 # seed7-*.sql: rows only the v7 schema needs (a portlet's XSL style, a column the v8 dropped), applied on the v7
 # leg of run.sh compare only.
