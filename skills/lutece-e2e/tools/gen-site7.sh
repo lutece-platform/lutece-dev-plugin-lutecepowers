@@ -67,6 +67,13 @@ echo ">> v7 site: lutece-site-pom $SITE_POM, core $CORE, $A $V ; extra: ${V7_PLU
 awk -v core="$CORE" -v sp="$SITE_POM" -v deps="$DEPS" '{gsub(/@@CORE_VERSION@@/, core); gsub(/@@SITE_POM_VERSION@@/, sp); if ($0 ~ /^[[:space:]]*@@DEPENDENCIES@@[[:space:]]*$/) print deps; else print}' \
     "$SITE/pom.xml.tpl" > "$SITE/pom.xml"
 mkdir -p "$SITE/webapp/WEB-INF/plugins"
+# A bench whose artefact has no screen proves it through a probe JSP under harness/site/webapp/jsp/e2e. The v7
+# site needs the same probe, or every probe scenario fails on the v7 leg and the comparison reads "corrigé"
+# where only the v7 site was missing the page. The probe is the bench's, not the artefact's: it is copied as is.
+if [ -d "$E2E/harness/site/webapp/jsp/e2e" ]; then
+  mkdir -p "$SITE/webapp/jsp/e2e" && cp -a "$E2E/harness/site/webapp/jsp/e2e/." "$SITE/webapp/jsp/e2e/"
+  echo ">> probe pages copied to the v7 site ($(ls "$SITE/webapp/jsp/e2e" | tr '\n' ' '))"
+fi
 ENABLED=$(echo "$ENABLE" | tr ',' '\n' | sed '/^$/d; s/[[:space:]]//g; s/$/.installed=1/' | sort -u)
 awk -v repl="$ENABLED" '{if ($0 ~ /@@PLUGINS_ENABLED@@/) print repl; else print}' \
     "$E2E/harness/site/plugins.dat.tpl" > "$SITE/webapp/WEB-INF/plugins/plugins.dat"

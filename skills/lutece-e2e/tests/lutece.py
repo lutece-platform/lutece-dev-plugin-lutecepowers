@@ -472,6 +472,9 @@ def console_allowed(text):
 V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
     r"Refused to apply style", r"MIME type \('text/html'\)", r"jquery", r"\$ is not defined",
     r"Failed to load resource", r"favicon",
+    # A v7 template asking for an empty asset path resolves to the site root, which the browser aborts. It is the
+    # v7 theme's own markup, not a request the artefact makes.
+    r"^https?://[^/]+/[^/]*/?$", r"ERR_ABORTED",
 ))
 
 
