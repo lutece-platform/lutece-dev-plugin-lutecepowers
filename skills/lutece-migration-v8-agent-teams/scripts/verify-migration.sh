@@ -298,7 +298,7 @@ echo ""
 echo "CATEGORY: Deprecated API"
 check_grep "DP01" 'AccessControlService\.getInstance\|AccessLogService\.getInstance\|AdminDashboardService\.getInstance\|AttributeFieldService\.getInstance\|AttributeService\.getInstance\|AttributeTypeService\.getInstance\|DashboardService\.getInstance\|EditorBbcodeService\.getInstance\|ExtendableResourceActionHit\.getInstance\|FileImagePublicService\.getInstance\|FileImageService\.getInstance\|FileService\.getInstance\|FilterService\.getInstance\|LuteceUserCacheService\.getInstance\|PortalMenuService\.getInstance\|PortletService\.getInstance\|ProgressManagerService\.getInstance\|QueryListenersService\.getInstance\|RegularExpressionService\.getInstance\|RSAKeyPairUtil\.getInstance\|SecurityTokenService\.getInstance\|ServletService\.getInstance\|WorkflowService\.getInstance' "src/" "FAIL" "Deprecated core getInstance() calls (23 @Deprecated(since=8.0) in lutece-core; SecurityService/AdminAuthenticationService are not deprecated)"
 check_grep "DP02" 'FileImagePublicService\.init\|FileImageService\.init' "src/" "FAIL" "Deprecated init() calls (auto-registered in v8)"
-check_grep "DP03" '\(^\|[^.A-Za-z0-9_]\)getModel( )' "src/" "FAIL" "MANDATORY: getModel() -> @Inject Models (excludes DTO getters like request.getModel())"
+check_grep "DP03" '\(^\|[^.A-Za-z0-9_]\)getModel([[:space:]]*)' "src/" "FAIL" "MANDATORY: getModel() -> Models parameter (excludes DTO getters like request.getModel())"
 echo ""
 
 # ─── DAO ─────────────────────────────────────────────────

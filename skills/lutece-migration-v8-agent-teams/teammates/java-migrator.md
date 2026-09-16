@@ -207,6 +207,10 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 
 ## Step 8h: zero compiler warning
 
+`patterns/deprecation-fixes.md` lists what each deprecated API is replaced by — read it before fixing by hand,
+several have a trap (the RBAC and workgroup overloads need an explicit `(User)` cast, or the compiler keeps
+picking the deprecated one).
+
 Every file you own compiles **without a warning** when it leaves your hands: `@Deprecated` API replaced by
 its successor, generics declared (no raw types, no unchecked casts left to the reader), `serialVersionUID`
 on `Serializable` classes, unused imports and variables removed, `@Override` where it applies. The migration is
