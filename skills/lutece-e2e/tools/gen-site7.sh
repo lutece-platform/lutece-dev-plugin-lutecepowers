@@ -5,7 +5,11 @@
 # built with plain mvn (the site pom declares the Lutece repositories), or with E2E_MVN7 when a developer keeps separate settings.
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")/.." && pwd)
+# The environment wins over e2e.conf, as in run.sh: a caller that exported E2E_… (run.sh compare assembling the
+# site without the authentication plugin, for instance) must not have its choice overwritten by the file.
+_e2e_env=$(export -p | grep -E "^(declare -x |export )E2E_" || true)
 . "$E2E/e2e.conf"
+eval "$_e2e_env"
 SRC=$(cd "$E2E/$E2E_SRC" && pwd)
 SITE="$E2E/harness/site7"
 WT="$E2E/harness/src7"

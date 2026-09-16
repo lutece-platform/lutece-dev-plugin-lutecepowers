@@ -344,7 +344,10 @@ cmd_compare() {
   step "compare 1/6: v7 site and image, v8 image"
   bash tools/gen-site7.sh
   "${COMPOSE[@]}" build lutece7
-  needs_build && cmd_build
+  # Always rebuild the v8 site here, never `needs_build`: the comparison changes what the site is assembled with
+  # (no authentication plugin), and a war left from a previous `run.sh all` would carry plugins this run excluded
+  # — their v7→v8 scripts would then run on the v7 database and the site would not start.
+  cmd_build
   step "compare 2/6: v7 on a fresh database, seeded"
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   rm -rf artifacts/logs artifacts/logs7 artifacts/v7 artifacts/v8 artifacts/compare.md artifacts/compare.html

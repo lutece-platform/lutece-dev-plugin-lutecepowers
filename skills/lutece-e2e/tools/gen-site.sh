@@ -3,7 +3,11 @@
 # The artefact under test (core or plugin) is installed to ~/.m2 first so the site picks the local build.
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")/.." && pwd)
+# The environment wins over e2e.conf, as in run.sh: a caller that exported E2E_… (run.sh compare assembling the
+# site without the authentication plugin, for instance) must not have its choice overwritten by the file.
+_e2e_env=$(export -p | grep -E "^(declare -x |export )E2E_" || true)
 . "$E2E/e2e.conf"
+eval "$_e2e_env"
 SRC=$(cd "$E2E/$E2E_SRC" && pwd)
 SITE="$E2E/harness/site"
 MVN=${MVN:-mvn}
