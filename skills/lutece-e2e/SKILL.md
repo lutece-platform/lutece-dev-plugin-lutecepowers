@@ -304,6 +304,13 @@ a 7.1.x site upgraded under Liquibase gets no front office (`globalTheme is null
 scripts by hand before the v8 start and prints `HAND-APPLIED` for each: the bench shows the plugin on a
 migrated base, the finding goes to the core.
 
+**The site around the artefact replays its own upgrades too.** The v8 site takes over a v7 database, so every
+plugin assembled with it runs its v7→v8 scripts — including the ones the bench added for its own comfort. One
+unguarded `DELETE` in any of them stops the whole start (`plugin-mylutece`'s `update_db_core_mylutece-5.0.0-5.0.1.sql`
+deletes rows from `core_style*`, which the core's 7→8 step has already dropped: `globalTheme is null`, empty
+site). `compare` therefore runs **without** the bench's front-office authentication (`E2E_MYLUTECE_FORCE=1`
+puts it back), and a bench keeps `E2E_PLUGINS` to what the artefact really needs.
+
 **The v7 side is not neutral either.** A v7 plugin's `init_core` may target tables a later 7.x core dropped
 (a portlet plugin writes its XSL style into `core_style*`, removed in core 7.1.9): pick `E2E_V7_CORE` where
 the plugin as shipped actually runs, and read `artifacts/v7/logs7/ant-dbinit.log` — the Ant build continues on

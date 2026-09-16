@@ -332,6 +332,15 @@ snapshot() {
 }
 cmd_compare() {
   COMPOSE+=(--profile v7)
+  # The v8 site takes over a v7 database, so every plugin of the site replays its own v7→v8 upgrades — including
+  # the ones the bench added for its own comfort. plugin-mylutece's `update_db_core_mylutece-5.0.0-5.0.1.sql`
+  # deletes rows from core_style* with no precondition, and the core's 7→8 step has already dropped those tables:
+  # the v8 site never starts. Front-office authentication is not what a before/after compares, so the comparison
+  # runs without it; E2E_MYLUTECE=1 in the environment forces it back when a bench really needs it there.
+  if [ "${E2E_MYLUTECE:-1}" != 0 ] && [ -z "${E2E_MYLUTECE_FORCE:-}" ]; then
+    export E2E_MYLUTECE=0
+    echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
+  fi
   step "compare 1/6: v7 site and image, v8 image"
   bash tools/gen-site7.sh
   "${COMPOSE[@]}" build lutece7
