@@ -284,6 +284,14 @@ migration changed a url or a selector, the step value is a per-version mapping:
 seulement", never as a regression fixed by v8. Do not use it to dodge a v7 url: a scenario skipped on the v7
 leg proves nothing about the migration.
 
+**Read a "corrigé" before believing it.** A green v8 against a red v7 means the migration fixed something *only
+when the same parcours really ran on both sides*. Four things make a v7 leg fail for reasons that have nothing to
+do with the artefact, and each one turns every affected function into a false "corrigé": the bench's probe missing
+from the v7 site or not compiling there (never import a servlet class in it), the bench's properties not reaching
+the v7 container (they do now, same `app.env`), the stand-ins not started on that leg, and a scenario written
+against a v8 form that has no v7 equivalent (`versions: [v8]`, or per-version values). Before writing a
+"corrigé" in a hand-over, open the v7 failure and check it is the plugin's, not the bench's.
+
 **Name the form you submit.** `submit: 'form'` takes the first form of the page; in the Lutece 7 admin layout
 that is the header's accessibility form (`DoModifyAccessibilityMode.jsp`), and the scenario silently posts
 nothing while v8, whose layout has no such form, passes — a false "corrigé". Always `form[action*="ManageX.jsp"]`.
