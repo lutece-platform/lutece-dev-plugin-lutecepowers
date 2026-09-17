@@ -188,12 +188,36 @@ def _dom_value(loc, attr):
     return loc.get_attribute(attr)
 
 
+PROBE_PATH = "jsp/e2e/"
+"""Where a bench puts its own probe pages: they belong to the bench, never to the artefact under test."""
+
+PROBE_BROKEN = re.compile(r"org\.apache\.jasper|Unable to compile|cannot be resolved|PWC6033|JSPG0049E", re.I)
+"""A JSP the container could not compile. On the v7 leg a probe written against the v8 APIs ends here."""
+
+
+def _probe_guard(page, target, resp):
+    """Stops the scenario when the bench's own probe page did not compile on this leg.
+
+    A probe is bench code, not the artefact: when it does not run, the scenario proves nothing about the artefact,
+    and letting it fail would read in the comparison as a defect this version has and the other fixed. A probe
+    written with the v8 APIs cannot compile on a v7 site, which is a bench limit, so the scenario is declared out
+    of that leg instead of being counted red."""
+    if PROBE_PATH not in (target or ""):
+        return
+    status = resp.status if resp else 0
+    if status >= 500 or PROBE_BROKEN.search(page.content()[:4000]):
+        pytest.skip(lutece.DECLARED_SKIP + "the bench's probe page does not run on %s (HTTP %s): it is bench code, "
+                    "not the artefact — give the bench a probe this version can compile, or declare the scenario "
+                    "for the other version only" % (os.environ.get("E2E_VERSION", "v8"), status or "compile error"))
+
+
 def run_step(page, step, vars_, record):
     """Executes one step; raises AssertionError with a readable message on failure."""
     (key, arg), = step.items() if len(step) == 1 else [(k, v) for k, v in step.items() if k != "name"][:1]
     arg = _expand(arg, vars_)
     if key == "goto":
-        page.goto(lutece.url(arg), wait_until="domcontentloaded")
+        resp = page.goto(lutece.url(arg), wait_until="domcontentloaded")
+        _probe_guard(page, arg, resp)
     elif key == "click":
         _click(page, arg)
     elif key == "fill":

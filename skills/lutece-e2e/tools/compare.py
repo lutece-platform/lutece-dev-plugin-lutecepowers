@@ -104,14 +104,19 @@ def groups(v7, v8):
     by = {}
     for k in set(m7) | set(m8):
         by.setdefault(k[:3], []).append((k[3], m7.get(k), m8.get(k)))
-    out = []
+    out, unjudged = [], 0
     for g, pairs in by.items():
         # The representative is the worst pair seen on both sides; a variant only one crawl sampled (another id)
         # says nothing about the function and is folded, not judged.
         pairs.sort(key=lambda p: (0 if p[1] and p[2] else 1, ORDER[verdict(p[1], p[2])], p[0]))
+        # Skipped on both legs: neither version was judged, so the row would say "inchangé" about nothing. Counted,
+        # not listed — the reader needs the number, not a table of empty comparisons.
+        if all(state(r) == "skip" for _, r7, r8 in pairs for r in (r7, r8) if r):
+            unjudged += 1
+            continue
         out.append((g, pairs))
     out.sort(key=lambda gp: (ORDER[verdict(gp[1][0][1], gp[1][0][2])], gp[0]))
-    return out
+    return out, unjudged
 
 
 def title(g, pairs):
@@ -137,6 +142,13 @@ def reason(r):
     return (r.get("reason") or "").replace("\n", " ") if r and state(r) == "ko" else ""
 
 
+def skip_note(r):
+    """Why a leg did not judge the screen, as the bench wrote it: a leg that skipped proves nothing, and the reader
+    has to see whether that was declared or just happened."""
+    t = (r.get("reason") or "").replace("\n", " ") if r and state(r) == "skip" else ""
+    return t.replace("Skipped: ", "", 1).replace("declared exclusion: ", "", 1)
+
+
 def counts_of(gs):
     c = {}
     for g, pairs in gs:
@@ -145,17 +157,22 @@ def counts_of(gs):
     return c
 
 
-def md(gs):
+def md(gs, unjudged=0):
     c = counts_of(gs)
     L = ["# Avant / après — v7 puis v8 sur la même base", "",
          "Une ligne par fonction (écran, formulaire, scénario) ; les écrans qui ne diffèrent que par leurs identifiants sont des variantes de la même fonction.", "",
          "| Verdict | Fonctions |", "|---|---|"] + ["| %s | %d |" % (v, c[v]) for v in sorted(c, key=ORDER.get)]
+    if unjudged:
+        L += ["", "%d fonction(s) ne sont jugées sur aucune des deux jambes (exclusion déclarée, ou aucun écran à ouvrir) : "
+              "elles ne disent rien de la migration et ne figurent pas dans le tableau." % unjudged]
     L += ["", "| Verdict | Fonction | Type | v7 | v8 | Variantes | Détail |", "|---|---|---|---|---|---|---|"]
     for g, pairs in gs:
         ids, r7, r8 = pairs[0]
         v = verdict(r7, r8)
         detail = ("v8 : " + reason(r8)[:140]) if reason(r8) else ("v7 : " + reason(r7)[:140]) if reason(r7) else (
-            "type de page %s → %s" % (r7.get("kind"), r8.get("kind")) if v == "rendu différent" else "")
+            "type de page %s → %s" % (r7.get("kind"), r8.get("kind")) if v == "rendu différent" else
+            "v7 non jugé : " + skip_note(r7)[:140] if v == "v8 seulement" else
+            "v8 non jugé : " + skip_note(r8)[:140] if v == "v7 seulement" else "")
         L.append("| %s | %s | %s | %s | %s | %d | %s |" % (
             v, title(g, pairs).replace("|", "/"), (r8 or r7)["suite"],
             ("%s · %s" % (state(r7), where(r7))) if r7 else "—", ("%s · %s" % (state(r8), where(r8))) if r8 else "—",
@@ -188,6 +205,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .side img{width:100%;border:1px solid var(--line);border-radius:6px;display:block}
 .none{color:var(--mute);font-style:italic;padding:30px 0;text-align:center;border:1px dashed var(--line);border-radius:6px}
 .reason{margin-top:8px;color:#b91c1c;font-size:12px;white-space:pre-wrap;word-break:break-word}
+.note{margin-top:8px;color:var(--mute);font-size:12px;white-space:pre-wrap;word-break:break-word}
 details{border-top:1px solid var(--line)}summary{padding:8px 16px;cursor:pointer;color:var(--mute);font-size:13px}
 table{border-collapse:collapse;width:100%;font-size:12px}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);padding:6px 16px;background:var(--soft)}
@@ -203,15 +221,18 @@ def cell(ver, r):
     img = '<a href="%s" target=_blank><img loading=lazy src="%s"></a>' % (s, s) if s else '<div class=none>pas de capture</div>'
     return '<div><div class=cap><b>%s</b> <span class=%s>%s</span> <code title="%s">%s</code> <span>%s</span></div>%s%s</div>' % (
         ver, state(r), state(r), html.escape(where(r)), html.escape(where(r)), html.escape(r.get("kind") or ""), img,
-        ('<div class=reason>%s</div>' % html.escape(reason(r)[:600])) if reason(r) else "")
+        ('<div class=reason>%s</div>' % html.escape(reason(r)[:600])) if reason(r)
+        else ('<div class=note>non jugé : %s</div>' % html.escape(skip_note(r)[:600])) if skip_note(r) else "")
 
 
-def page(gs, name):
+def page(gs, name, unjudged=0):
     c = counts_of(gs)
     H = ["<!doctype html><html lang=fr><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>",
          "<title>Avant / après — %s</title><style>%s</style><body><main>" % (html.escape(name), CSS),
          "<h1>Avant / après — %s</h1><div class=sub>Les mêmes parcours sur l'artefact en v7 puis en v8, sur la même base de données. "
-         "Une carte par fonction, v7 à gauche, v8 à droite ; les variantes (autres identifiants) sont repliées dessous.</div>" % html.escape(name),
+         "Une carte par fonction, v7 à gauche, v8 à droite ; les variantes (autres identifiants) sont repliées dessous."
+         "%s</div>" % (html.escape(name),
+                       " %d fonction(s) ne sont jugées sur aucune des deux jambes et ne sont pas affichées." % unjudged if unjudged else ""),
          "<div class=tiles>%s</div>" % "".join('<a class=tile href="#%s"><div class=n>%d</div><div class=l>%s</div></a>' % (
              html.escape(v.replace(" ", "-")), c[v], html.escape(v)) for v in sorted(c, key=ORDER.get))]
     current = None
@@ -241,12 +262,13 @@ def main():
     if not v7 or not v8:
         print("compare: need both artifacts/v7/results and artifacts/v8/results (run.sh compare writes them)")
         return 2
-    gs = groups(v7, v8)
+    gs, unjudged = groups(v7, v8)
     name = pathlib.Path((json.loads((A / "inventory.json").read_text()) if (A / "inventory.json").exists() else {}).get("root", "")).name or "artefact"
-    (A / "compare.md").write_text(md(gs))
-    (A / "compare.html").write_text(page(gs, name))
+    (A / "compare.md").write_text(md(gs, unjudged))
+    (A / "compare.html").write_text(page(gs, name, unjudged))
     c = counts_of(gs)
-    print("compare: " + ", ".join("%s %d" % (v, c[v]) for v in sorted(c, key=ORDER.get)) + " → artifacts/compare.md, compare.html")
+    print("compare: " + ", ".join("%s %d" % (v, c[v]) for v in sorted(c, key=ORDER.get))
+          + (", %d non jugée(s) des deux côtés" % unjudged if unjudged else "") + " → artifacts/compare.md, compare.html")
     # Only a regression — green in v7, red in v8 — fails the comparison.
     return 1 if c.get("régression") else 0
 
