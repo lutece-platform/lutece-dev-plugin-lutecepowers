@@ -10,11 +10,10 @@ set -uo pipefail
 cd "${1:-.}" || exit 1
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "not a git work tree"; exit 2; }
 
+# Same rule as LE01: the file counts as converted when HEAD and the work tree disagree on carriage returns,
+# whatever else changed in it. The content is left alone, only the endings move.
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-git diff HEAD --numstat | awk -F'\t' '{print $3"\t"$1+$2}' | sort > "$TMP/all"
-git diff HEAD --ignore-cr-at-eol --numstat | awk -F'\t' '{print $3"\t"$1+$2}' | sort > "$TMP/content"
-# Same rule as LE01: the file counts as converted when ignoring the endings makes its diff collapse.
-join -t $'\t' "$TMP/all" "$TMP/content" | awk -F'\t' '$2 > 3*$3+20 {print $1}' > "$TMP/files"
+git diff HEAD --name-only --diff-filter=M > "$TMP/files"
 
 N=0
 while read -r f; do
@@ -25,8 +24,6 @@ while read -r f; do
         perl -pi -e 's/\n/\r\n/ unless /\r\n$/' "$f"; N=$((N+1)); echo "  LF -> CRLF  $f"
     elif [ "$head_cr" -eq 0 ] && [ "$work_cr" -gt 0 ]; then
         perl -pi -e 's/\r\n/\n/' "$f"; N=$((N+1)); echo "  CRLF -> LF  $f"
-    else
-        echo "  left alone (mixed endings on both sides): $f"
     fi
 done < "$TMP/files"
 echo "$N file(s) restored — run verify-migration.sh again, LE01 must pass"

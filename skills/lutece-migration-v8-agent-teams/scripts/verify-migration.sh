@@ -481,16 +481,22 @@ COUNT=0; [ -n "$ST05_MATCHES" ] && COUNT=$(echo "$ST05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST05" "PASS" "Files created by the migration are not ignored by git" 0
 else emit "ST05" "FAIL" "Files created by the migration are excluded by .gitignore" "$COUNT" "$ST05_MATCHES"; fi
 
-# LE01: a converted line ending widens the diff to the whole file and hides the migration in it.
+# LE01: a converted line ending rewrites every line of the file and hides the migration in the diff. A file counts
+# as converted when HEAD and the work tree disagree on carriage returns, whatever else changed in it: the files
+# that also carry real changes are the ones where the review matters most.
 LE01_MATCHES=""
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    LE01_MATCHES=$(join -t $'\t' <(git diff HEAD --numstat 2>/dev/null | awk -F'\t' '{print $3"\t"$1+$2}' | sort) \
-                        <(git diff HEAD --ignore-cr-at-eol --numstat 2>/dev/null | awk -F'\t' '{print $3"\t"$1+$2}' | sort) 2>/dev/null \
-                   | awk -F'\t' '$2 > 3*$3+20 {print $1": "$2" changed lines, "$3" once line endings are ignored — endings were converted"}')
+    LE01_MATCHES=$(git diff HEAD --name-only --diff-filter=M 2>/dev/null | while read -r f; do
+        [ -f "$f" ] || continue
+        head_cr=$(git show "HEAD:$f" 2>/dev/null | head -c 20000 | grep -c $'\r' || true)
+        work_cr=$(head -c 20000 "$f" | grep -c $'\r' || true)
+        if [ "$head_cr" -gt 0 ] && [ "$work_cr" -eq 0 ]; then echo "$f: CRLF in HEAD, LF now"
+        elif [ "$head_cr" -eq 0 ] && [ "$work_cr" -gt 0 ]; then echo "$f: LF in HEAD, CRLF now"; fi
+    done)
 fi
 COUNT=0; [ -n "$LE01_MATCHES" ] && COUNT=$(echo "$LE01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "LE01" "PASS" "No file had its line endings converted" 0
-else emit "LE01" "WARN" "Line endings converted (restore them: the diff must show the migration, not the whole file)" "$COUNT" "$LE01_MATCHES"; fi
+else emit "LE01" "FAIL" "Line endings converted: run restore-line-endings.sh, the diff must show the migration, not the whole file" "$COUNT" "$LE01_MATCHES"; fi
 
 # XT01: the XSL machinery left the core (LUT-32172): XmlTransformerService and the core_style* tables live in
 # plugin-xmltransformer. Code or SQL that still uses them needs that dependency declared — or, for a portlet, the

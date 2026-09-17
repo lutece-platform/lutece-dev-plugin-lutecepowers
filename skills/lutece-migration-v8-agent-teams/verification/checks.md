@@ -148,7 +148,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | ST03 | WARN | DAO without CDI scope | (cross-file check) | *.java |
 | ST04 | WARN | Service without CDI scope | (cross-file check) | *.java |
 | ST05 | FAIL | files created by the migration excluded by .gitignore (they would never be committed) | `git check-ignore` | beans.xml, test microprofile-config |
-| LE01 | WARN | line endings converted in a changed file (diff widened to the whole file) | `git diff --numstat` vs `--ignore-cr-at-eol` | changed files |
+| LE01 | FAIL | line endings converted in a changed file (diff widened to the whole file) | carriage returns in HEAD vs the work tree | changed files |
 
 **MV03** — an MVC bean gets its token from the framework, so a token put in the model or validated by hand
 there means the framework's own is off or duplicated. A bean that is not MVC — a portlet admin bean, a servlet —
@@ -164,9 +164,10 @@ exact syntax in `sql-liquibase.md`.
 ALTER belongs in a `dbms:mariadb,mysql` changeset after `SET SESSION sql_mode='NO_AUTO_VALUE_ON_ZERO'`.
 A WARN says the guard is missing; a FAIL says the install data really ships a 0, so every existing site breaks.
 
-**LE01** — the fix is `scripts/restore-line-endings.sh`: it puts back the endings HEAD has on the files whose
-diff collapses once endings are ignored, and touches nothing else. Run it before the final gate, then verify
-again: a review that has to read a whole rewritten file does not happen.
+**LE01** — the fix is `scripts/restore-line-endings.sh`: it puts back the endings HEAD has on every changed file
+whose endings moved, whatever else changed in it, and touches nothing else. A file that carries real changes on
+top of the conversion is the one where this matters most: its migration is buried under a rewrite of every line.
+Run it before the final gate, then verify again: a review that has to read a whole rewritten file does not happen.
 
 **ST02** — `final` is legal and is the core's own pattern when the bean is resolved only
 through its interface (`@ApplicationScoped public final class XDAO implements IXDAO`, twelve
