@@ -358,10 +358,15 @@ cmd_compare() {
   # the ones the bench added for its own comfort. plugin-mylutece's `update_db_core_mylutece-5.0.0-5.0.1.sql`
   # deletes rows from core_style* with no precondition, and the core's 7→8 step has already dropped those tables:
   # the v8 site never starts. Front-office authentication is not what a before/after compares, so the comparison
-  # runs without it; E2E_MYLUTECE=1 in the environment forces it back when a bench really needs it there.
+  # runs without it — unless the artefact under test itself depends on mylutece: then the module is the subject,
+  # not a comfort, and it stays. E2E_MYLUTECE_FORCE=1 in the environment keeps it for any other reason.
   if [ "${E2E_MYLUTECE:-1}" != 0 ] && [ -z "${E2E_MYLUTECE_FORCE:-}" ]; then
-    export E2E_MYLUTECE=0
-    echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
+    if grep -qE '<artifactId>(plugin-mylutece|module-mylutece-[a-z]+)</artifactId>' ../pom.xml 2>/dev/null; then
+      echo ">> compare keeps plugin-mylutece: the artefact under test depends on it"
+    else
+      export E2E_MYLUTECE=0
+      echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
+    fi
   fi
   # A plugin assembled on the v8 leg but absent from the v7 one arrives on a database where its tables already
   # exist (the v7 core created them) with no version recorded for it: plugin-liquibase installs it as new, marks
