@@ -326,7 +326,10 @@ APP7="${E2E_NAME}-lutece7-1"
 wait_healthy() {
   local c=$1
   until [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null || echo missing)" != starting ]; do sleep 3; done
-  [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] || { echo "$c unhealthy, last log lines:"; docker logs --tail 60 "$c"; return 1; }
+  # The whole log is kept beside the last lines: when the site does not come up, the cause (a Liquibase
+  # changeset that stopped, a bean that failed to start) is hundreds of lines above the tail and would otherwise
+  # be gone with the container.
+  [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] || { mkdir -p artifacts/logs; docker logs "$c" > "artifacts/logs/unhealthy-$c.log" 2>&1; echo "$c unhealthy (full log: artifacts/logs/unhealthy-$c.log)"; grep -m1 -oE "Migration failed for changeset [^ ]+" "artifacts/logs/unhealthy-$c.log" | sed 's/^/>> LIQUIBASE STOPPED: /'; grep -m1 -oE "Reason: .{0,200}" "artifacts/logs/unhealthy-$c.log" | sed 's/^/>>   /'; echo "last log lines:"; docker logs --tail 60 "$c"; return 1; }
 }
 snapshot() {
   mkdir -p "artifacts/$1"
