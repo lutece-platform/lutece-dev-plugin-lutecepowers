@@ -149,11 +149,14 @@ def classify(page, status=None):
         warning: !!document.querySelector('.card-status-start.bg-warning, .card-stamp-icon.bg-warning'),
         card: !!document.querySelector('.card-status-start, .card-stamp-icon'),
         forms: [...document.forms].filter(f => f.querySelector('button[type=submit], input[type=submit]')).length,
-        fo: !!document.querySelector('body[id^=body-page], #main-banner-1, .lutece-portal, #portal-header'),
+        fo: !!document.querySelector('body[id^=body-page], #main-banner-1, .lutece-portal, #portal-header, header[role=banner]'),
         foAlert: (() => { const t = document.querySelector('.alert .alert-title'); const box = t && t.closest('.alert');
                           return box && document.querySelector('.btn-back, form button[type=submit]') ? box.className : ''; })(),
         layout: !!document.querySelector('html > head > link[rel=stylesheet], html > head > script'),
         text: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, 4000)})""")
+    # header[role=banner] is the front-office page of a v7 site, where none of the v8 markers exist: without it
+    # every front-office page of the older leg reads as a bare form and the comparison shows a rendering change
+    # on pages nothing touched.
     low = info["text"].lower()
     if not low:
         return "blank"

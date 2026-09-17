@@ -3,6 +3,10 @@
 <%@ page import="fr.paris.lutece.portal.service.admin.AdminAuthenticationService" %>
 <%-- Never import a servlet class here: the package is javax in v7 and jakarta in v8, and the same probe has to
      compile on both sites when run.sh compare copies it to the v7 one. JSP already gives you `request`. --%>
+<%-- When the probe calls the service in a scriptlet and catches what it throws, write the exception AND the
+     first frames into the page: an id that only says "NullPointerException" tells the reader nothing, and the
+     exception never reaches the server log because the probe swallowed it.
+     String strError = e.getClass().getName() + " | " + e.getStackTrace()[0] + " | " + e.getStackTrace()[1]; --%>
 <!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><title>e2e probe myplugin</title></head>
 <body data-e2e-probe="myplugin">
