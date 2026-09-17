@@ -91,5 +91,9 @@ def test_form(bo, anon, record, pair):
     record["kind"] = kind
     assert kind in ("screen", "confirmation", "error", "warning", "info", "login", "public-form") or (kind == "auth" and SESSIONLESS.search(screen)), \
         "server answered with %s (%s)" % (kind, lutece.page_text(bo)[:200])
-    assert not bo.obs["errors"], "js errors %s" % bo.obs["errors"][:2]
-    assert not bo.obs["console"], "console %s" % [c["text"] for c in bo.obs["console"]][:2]
+    # Same judgement as the other suites: what the bench declared, and the environment's own noise, are not the
+    # artefact's doing. Reading page.obs directly here failed a form on an asset every other suite accepts.
+    errs, noise, bad = lutece.console_noise(bo)
+    assert not errs, "js errors %s" % errs[:2]
+    assert not noise, "console %s" % noise[:2]
+    assert not bad, "failed sub-requests %s" % [r["url"] for r in bad][:2]
