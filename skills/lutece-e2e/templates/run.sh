@@ -410,6 +410,15 @@ WARN
   "${COMPOSE[@]}" stop lutece7
   docker exec -i "${E2E_NAME}-db-1" mariadb -ulutece -plutece lutece < artifacts/v7-seeded.sql
   echo ">> database restored to its seeded v7 state (what the suites consumed is not handed over)"
+  # The v8 core reads the global theme from a datastore key its fresh install writes and its 7→8 upgrade does not
+  # create. Without it ThemeDAO.getGlobalTheme dereferences a null entity and every page of the migrated site
+  # answers 500, so no comparison is possible at all. Written here when missing, and said out loud: this is an
+  # upstream defect the bench works around, not something the artefact under test did.
+  if [ -z "$(docker exec "${E2E_NAME}-db-1" mariadb -N -ulutece -plutece lutece -e "SELECT entity_key FROM core_datastore WHERE entity_key='theme.globalThemeCode'" 2>/dev/null)" ]; then
+    docker exec "${E2E_NAME}-db-1" mariadb -ulutece -plutece lutece \
+      -e "INSERT INTO core_datastore (entity_key, entity_value) VALUES ('theme.globalThemeCode', 'lutece')" >/dev/null 2>&1 || true
+    echo ">> WARNING: the taken-over database has no 'theme.globalThemeCode' datastore key — the core's 7→8 upgrade does not create it and every page would answer 500. Written by the bench (upstream defect)."
+  fi
   LIQUIBASE_MIGRATION_MODE=true "${COMPOSE[@]}" up -d lutece
   wait_healthy "$APP" || exit 1
   "${COMPOSE[@]}" stop lutece

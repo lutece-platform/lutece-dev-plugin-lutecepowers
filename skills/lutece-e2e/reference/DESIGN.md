@@ -109,6 +109,10 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - `expect_message` : le thème n'expose que la couleur de la carte (`bg-danger`/`bg-warning`) ; la confirmation se reconnaît à ses deux formulaires (valider / annuler).
 
 ### Pièges des benchs de plugin
+- Le core v8 lit le thème global dans une clé du datastore que seule l'installation neuve écrit : la montée 7→8
+  ne la crée pas, `ThemeDAO.getGlobalTheme` déréférence une entité nulle et toutes les pages du site migré
+  répondent 500. Le banc écrit la clé quand elle manque, en le disant : c'est un défaut amont contourné, pas un
+  comportement de l'artefact testé.
 - Un plugin assemblé côté v8 mais absent de la jambe v7 arrive sur une base où ses tables existent déjà, sans
   version enregistrée pour lui : il est installé comme neuf, son script de création est marqué appliqué et ses
   montées ne tournent jamais. Le schéma reste en forme v7 et le site échoue sur une colonne que la montée aurait
