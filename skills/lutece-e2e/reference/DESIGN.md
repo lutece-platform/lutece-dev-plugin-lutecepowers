@@ -109,6 +109,10 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - `expect_message` : le thème n'expose que la couleur de la carte (`bg-danger`/`bg-warning`) ; la confirmation se reconnaît à ses deux formulaires (valider / annuler).
 
 ### Pièges des benchs de plugin
+- Un plugin assemblé côté v8 mais absent de la jambe v7 arrive sur une base où ses tables existent déjà, sans
+  version enregistrée pour lui : il est installé comme neuf, son script de création est marqué appliqué et ses
+  montées ne tournent jamais. Le schéma reste en forme v7 et le site échoue sur une colonne que la montée aurait
+  ajoutée — cela se lit comme un défaut de migration. Les deux jambes listent les mêmes plugins.
 - Une sonde du bench écrite avec les API v8 ne compile pas sur la jambe v7 : les scénarios qui passent par elle
   s'arrêtent avec une raison écrite au lieu de virer au rouge, sinon la comparaison lit « corrigé » sur du code
   de bench. Sur la version visée par le bench, la même sonde cassée reste rouge.

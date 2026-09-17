@@ -347,6 +347,17 @@ cmd_compare() {
     export E2E_MYLUTECE=0
     echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
   fi
+  # A plugin assembled on the v8 leg but absent from the v7 one arrives on a database where its tables already
+  # exist (the v7 core created them) with no version recorded for it: plugin-liquibase installs it as new, marks
+  # its creation script as already applied and never runs its upgrades, so the schema stays at the v7 shape and
+  # the site fails on a column that upgrade would have added. Cost a front office reading as a migration defect.
+  for dep in ${E2E_PLUGINS//,/ }; do
+    IFS=':' read -r _ art _ _ <<< "$dep"
+    [ -n "${art:-}" ] || continue
+    case ",${E2E_V7_PLUGINS:-}," in *":$art:"*) ;; *)
+      echo ">> WARNING: $art is assembled on the v8 leg but not listed in E2E_V7_PLUGINS: its v7→v8 upgrades will not run on the taken-over database." ;;
+    esac
+  done
   step "compare 1/6: v7 site and image, v8 image"
   bash tools/gen-site7.sh
   "${COMPOSE[@]}" build lutece7
