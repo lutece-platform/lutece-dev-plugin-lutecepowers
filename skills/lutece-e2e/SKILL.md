@@ -153,6 +153,12 @@ behaviour under test.
 | Solr | `solr:9.10.1-slim` (the version of the `solr-solrj` `plugin-solr` depends on) | `http://solr:8983/solr/${E2E_SOLR_CORE}` → `search-solr.properties` `solr.server.address` | `E2E_SOLR_PORT` (18983) |
 | Elasticsearch | `docker.elastic.co/elasticsearch/elasticsearch:9.5.3`, single node, security off | `http://elastic:9200` → `elasticdata.properties` `elasticdata.elastic_server.url` | `E2E_ES_PORT` (19200) |
 
+Both legs get the address written for them: `gen-site.sh` and `gen-site7.sh` drop an override
+(`WEB-INF/conf/override/plugins/search-solr.properties`, `elasticdata.properties`) into the assembled site when
+the plugin is there and the bench ships none of its own. Without it the plugin keeps its packaged default
+(`localhost:8983`, `localhost:9200`), the indexer writes nowhere, and nothing fails on screen: the index is
+simply empty, which a scenario only catches when it reads the engine back.
+
 The core is created at startup. `plugin-solr` ships its own `solrconfig.xml` and `schema.xml` in
 `webapp/WEB-INF/plugins/solr/conf`: point `E2E_SOLR_CONF` at that directory (path relative to `harness/`) or the
 core is built from the `_default` configset — enough to prove the site boots and connects, not enough to index.

@@ -74,5 +74,24 @@ echo ">> assemble war"
 ( cd "$SITE" && $MVN -B -q -Pcontainer-runtime clean package lutece:site-assembly )
 FINAL=$(find "$SITE/target" -maxdepth 1 -type d -name "e2e-site-*" | head -1)
 [ -n "$FINAL" ] || { echo "site-assembly produced no exploded directory under $SITE/target" >&2; exit 1; }
+# A search plugin ships a properties file pointing at a local engine (localhost:8983 for solr, localhost:9200 for
+# elasticdata). In the bench the engines are containers reached by name, so the site must override the address or
+# the indexer writes nowhere and the failure only shows as an empty index, never as an error on screen. Written
+# here, after assembly, so no bench can forget it.
+if [ -d "$FINAL/WEB-INF/plugins/solr" ] || [ -f "$FINAL/WEB-INF/conf/plugins/search-solr.properties" ]; then
+  mkdir -p "$FINAL/WEB-INF/conf/override/plugins"
+  if [ ! -f "$E2E/harness/site/webapp/WEB-INF/conf/override/plugins/search-solr.properties" ]; then
+    printf '# e2e bench: reach the real Solr container (SKILL.md, Search engines)\nsolr.server.address=http://solr:8983/solr/%s\nsolr.indexer.commit.size=10000\n' \
+      "${E2E_SOLR_CORE:-lutece}" > "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties"
+    echo ">> solr address overridden: http://solr:8983/solr/${E2E_SOLR_CORE:-lutece}"
+  fi
+fi
+if [ -f "$FINAL/WEB-INF/conf/plugins/elasticdata.properties" ] \
+   && [ ! -f "$E2E/harness/site/webapp/WEB-INF/conf/override/plugins/elasticdata.properties" ]; then
+  mkdir -p "$FINAL/WEB-INF/conf/override/plugins"
+  printf '# e2e bench: reach the real Elasticsearch container (SKILL.md, Search engines)\nelasticdata.elastic_server_url=http://elastic:9200\n' \
+    > "$FINAL/WEB-INF/conf/override/plugins/elasticdata.properties"
+  echo ">> elasticsearch address overridden: http://elastic:9200"
+fi
 ( cd "$FINAL" && jar -cf ../lutece.war . )
 echo ">> $(du -h "$SITE/target/lutece.war" | cut -f1) $SITE/target/lutece.war"

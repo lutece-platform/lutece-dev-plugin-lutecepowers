@@ -31,6 +31,16 @@ if [ -d "$WT/.git" ] || [ -f "$WT/.git" ]; then
 else
   git -C "$SRC" worktree add -q --detach "$WT" "$(git -C "$SRC" rev-parse "$REF")"
 fi
+# A v7 tree does not always compile against the v7 core the bench runs: an artefact left on an older core keeps a
+# call the 7.x line removed (a constructor, a method), and no choice of E2E_V7_CORE fixes it — the code never
+# compiled against that core. `harness/src7-overlay` is copied over the disposable worktree, same paths as the
+# sources, so the leg builds and the comparison can happen. It holds v7 code, never migrated code, and the
+# migrated tree is never touched. Each file deserves a comment saying which core release broke it.
+if [ -d "$E2E/harness/src7-overlay" ]; then
+  cp -a "$E2E/harness/src7-overlay/." "$WT/"
+  echo ">> v7 source overlay applied: $(cd "$E2E/harness/src7-overlay" && find . -type f | sed 's|^\./||' | tr '\n' ' ')"
+fi
+
 V7_PARENT=$(grep -A4 '<parent>' "$WT/pom.xml" | grep -oE '<version>[^<]+' | head -1 | sed 's/<version>//')
 case "$V7_PARENT" in 7.*|6.*|5.*) ;; *) echo "gen-site7.sh: $REF has parent $V7_PARENT, not a v7 tree (set E2E_V7_REF)" >&2; exit 2 ;; esac
 
@@ -130,6 +140,14 @@ FINAL=$(find "$SITE/target" -maxdepth 1 -type d -name "e2e-site7-*" | head -1)
 if [ -d "$E2E/harness/v7-overlay" ]; then
   cp -a "$E2E/harness/v7-overlay/." "$FINAL/"
   echo ">> v7 overlay applied: $(cd "$E2E/harness/v7-overlay" && find . -type f | sed 's|^\./||' | tr '\n' ' ')"
+fi
+# Same as the v8 leg: a search plugin points at a local engine by default, the bench reaches containers by name.
+# Written after the overlay so a bench that ships its own file still wins.
+if [ -f "$FINAL/WEB-INF/conf/plugins/search-solr.properties" ] && [ ! -f "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties" ]; then
+  mkdir -p "$FINAL/WEB-INF/conf/override/plugins"
+  printf '# e2e bench: reach the real Solr container (SKILL.md, Search engines)\nsolr.server.address=http://solr:8983/solr/%s\nsolr.indexer.commit.size=10000\n' \
+    "${E2E_SOLR_CORE:-lutece}" > "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties"
+  echo ">> solr address overridden on the v7 leg: http://solr:8983/solr/${E2E_SOLR_CORE:-lutece}"
 fi
 ( cd "$FINAL" && jar -cf ../lutece.war . )
 echo ">> $(du -h "$SITE/target/lutece.war" | cut -f1) $SITE/target/lutece.war"
