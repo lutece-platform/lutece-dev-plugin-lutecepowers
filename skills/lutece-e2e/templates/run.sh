@@ -62,12 +62,12 @@ cmd_build() {
 # networking error naming an endpoint, which reads like a Docker problem and is not one. Say who holds the port.
 ports_free() {
   local p busy=""
-  for p in "${E2E_PORT}" "${E2E_DB_PORT:-13306}" "${E2E_MAIL_PORT:-18025}" ${E2E_FAKES:+${E2E_FAKES_PORT:-19030} ${E2E_OAUTH2_PORT:-19080}} ${E2E_SEARCH:+${E2E_SOLR_PORT:-18983} ${E2E_ES_PORT:-19200}}; do
+  for p in "${E2E_PORT}" "${E2E_PORT7:-18081}" "${E2E_DB_PORT:-13306}" "${E2E_MAIL_PORT:-18025}" ${E2E_FAKES:+${E2E_FAKES_PORT:-19030} ${E2E_OAUTH2_PORT:-19080}} ${E2E_SEARCH:+${E2E_SOLR_PORT:-18983} ${E2E_ES_PORT:-19200}}; do
     (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3<&- 3>&-; busy="$busy $p($(docker ps --format '{{.Names}} {{.Ports}}' | grep -m1 ":$p->" | cut -d' ' -f1))"; }
   done
   [ -z "$busy" ] && return 0
   echo "ports already in use:$busy"
-  echo "another bench is probably still up — stop it with 'cd <its project> && ./e2e/run.sh down', or give this bench its own slot (e2e.conf: E2E_PORT, E2E_DB_PORT, E2E_MAIL_PORT)."
+  echo "another bench is probably still up — stop it with 'cd <its project> && ./e2e/run.sh down', or give this bench its own slot (scripts/init-e2e.sh reads and records them in ~/.lutece-e2e-slots)."
   return 1
 }
 
