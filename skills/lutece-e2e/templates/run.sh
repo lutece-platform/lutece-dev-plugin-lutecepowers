@@ -385,6 +385,15 @@ WARN
   E2E_APP=lutece7 E2E_APP_PORT=8080 E2E_VERSION=v7 runner tools/metrics.py perf >/dev/null 2>&1 || true
   cmd_report || true
   docker logs "$APP7" > artifacts/logs7/catalina.out 2>&1 || true
+  # An XSL portlet whose stylesheet the v7 core cannot load fails there and renders in v8, where the migration
+  # ported it to HTML: the verdict "corrigé" is then about the bench's v7 site, not about the artefact. Said in
+  # the run and carried into the comparison, where the reader sees the verdict.
+  if grep -qE "XmlTransformerService|core_style.*doesn't exist" artifacts/logs7/catalina.out; then
+    printf '%s\n' "La jambe v7 n'a pas pu rendre un portlet XSL (XmlTransformerService en erreur, ou tables core_style absentes de ce core v7). Les verdicts « corrigé » portant sur un rendu de portlet sont à lire comme « non rendu en v7 », pas comme un défaut corrigé par la migration." > artifacts/v7-render-warning.txt
+    echo ">> WARNING: the v7 leg could not render an XSL portlet — see artifacts/v7-render-warning.txt"
+  else
+    rm -f artifacts/v7-render-warning.txt
+  fi
   snapshot v7
   step "compare 4/6: the v8 site takes over the v7 database"
   "${COMPOSE[@]}" stop lutece7

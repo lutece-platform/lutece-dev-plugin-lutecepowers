@@ -26,12 +26,35 @@ eval_pom() { $MVN7 -q -f "$1" help:evaluate -Dexpression="$2" -DforceStdout 2>/d
 
 # -- the v7 sources, in a worktree that never touches the migrated tree ---------------------------------------------
 if [ -d "$WT/.git" ] || [ -f "$WT/.git" ]; then
-  git -C "$WT" checkout -q --detach "$(git -C "$SRC" rev-parse "$REF")"
+  # --force: a previous run may have pinned a dependency in this pom, and the worktree is disposable.
+  git -C "$WT" checkout -q --force --detach "$(git -C "$SRC" rev-parse "$REF")"
 else
   git -C "$SRC" worktree add -q --detach "$WT" "$(git -C "$SRC" rev-parse "$REF")"
 fi
 V7_PARENT=$(grep -A4 '<parent>' "$WT/pom.xml" | grep -oE '<version>[^<]+' | head -1 | sed 's/<version>//')
 case "$V7_PARENT" in 7.*|6.*|5.*) ;; *) echo "gen-site7.sh: $REF has parent $V7_PARENT, not a v7 tree (set E2E_V7_REF)" >&2; exit 2 ;; esac
+
+# A v7 pom often declares its dependencies as ranges, and the top of the range has moved on since: the sources
+# no longer compile against what Maven resolves today, and the leg cannot be built at all. E2E_V7_DEP_PINS
+# ("groupId:artifactId:version,...") replaces those versions in the worktree pom — the worktree is disposable,
+# the migrated tree is never touched. The pin belongs to the bench, beside E2E_V7_PLUGINS in e2e.conf.
+_PINS="${E2E_V7_DEP_PINS:-}"
+for pin in ${_PINS//,/ }; do
+  IFS=':' read -r PG PA PV <<< "$pin"
+  [ -n "${PV:-}" ] || { echo "gen-site7.sh: E2E_V7_DEP_PINS wants groupId:artifactId:version, got '$pin'" >&2; exit 2; }
+  python3 - "$WT/pom.xml" "$PG" "$PA" "$PV" <<'PYPIN'
+import re, sys
+pom, g, a, v = sys.argv[1:5]
+t = open(pom, encoding="utf-8").read()
+pat = re.compile(r"(<dependency>(?:(?!</dependency>).)*?<groupId>\s*%s\s*</groupId>(?:(?!</dependency>).)*?<artifactId>\s*%s\s*</artifactId>(?:(?!</dependency>).)*?<version>)([^<]*)(</version>)"
+                 % (re.escape(g), re.escape(a)), re.S)
+t2, n = pat.subn(lambda m: m.group(1) + v + m.group(3), t)
+if not n:
+    sys.exit("gen-site7.sh: no dependency %s:%s in the v7 pom to pin" % (g, a))
+open(pom, "w", encoding="utf-8").write(t2)
+PYPIN
+  echo ">> v7 dependency pinned: $PG:$PA -> $PV"
+done
 
 if [ "${1:-}" != "--no-install" ]; then
   echo ">> mvn install (v7, ref $REF, parent $V7_PARENT) $WT"

@@ -55,6 +55,10 @@ E2E_V7_REF=HEAD
 E2E_V7_SITE_POM=7.0.8
 E2E_V7_CORE=7.1.9
 E2E_V7_PLUGINS=
+# A v7 pom often declares a dependency as a range whose top has moved on: the sources no longer compile
+# against what Maven resolves today and the v7 leg cannot be built. Pin them here, groupId:artifactId:version
+# separated by commas (the v7 sources are built in a disposable worktree, the migrated tree is untouched).
+E2E_V7_DEP_PINS=
 E2E_PORT7=18081
 # Instance already deployed (run.sh external): its url, and its database when the sql oracles may reach it.
 # The forms fuzzer never runs there; the scenarios do, and they create rows.

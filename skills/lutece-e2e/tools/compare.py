@@ -157,11 +157,19 @@ def counts_of(gs):
     return c
 
 
+def v7_warning():
+    """What run.sh saw of the v7 leg's own limits: a verdict has to be read with that in front of it."""
+    f = A / "v7-render-warning.txt"
+    return f.read_text().strip() if f.exists() else ""
+
+
 def md(gs, unjudged=0):
     c = counts_of(gs)
     L = ["# Avant / après — v7 puis v8 sur la même base", "",
          "Une ligne par fonction (écran, formulaire, scénario) ; les écrans qui ne diffèrent que par leurs identifiants sont des variantes de la même fonction.", "",
          "| Verdict | Fonctions |", "|---|---|"] + ["| %s | %d |" % (v, c[v]) for v in sorted(c, key=ORDER.get)]
+    if v7_warning():
+        L += ["", "> **" + v7_warning() + "**"]
     if unjudged:
         L += ["", "%d fonction(s) ne sont jugées sur aucune des deux jambes (exclusion déclarée, ou aucun écran à ouvrir) : "
               "elles ne disent rien de la migration et ne figurent pas dans le tableau." % unjudged]
@@ -231,7 +239,8 @@ def page(gs, name, unjudged=0):
          "<title>Avant / après — %s</title><style>%s</style><body><main>" % (html.escape(name), CSS),
          "<h1>Avant / après — %s</h1><div class=sub>Les mêmes parcours sur l'artefact en v7 puis en v8, sur la même base de données. "
          "Une carte par fonction, v7 à gauche, v8 à droite ; les variantes (autres identifiants) sont repliées dessous."
-         "%s</div>" % (html.escape(name),
+         "%s%s</div>" % (html.escape(name),
+                       " " + html.escape(v7_warning()) if v7_warning() else "",
                        " %d fonction(s) ne sont jugées sur aucune des deux jambes et ne sont pas affichées." % unjudged if unjudged else ""),
          "<div class=tiles>%s</div>" % "".join('<a class=tile href="#%s"><div class=n>%d</div><div class=l>%s</div></a>' % (
              html.escape(v.replace(" ", "-")), c[v], html.escape(v)) for v in sorted(c, key=ORDER.get))]
