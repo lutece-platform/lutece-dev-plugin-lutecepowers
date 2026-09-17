@@ -590,6 +590,12 @@ re-diagnose them; fix the script if one resurfaces.
   deployment owns, such as a third-party host the site's CSP has to allow — never an error of the artefact),
   `confirm`, `protected` (never fuzzed: the reference rows the scenarios rely on,
   e.g. `faq_id=9001`), `deny` (never posted). No Python change for a new plugin.
+- **A seed never writes an id it did not create.** Its own rows carry fixed ids in the 9000s, but a foreign key
+  into a table the application filled (an entry type, a workflow state, a portlet type) is read back by its
+  business key: `( SELECT MIN( id ) FROM <table> WHERE <business key> = '...' )`, with an `EXISTS` guard so the
+  row is not written at all when the reference is missing. The two legs of a comparison number those tables
+  differently, and a literal id leaves the row pointing at nothing on one of them: the artefact then fails on
+  data the bench itself created, which reads as a defect of the artefact.
 - **Reference rows**: `harness/db/seed-<plugin>.sql` inserts fixed-id rows guarded by `WHERE NOT EXISTS`
   (ids in the 9000s so they never collide with the DAO's max+1), re-applied by every `run.sh test`. Scenarios read
   them, create their own `{{rand}}` rows for mutations, and protect them from the fuzzer with `protected`.
