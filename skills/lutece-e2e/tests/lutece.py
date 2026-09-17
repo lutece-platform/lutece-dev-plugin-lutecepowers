@@ -478,6 +478,7 @@ V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
     # Assets and jQuery plugins the Lutece 7 theme used to ship and the site under test does not: a plugin
     # template written for v7 legitimately calls them, and their absence says nothing about the migration.
     r"bootstrap[\w.-]*\.(css|js)", r"\.tooltip is not a function", r"is not a function",
+    r"images/poweredby\.svg", r"/images/[\w.-]+\.(svg|png|gif)$",
 ))
 
 
