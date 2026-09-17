@@ -333,8 +333,9 @@ plugin assembled with it runs its v7→v8 scripts — including the ones the ben
 unguarded `DELETE` in any of them stops the whole start (`plugin-mylutece`'s `update_db_core_mylutece-5.0.0-5.0.1.sql`
 deletes rows from `core_style*`, which the core's 7→8 step has already dropped: `globalTheme is null`, empty
 site). `compare` therefore runs **without** the bench's front-office authentication, except when the artefact
-under test depends on mylutece itself, where the module is the subject and stays (`E2E_MYLUTECE_FORCE=1` keeps
-it for any other reason), and a bench keeps `E2E_PLUGINS` to what the artefact really needs.
+under test depends on mylutece itself or the bench names it in `E2E_PLUGINS`: there the module is the subject
+or a fixture the scenarios sign in with, and it stays (`E2E_MYLUTECE_FORCE=1` keeps it for any other reason).
+A bench keeps `E2E_PLUGINS` to what the artefact really needs.
 
 **The v7 side is not neutral either.** A v7 plugin's `init_core` may target tables a later 7.x core dropped
 (a portlet plugin writes its XSL style into `core_style*`, removed in core 7.1.9): pick `E2E_V7_CORE` where

@@ -363,6 +363,8 @@ cmd_compare() {
   if [ "${E2E_MYLUTECE:-1}" != 0 ] && [ -z "${E2E_MYLUTECE_FORCE:-}" ]; then
     if grep -qE '<artifactId>(plugin-mylutece|module-mylutece-[a-z]+)</artifactId>' ../pom.xml 2>/dev/null; then
       echo ">> compare keeps plugin-mylutece: the artefact under test depends on it"
+    elif case ",${E2E_PLUGINS:-}," in *:plugin-mylutece:*) true ;; *) false ;; esac; then
+      echo ">> compare keeps plugin-mylutece: the bench names it in E2E_PLUGINS, so its scenarios need a signed-in user"
     else
       export E2E_MYLUTECE=0
       echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
