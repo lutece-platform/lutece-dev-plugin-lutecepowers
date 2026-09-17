@@ -485,14 +485,23 @@ V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
 ))
 
 
+# The core's own assets, missing from the core itself: every bench of every artefact sees them, and no artefact
+# can fix them. `page_template_styles_admin.min.css` imports `tabler-icons-filled.min.css`, which the core's
+# webapp does not ship. Reported upstream; kept here so 25 benches do not each rediscover it as a defect.
+CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
+    r"themes/shared/css/tabler-icons-filled\.min\.css",
+))
+
+
 def console_noise(page, baseline=None):
     """Console messages and JS errors worth failing on: everything the bench did not declare, minus a baseline.
     On the v7 leg, the surrounding site's own noise is excluded (see V7_ENV_NOISE)."""
     base = baseline or {}
+    core_asset = lambda t: any(p.search(t or "") for p in CORE_ASSET_NOISE)
     if os.environ.get("E2E_VERSION") == "v7":
-        allowed = lambda t: console_allowed(t) or any(p.search(t or "") for p in V7_ENV_NOISE)
+        allowed = lambda t: console_allowed(t) or core_asset(t) or any(p.search(t or "") for p in V7_ENV_NOISE)
     else:
-        allowed = console_allowed
+        allowed = lambda t: console_allowed(t) or core_asset(t)
     errs = [e for e in page.obs["errors"] if e not in (base.get("errors") or []) and not allowed(e)]
     noise = [c["text"] for c in page.obs["console"]
              if c["text"] not in (base.get("console") or []) and not allowed(c["text"])]
