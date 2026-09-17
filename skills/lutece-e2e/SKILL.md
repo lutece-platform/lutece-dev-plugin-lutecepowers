@@ -109,6 +109,15 @@ leave it empty otherwise (a core bench never needs them).
 environment of the `lutece` service when the property is read through MicroProfile Config. Check the artefact's own
 `.properties` for its exact keys.
 
+**On the v7 leg, the environment reaches nothing.** A v7 site takes its configuration from the `.properties` it
+ships and from the Spring context XML, where an endpoint is often a literal value; neither reads the variables the
+v8 leg is configured with. The v7 leg then calls the real outside system, the v8 leg calls the stand-in, and the
+comparison reads the difference as a fix the migration did not make. Two ways out, both bench-side: the property
+override directory above (it is copied to the v7 site too), and `harness/v7-overlay/`, laid over the assembled v7
+webapp after assembly — same paths as the webapp, for what only a file can change, a `<plugin>_context.xml` whose
+endpoint is written in the bean definition. Check the key the artefact really reads: a module may read
+`oauth2.issuer` in v7 and `oauth2.server.issuer` in v8, and setting the wrong one changes nothing.
+
 | System | Property → URL |
 | :-- | :-- |
 | CAS (mylutece-cas) | server URL `http://fakes:9030/cas` — login `/cas/login?service=…`, `serviceValidate`, `proxyValidate`, `logout`. Accounts `admin` and `pro` (GUID `E2E_PRO_GUID`); any other name logs in with `pro`'s profile and that name as GUID |

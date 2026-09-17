@@ -90,6 +90,15 @@ echo ">> assemble v7 war"
 ( cd "$SITE" && $MVN7 -B -q clean package lutece:site-assembly )
 FINAL=$(find "$SITE/target" -maxdepth 1 -type d -name "e2e-site7-*" | head -1)
 [ -n "$FINAL" ] || { echo "site-assembly produced no exploded directory under $SITE/target" >&2; exit 1; }
+# v7 configuration is not reachable from the environment: an endpoint often sits as a literal in a Spring context
+# XML, or in a .properties the artefact ships, and neither reads the variables the v8 leg is configured with. The
+# v7 leg then calls the real outside system while the v8 leg calls the stand-in, and the comparison reads the
+# difference as "corrigé". `harness/v7-overlay` is laid over the assembled v7 webapp, after assembly so the
+# artefact's own files are already there: same paths, same purpose as app.env on the v8 leg.
+if [ -d "$E2E/harness/v7-overlay" ]; then
+  cp -a "$E2E/harness/v7-overlay/." "$FINAL/"
+  echo ">> v7 overlay applied: $(cd "$E2E/harness/v7-overlay" && find . -type f | sed 's|^\./||' | tr '\n' ' ')"
+fi
 ( cd "$FINAL" && jar -cf ../lutece.war . )
 echo ">> $(du -h "$SITE/target/lutece.war" | cut -f1) $SITE/target/lutece.war"
 # What run.sh compare needs to hand the v7 database to the v8 site: the component names and versions the v7 site
