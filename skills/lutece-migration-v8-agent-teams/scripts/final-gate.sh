@@ -20,11 +20,16 @@ case "${1:-}" in
     exit 0 ;;
 esac
 
-PROJECT="${1:-.}"
-[ "$PROJECT" = "--no-e2e" ] && PROJECT="."
+PROJECT="."
 RUN_E2E=true
 RUN_COMPARE=true
-for a in "$@"; do [ "$a" = "--no-e2e" ] && RUN_E2E=false; [ "$a" = "--no-compare" ] && RUN_COMPARE=false; done
+for a in "$@"; do
+  case "$a" in
+    --no-e2e) RUN_E2E=false ;;
+    --no-compare) RUN_COMPARE=false ;;
+    *) PROJECT="$a" ;;
+  esac
+done
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS="${E2E_MVN_SETTINGS:-$HOME/.m2/settings.xml}"
