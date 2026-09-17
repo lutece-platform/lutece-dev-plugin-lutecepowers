@@ -25,6 +25,11 @@ cd "$E2E"
 # The environment wins over e2e.conf: E2E_VOLUME=large ./run.sh must not be silently overwritten.
 _e2e_env=$(export -p | grep -E "^(declare -x |export )E2E_" || true)
 set -a; . ./e2e.conf; set +a
+# Proving a fix of a dependency before it is published: `mvn install` in its clone puts the patched build in the
+# local repository, but Maven still prefers the remote snapshot when it is newer. Offline makes the local build
+# win on the v8 legs. It must not reach the v7 leg, which downloads its own artefacts: that leg keeps its own
+# command (E2E_MVN7, gen-site7.sh) unless the bench set one.
+if [ "${E2E_MVN_OFFLINE:-0}" = 1 ]; then export MVN="${MVN:-mvn} -o"; export E2E_MVN7="${E2E_MVN7:-mvn}"; fi
 eval "$_e2e_env"
 export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-small} E2E_WORKERS=${E2E_WORKERS:-4}
 APP="${E2E_NAME}-lutece-1"

@@ -109,6 +109,14 @@ leave it empty otherwise (a core bench never needs them).
 environment of the `lutece` service when the property is read through MicroProfile Config. Check the artefact's own
 `.properties` for its exact keys.
 
+**Proving a fix of an upstream plugin before it is published.** Build the fixed clone with `mvn install`, then
+run the bench with `E2E_MVN_OFFLINE=1`: the v8 legs resolve snapshots from the local repository, where the
+patched build now sits, instead of the remote copy Maven prefers when it is newer. The v7 leg keeps downloading
+its own artefacts. Check the war afterwards: `unzip -p harness/site/target/lutece.war WEB-INF/classes/sql/...`
+must show the change, otherwise the run proved the old build. List the fixed plugin on both legs (`E2E_PLUGINS`
+and `E2E_V7_PLUGINS`) so the upgrade path runs; `run.sh compare` is the proof, a fresh install never runs an
+upgrade script.
+
 **On the v7 leg, the environment reaches nothing.** A v7 site takes its configuration from the `.properties` it
 ships and from the Spring context XML, where an endpoint is often a literal value; neither reads the variables the
 v8 leg is configured with. The v7 leg then calls the real outside system, the v8 leg calls the stand-in, and the

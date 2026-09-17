@@ -498,13 +498,73 @@ else emit "LE01" "WARN" "Line endings converted (restore them: the diff must sho
 XT01_MATCHES=""
 if ! grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null; then
     XT01_MATCHES=$({ grep -rlE 'XmlTransformerService|XmlTransformer\b|XslExportService' src/ --include="*.java" 2>/dev/null || true; } | sed 's/$/: uses the XSL services that moved to plugin-xmltransformer, undeclared/')
-    # Statements only: a leftover `-- Dumping data for table core_style` comment writes nothing.
-    SQL_XT=$({ grep -rlE '^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER|CREATE)[^;]*core_style' src/sql 2>/dev/null || true; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
+    # Statements only: a leftover `-- Dumping data for table core_style` comment writes nothing. An upgrade statement
+    # sitting in a changeset guarded by a precondition on those tables is a legacy step kept for the sites that have
+    # them (XT03 checks the guard): it needs no dependency and is not counted here.
+    SQL_XT=$({ find src/sql -name '*.sql' 2>/dev/null | sort | while read -r f; do
+        awk 'BEGIN{IGNORECASE=1; g=0; found=0} /^--[[:space:]]*changeset/ {g=0} /^--[[:space:]]*precondition-sql-check/ {g=1}
+             /^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER|CREATE)[^;]*core_style/ && !g {found=1} END{exit !found}' "$f" && echo "$f"
+    done; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
     [ -n "$SQL_XT" ] && XT01_MATCHES="$XT01_MATCHES${XT01_MATCHES:+$'\n'}$SQL_XT"
 fi
 COUNT=0; [ -n "$XT01_MATCHES" ] && COUNT=$(echo "$XT01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "XT01" "PASS" "No use of the XSL services and tables that left the core" 0
 else emit "XT01" "FAIL" "XSL services or core_style* used without plugin-xmltransformer (patterns/core-8x-moves.md)" "$COUNT" "$XT01_MATCHES"; fi
+
+# XT02: a plugin that keeps XSL declares plugin-xmltransformer, and then its install scripts write to tables that
+# plugin creates. Without `-- lutece runAfter:xmltransformer` the order of installation is not guaranteed and the
+# inserts land before the tables exist; the v7 Ant install went on past that error, Liquibase does not.
+XT02_MATCHES=""
+if grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null && [ -d src/sql ]; then
+    XT02_MATCHES=$(find src/sql -name '*.sql' -not -path '*/upgrade/*' | sort | while read -r f; do
+        grep -qE '^[[:space:]]*(INSERT|UPDATE|DELETE)[^;]*core_style' "$f" || continue
+        grep -qiE '^--[[:space:]]*lutece runAfter:xmltransformer' "$f" || echo "$f: writes core_style* but has no '-- lutece runAfter:xmltransformer' header"
+    done)
+fi
+COUNT=0; [ -n "$XT02_MATCHES" ] && COUNT=$(echo "$XT02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "XT02" "PASS" "Install scripts writing core_style* run after xmltransformer" 0
+else emit "XT02" "FAIL" "Install scripts write core_style* without runAfter:xmltransformer (sql-liquibase.md)" "$COUNT" "$XT02_MATCHES"; fi
+
+# XT03: an upgrade script that writes to core_style* runs on every site that migrates, including the ones where
+# those tables are gone. Unguarded, its first statement stops the whole Liquibase update, the core's own upgrade
+# included. The statement must sit in a changeset opened by a precondition on the presence of the tables.
+XT03_MATCHES=""
+if [ -d src/sql ]; then
+    XT03_MATCHES=$(find src/sql -path '*/upgrade/*' -name '*.sql' | sort | while read -r f; do
+        awk -v F="$f" 'BEGIN{IGNORECASE=1; guarded=0}
+            /^--[[:space:]]*changeset/ {guarded=0}
+            /^--[[:space:]]*precondition-sql-check/ {guarded=1}
+            /^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER)[^;]*core_style/ && !guarded {print F": "NR": statement on core_style* in a changeset without precondition-sql-check"}' "$f"
+    done)
+fi
+COUNT=0; [ -n "$XT03_MATCHES" ] && COUNT=$(echo "$XT03_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "XT03" "PASS" "Upgrade statements on core_style* are guarded by a precondition" 0
+else emit "XT03" "FAIL" "Upgrade statements on core_style* without a precondition on the tables (sql-liquibase.md)" "$COUNT" "$XT03_MATCHES"; fi
+
+# SQ03: adding AUTO_INCREMENT to a column whose rows include a 0 makes MariaDB and MySQL renumber that 0 into 1
+# and fail on the duplicate key. Reference rows shipped with id 0 are common in older init scripts. The ALTER needs
+# `SET SESSION sql_mode='NO_AUTO_VALUE_ON_ZERO'` in the same changeset, restricted to dbms:mariadb,mysql.
+SQ03_MATCHES=""; SQ03_ZERO=0
+if [ -d src/sql ]; then
+    SQ03_MATCHES=$(find src/sql -path '*/upgrade/*' -name '*.sql' | sort | while read -r f; do
+        awk -v F="$f" 'BEGIN{IGNORECASE=1; safe=0}
+            /^--[[:space:]]*changeset/ {safe=0}
+            /NO_AUTO_VALUE_ON_ZERO/ {safe=1}
+            /^[[:space:]]*ALTER[[:space:]]+TABLE[[:space:]]+[A-Za-z0-9_]+[[:space:]]+(MODIFY|CHANGE|ADD)[^;]*AUTO_INCREMENT/ && !safe {
+                t=$3; print F": "NR": AUTO_INCREMENT added to "t" without NO_AUTO_VALUE_ON_ZERO in the changeset"}' "$f"
+    done)
+    if [ -n "$SQ03_MATCHES" ]; then
+        for tbl in $(echo "$SQ03_MATCHES" | sed -n 's/.*added to \([A-Za-z0-9_]*\) .*/\1/p' | sort -u); do
+            if find src/sql -name '*.sql' -not -path '*/upgrade/*' -print0 | xargs -0 grep -qiE "INSERT INTO[[:space:]]+$tbl\b[^;]*VALUES[[:space:]]*\(0," 2>/dev/null; then
+                SQ03_ZERO=1; SQ03_MATCHES="$SQ03_MATCHES"$'\n'"$tbl: the install data ships a row with id 0 — this upgrade fails on every existing site"
+            fi
+        done
+    fi
+fi
+COUNT=0; [ -n "$SQ03_MATCHES" ] && COUNT=$(echo "$SQ03_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ03" "PASS" "No AUTO_INCREMENT added without NO_AUTO_VALUE_ON_ZERO" 0
+elif [ "$SQ03_ZERO" -eq 1 ]; then emit "SQ03" "FAIL" "AUTO_INCREMENT added to a table shipped with an id 0, without NO_AUTO_VALUE_ON_ZERO (sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"
+else emit "SQ03" "WARN" "AUTO_INCREMENT added without NO_AUTO_VALUE_ON_ZERO: fails on a site whose older data holds an id 0 (sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"; fi
 
 # CS02: ContentService no longer extends AbstractCacheableService in v8: initCache/getFromCache/putInCache on a
 # content service do not compile. The cache, if still wanted, is a service of its own (lutece-cache skill).

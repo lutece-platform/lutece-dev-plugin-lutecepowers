@@ -155,6 +155,15 @@ there means the framework's own is off or duplicated. A bean that is not MVC —
 has no framework token and must carry it by hand: that is the pattern, not a finding, and the check leaves it
 alone. `securityTokenEnabled = false` is always a finding.
 
+**XT02 / XT03** — a plugin that keeps XSL rendering depends on plugin-xmltransformer, so its install scripts
+must run after that plugin (`runAfter`) and its old upgrade scripts must not fail where the style tables are gone
+(a guarded changeset). A plugin that ported its portlet to HTML removes the statements instead (XT01). Recipe and
+exact syntax in `sql-liquibase.md`.
+
+**SQ03** — MariaDB renumbers an id 0 when the column becomes AUTO_INCREMENT and fails on the duplicate. The
+ALTER belongs in a `dbms:mariadb,mysql` changeset after `SET SESSION sql_mode='NO_AUTO_VALUE_ON_ZERO'`.
+A WARN says the guard is missing; a FAIL says the install data really ships a 0, so every existing site breaks.
+
 **LE01** — the fix is `scripts/restore-line-endings.sh`: it puts back the endings HEAD has on the files whose
 diff collapses once endings are ignored, and touches nothing else. Run it before the final gate, then verify
 again: a review that has to read a whole rewritten file does not happen.
@@ -177,6 +186,7 @@ after the gate.
 |----|----------|-------------|---------|-------|
 | SQ01 | FAIL | SQL file without the Liquibase header (v8 installs only Liquibase changesets) | first non-empty line ≠ `-- liquibase formatted sql` | src/sql/**/*.sql |
 | SQ02 | FAIL | column or table gained by `create_db_*.sql` since the last commit with no upgrade script adding it | (cross-file check against `git show HEAD:`) | src/sql |
+| SQ03 | FAIL / WARN | `AUTO_INCREMENT` added to a column without `NO_AUTO_VALUE_ON_ZERO` in the changeset; FAIL when the install data ships an id 0 for that table | per-changeset scan + init data | src/sql/**/upgrade |
 
 **SQ02** — a fresh install runs the creation script and is green; an existing site runs only the
 `update_db_*` scripts newer than its recorded version. An older upgrade that (re)creates the table
@@ -188,6 +198,8 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 |----|----------|-------------|---------|-------|
 | XS01 | FAIL | portlet still rendered by XSL | (cross-file check) | *.java, src/sql, *.xsl |
 | XT01 | FAIL | XSL services or `core_style*` tables used without `plugin-xmltransformer` declared | (cross-file check) | *.java, src/sql, pom.xml |
+| XT02 | FAIL | install script writing `core_style*` without `-- lutece runAfter:xmltransformer`, when the pom declares plugin-xmltransformer | header grep | src/sql (not upgrade) |
+| XT03 | FAIL | upgrade statement on `core_style*` in a changeset without `precondition-sql-check` | per-changeset scan | src/sql/**/upgrade |
 | CS02 | FAIL | content service calling the cache methods v8 removed from `ContentService` | `extends ContentService` + `initCache\|getFromCache\|putInCache` | *.java |
 | TL01 | FAIL | ThreadLocal not cleared with remove() | (cross-file check) | *.java |
 | CS01 | FAIL | portlet JspBean mutations without a CSRF token | (cross-file check) | *.java |

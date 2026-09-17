@@ -1,7 +1,7 @@
 #!/bin/bash
 # final-gate.sh — the postcondition of a migration. Run it after EVERY batch of fixes, never once at the end.
 #
-#   final-gate.sh [project_dir] [--no-e2e]
+#   final-gate.sh [project_dir] [--no-e2e] [--no-compare]
 #
 # Re-measures the three things a fix can silently invalidate, and fails on the first one that is not clean:
 #   1. verify-migration.sh          — 0 FAIL
@@ -23,7 +23,8 @@ esac
 PROJECT="${1:-.}"
 [ "$PROJECT" = "--no-e2e" ] && PROJECT="."
 RUN_E2E=true
-for a in "$@"; do [ "$a" = "--no-e2e" ] && RUN_E2E=false; done
+RUN_COMPARE=true
+for a in "$@"; do [ "$a" = "--no-e2e" ] && RUN_E2E=false; [ "$a" = "--no-compare" ] && RUN_COMPARE=false; done
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS="${E2E_MVN_SETTINGS:-$HOME/.m2/settings.xml}"
@@ -95,6 +96,23 @@ elif [ -x e2e/run.sh ]; then
     else
         grep -E "FAILED|passed|failed" /tmp/final-gate-e2e.log | tail -8
         bad "e2e bench failed (full log: /tmp/final-gate-e2e.log)"
+    fi
+    # A fresh install proves the v8 site; it says nothing about the site every real deployment is: a database the
+    # previous version built, that the new one has to take over. The upgrade scripts only run there, and a script
+    # that stops there stops the whole Liquibase update, the core's own upgrade included. When the bench knows a
+    # v7 ancestor, the gate plays that hand-over too (--no-compare to skip while iterating).
+    V7REF=$(sed -n 's/^E2E_V7_REF=//p' e2e/e2e.conf 2>/dev/null | head -1)
+    V7PARENT=$(git show "${V7REF:-HEAD}:pom.xml" 2>/dev/null | grep -A4 '<parent>' | grep -oE '<version>[^<]+' | head -1 | sed 's/<version>//')
+    if ! $RUN_COMPARE; then
+        good "compare: skipped on request"
+    elif [ -z "$V7REF" ] || ! echo "$V7PARENT" | grep -qE '^[567]\.'; then
+        good "compare: no v7 ancestor at E2E_V7_REF (${V7REF:-unset}, parent ${V7PARENT:-?}), nothing to take over"
+    elif ./e2e/run.sh compare > /tmp/final-gate-compare.log 2>&1; then
+        grep -E "^compare:|compare done" /tmp/final-gate-compare.log | tail -2
+        good "compare: the v8 site takes over the v7 database, rc=0"
+    else
+        grep -E "LIQUIBASE STOPPED|Reason:|unhealthy|régression|compare done" /tmp/final-gate-compare.log | tail -6
+        bad "compare failed: the migration does not take over a v7 database (full log: /tmp/final-gate-compare.log)"
     fi
 elif [ ! -d webapp ] && grep -q "<packaging>jar</packaging>" pom.xml 2>/dev/null; then
     # A library has no screen: a bench of its own would prove nothing. Its proof is that a plugin depending on it

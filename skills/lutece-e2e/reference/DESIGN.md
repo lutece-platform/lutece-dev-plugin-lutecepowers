@@ -119,6 +119,10 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - La configuration d'un site v7 vit dans ses `.properties` et ses contextes Spring : aucune variable
   d'environnement ne l'atteint. `harness/v7-overlay/` est posé sur la webapp v7 assemblée pour la pointer vers
   les doublures, comme `app.env` le fait côté v8.
+- Éprouver un plugin corrigé en local : `mvn install` dans son clone, puis `E2E_MVN_OFFLINE=1` pour que les
+  jambes v8 prennent le dépôt local plutôt que le snapshot distant plus récent. Le hors-ligne ne doit pas
+  atteindre la jambe v7, qui télécharge ses propres artefacts ; vérifier ensuite dans le war que le changement
+  y est, sinon le run a prouvé l'ancien build.
 - Un pom v7 déclare souvent ses dépendances en intervalles ouverts dont le haut a bougé : la jambe ne compile
   plus. `E2E_V7_DEP_PINS` fige ces versions dans le worktree jetable, en intervalle à une valeur (une version
   simple perd face à un intervalle).

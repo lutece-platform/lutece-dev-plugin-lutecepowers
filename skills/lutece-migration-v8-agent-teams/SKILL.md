@@ -309,4 +309,5 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
 | `deprecation-fixes.md` | What each deprecated API is replaced by (RBAC/workgroup `User` overloads, `getModel()`, `Strings.CS`, `getInstance()`, reflection, task signatures) | Java Migrators (always, short) |
 | `core-8x-moves.md` | Core APIs that moved or shrank (XSL to plugin-xmltransformer, ContentService without cache, Parser in library-core-utils), reflection-instantiated classes | Java Migrators + Config Migrator (always, short) |
+| `sql-liquibase.md` | Header, one small changeset per concern, precondition on tables another plugin owns, `runAfter`, AUTO_INCREMENT on a table shipped with an id 0, why the upgrade path is proven on a taken-over database | Config Migrator, Verifier |
 | `persistence-patterns.md` | JPA kept on EclipseLink (`persistence-3.1`), JPQL/native SQL rules, entity rules, Spring JDBC as library | Java Migrators + Config Migrator (if `persistence.hasJpa` or `hasSpringJdbc`) |
