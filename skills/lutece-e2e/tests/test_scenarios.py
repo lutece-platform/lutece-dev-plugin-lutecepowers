@@ -201,14 +201,19 @@ def _probe_guard(page, target, resp):
     A probe is bench code, not the artefact: when it does not run, the scenario proves nothing about the artefact,
     and letting it fail would read in the comparison as a defect this version has and the other fixed. A probe
     written with the v8 APIs cannot compile on a v7 site, which is a bench limit, so the scenario is declared out
-    of that leg instead of being counted red."""
+    of that leg instead of being counted red. On the version the bench is written for, the same broken probe is a
+    defect of the bench and stays red: a silent skip there would hide that nothing was judged at all."""
     if PROBE_PATH not in (target or ""):
         return
     status = resp.status if resp else 0
-    if status >= 500 or PROBE_BROKEN.search(page.content()[:4000]):
-        pytest.skip(lutece.DECLARED_SKIP + "the bench's probe page does not run on %s (HTTP %s): it is bench code, "
-                    "not the artefact — give the bench a probe this version can compile, or declare the scenario "
-                    "for the other version only" % (os.environ.get("E2E_VERSION", "v8"), status or "compile error"))
+    if status < 500 and not PROBE_BROKEN.search(page.content()[:4000]):
+        return
+    if os.environ.get("E2E_VERSION", "v8") == "v7":
+        pytest.skip(lutece.DECLARED_SKIP + "the bench's probe page does not run on the v7 leg (HTTP %s): a probe "
+                    "written with the v8 APIs cannot compile there. Give the bench a probe v7 compiles, or accept "
+                    "that this scenario is judged on v8 only" % (status or "compile error"))
+    raise AssertionError("the bench's own probe page did not run (HTTP %s): fix the probe, it is bench code and "
+                         "nothing about the artefact can be read from this" % (status or "compile error"))
 
 
 def run_step(page, step, vars_, record):
