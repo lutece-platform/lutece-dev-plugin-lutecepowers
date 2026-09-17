@@ -35,43 +35,47 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS="${E2E_MVN_SETTINGS:-$HOME/.m2/settings.xml}"
 cd "$PROJECT" || { echo "no such directory: $PROJECT"; exit 2; }
 
+# One log set per project: two gates running side by side on two benches would otherwise overwrite each
+# other's logs, and the failure printed would belong to the neighbour.
+LOGS="${TMPDIR:-/tmp}/final-gate-$(basename "$(pwd)")"
+
 FAILED=0
 step( ) { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 bad( ) { printf '\033[0;31mFAIL\033[0m %s\n' "$1"; FAILED=1; }
 good( ) { printf '\033[0;32mOK\033[0m   %s\n' "$1"; }
 
 step "1/4 migration checks"
-if bash "$SKILL_DIR/verify-migration.sh" . > /tmp/final-gate-verify.log 2>&1; then
+if bash "$SKILL_DIR/verify-migration.sh" . > $LOGS-verify.log 2>&1; then
     good "verify-migration.sh: 0 FAIL"
 else
-    grep -E "^  .*FAIL" /tmp/final-gate-verify.log | head -10
-    bad "verify-migration.sh reports failures (full log: /tmp/final-gate-verify.log)"
+    grep -E "^  .*FAIL" $LOGS-verify.log | head -10
+    bad "verify-migration.sh reports failures (full log: $LOGS-verify.log)"
 fi
 
 # A migration is the moment the compiler's warnings get fixed: deprecation, unchecked, rawtypes, serial, the
 # lot. Left in place they hide the next real one, and nobody comes back for them later. Only the plugin's own
 # sources count (src/), never the generated or the dependencies'.
 step "2/4 compiler warnings"
-mvn -B -s "$SETTINGS" clean compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true > /tmp/final-gate-compile.log 2>&1 || true
-WARNS=$(grep -E "^\[WARNING\] .*/src/.*\.java" /tmp/final-gate-compile.log | sed 's|^\[WARNING\] ||; s|^.*/src/|src/|' | sort -u)
+mvn -B -s "$SETTINGS" clean compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true > $LOGS-compile.log 2>&1 || true
+WARNS=$(grep -E "^\[WARNING\] .*/src/.*\.java" $LOGS-compile.log | sed 's|^\[WARNING\] ||; s|^.*/src/|src/|' | sort -u)
 NW=$(printf '%s' "$WARNS" | grep -c . || true)
-if grep -q "BUILD FAILURE" /tmp/final-gate-compile.log; then
-    grep -E "^\[ERROR\]" /tmp/final-gate-compile.log | head -8
-    bad "the project does not compile (full log: /tmp/final-gate-compile.log)"
+if grep -q "BUILD FAILURE" $LOGS-compile.log; then
+    grep -E "^\[ERROR\]" $LOGS-compile.log | head -8
+    bad "the project does not compile (full log: $LOGS-compile.log)"
 elif [ "$NW" -eq 0 ]; then
     good "compiler: 0 warning in the plugin's sources"
 else
     printf '%s\n' "$WARNS" | head -12
-    bad "compiler: $NW warning(s) in the plugin's sources — fix them, a migration leaves none behind (full log: /tmp/final-gate-compile.log)"
+    bad "compiler: $NW warning(s) in the plugin's sources — fix them, a migration leaves none behind (full log: $LOGS-compile.log)"
 fi
 
 step "3/4 unit tests"
 if [ -d src/test/java ] && find src/test/java -name "*Test.java" | grep -q .; then
     # lutece:exploded only exists for a core, a plugin or a site: a library runs its tests plainly.
     if grep -q "<packaging>jar</packaging>" pom.xml 2>/dev/null; then
-        mvn -B -s "$SETTINGS" clean test > /tmp/final-gate-tests.log 2>&1
+        mvn -B -s "$SETTINGS" clean test > $LOGS-tests.log 2>&1
     else
-        mvn -B -s "$SETTINGS" clean lutece:exploded antrun:run -Dlutece-test-hsql test > /tmp/final-gate-tests.log 2>&1
+        mvn -B -s "$SETTINGS" clean lutece:exploded antrun:run -Dlutece-test-hsql test > $LOGS-tests.log 2>&1
     fi
     # Every surefire file, never just the last one: with two test classes, reading `tail -1` reported the second
     # one's clean summary while the first was red, and the gate passed on a failing build.
@@ -79,8 +83,8 @@ if [ -d src/test/java ] && find src/test/java -name "*Test.java" | grep -q .; th
     DIRTY=$(echo "$SUMS" | grep -vE "Failures: 0, Errors: 0" | grep -E "^Tests run:")
     TOTAL=$(echo "$SUMS" | awk -F'[ ,]+' '{r+=$3; f+=$5; e+=$7; s+=$9} END {printf "%d tests, %d failures, %d errors, %d skipped, in %d class(es)", r, f, e, s, NR}')
     if [ -z "$SUMS" ]; then
-        tail -5 /tmp/final-gate-tests.log
-        bad "no surefire report produced (full log: /tmp/final-gate-tests.log)"
+        tail -5 $LOGS-tests.log
+        bad "no surefire report produced (full log: $LOGS-tests.log)"
     elif [ -z "$DIRTY" ]; then
         good "unit tests: $TOTAL"
     else
@@ -95,12 +99,12 @@ step "4/4 e2e bench"
 if ! $RUN_E2E; then
     good "e2e: skipped on request"
 elif [ -x e2e/run.sh ]; then
-    if KEEP=1 ./e2e/run.sh > /tmp/final-gate-e2e.log 2>&1; then
-        grep -E "passed|failed" /tmp/final-gate-e2e.log | tail -4
+    if KEEP=1 ./e2e/run.sh > $LOGS-e2e.log 2>&1; then
+        grep -E "passed|failed" $LOGS-e2e.log | tail -4
         good "e2e bench: rc=0"
     else
-        grep -E "FAILED|passed|failed" /tmp/final-gate-e2e.log | tail -8
-        bad "e2e bench failed (full log: /tmp/final-gate-e2e.log)"
+        grep -E "FAILED|passed|failed" $LOGS-e2e.log | tail -8
+        bad "e2e bench failed (full log: $LOGS-e2e.log)"
     fi
     # A fresh install proves the v8 site; it says nothing about the site every real deployment is: a database the
     # previous version built, that the new one has to take over. The upgrade scripts only run there, and a script
@@ -112,12 +116,12 @@ elif [ -x e2e/run.sh ]; then
         good "compare: skipped on request"
     elif [ -z "$V7REF" ] || ! echo "$V7PARENT" | grep -qE '^[567]\.'; then
         good "compare: no v7 ancestor at E2E_V7_REF (${V7REF:-unset}, parent ${V7PARENT:-?}), nothing to take over"
-    elif ./e2e/run.sh compare > /tmp/final-gate-compare.log 2>&1; then
-        grep -E "^compare:|compare done" /tmp/final-gate-compare.log | tail -2
+    elif ./e2e/run.sh compare > $LOGS-compare.log 2>&1; then
+        grep -E "^compare:|compare done" $LOGS-compare.log | tail -2
         good "compare: the v8 site takes over the v7 database, rc=0"
     else
-        grep -E "LIQUIBASE STOPPED|Reason:|unhealthy|régression|compare done" /tmp/final-gate-compare.log | tail -6
-        bad "compare failed: the migration does not take over a v7 database (full log: /tmp/final-gate-compare.log)"
+        grep -E "LIQUIBASE STOPPED|Reason:|unhealthy|régression|compare done" $LOGS-compare.log | tail -6
+        bad "compare failed: the migration does not take over a v7 database (full log: $LOGS-compare.log)"
     fi
 elif [ ! -d webapp ] && grep -q "<packaging>jar</packaging>" pom.xml 2>/dev/null; then
     # A library has no screen: a bench of its own would prove nothing. Its proof is that a plugin depending on it

@@ -602,7 +602,7 @@ if [ -d "src/" ]; then
     done) || XS01_MATCHES=""
 fi
 if [ -d "src/sql" ]; then
-    SQL_STYLES=$(grep -rli 'INSERT INTO core_style\|INSERT INTO core_stylesheet\|core_style_mode_stylesheet' src/sql 2>/dev/null | while read -r f; do
+    SQL_STYLES=$(grep -rlEi '^[[:space:]]*INSERT INTO[[:space:]]+`?core_(style|stylesheet|style_mode_stylesheet)`?[[:space:]]' src/sql 2>/dev/null | while read -r f; do
         echo "$f: inserts into style tables that no longer exist in the core"
     done)
     [ -n "$SQL_STYLES" ] && XS01_MATCHES="$XS01_MATCHES${XS01_MATCHES:+$'\n'}$SQL_STYLES"
