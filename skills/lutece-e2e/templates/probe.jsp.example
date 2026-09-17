@@ -1,6 +1,8 @@
 <%@ page contentType="text/html; charset=UTF-8" %>
 <%@ page import="fr.paris.lutece.plugins.myplugin.service.MyService" %>
 <%@ page import="fr.paris.lutece.portal.service.admin.AdminAuthenticationService" %>
+<%-- Never import a servlet class here: the package is javax in v7 and jakarta in v8, and the same probe has to
+     compile on both sites when run.sh compare copies it to the v7 one. JSP already gives you `request`. --%>
 <!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><title>e2e probe myplugin</title></head>
 <body data-e2e-probe="myplugin">

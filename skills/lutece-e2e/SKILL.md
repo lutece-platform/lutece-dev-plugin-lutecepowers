@@ -585,7 +585,9 @@ re-diagnose them; fix the script if one resurfaces.
   would and prints what it put in the model — not by looking for it on a front-office page.
 - **Library plugins (no screen, no XPage)**: ship a probe JSP in `harness/site/webapp/jsp/e2e/` (it lands in the
   assembled war): EL static calls on the service (`${ Service.method(param.id) }`), admin session required,
-  result in elements with ids so `expect_dom` can read it. `templates/probe.jsp.example` is the model.
+  result in elements with ids so `expect_dom` can read it. `templates/probe.jsp.example` is the model. **Never
+  import a servlet class in a probe** (`javax` in v7, `jakarta` in v8): the same page is copied to the v7 site by
+  `run.sh compare` and must compile there too — JSP already provides `request`, `response` and `pageContext`.
   Rebuild (`run.sh build`) after adding or editing a probe.
 - **Rich text**: `fill` on a textarea driven by TinyMCE sets the editor content too (otherwise the editor's
   empty content overwrites the value at submit).
