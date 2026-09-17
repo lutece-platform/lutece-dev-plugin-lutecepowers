@@ -70,6 +70,11 @@ services:
     image: ${E2E_NAME:-lutece-e2e}-server7:local
     profiles: [v7]
     user: "${E2E_UID:-1000}:0"
+    # The same bench properties as the v8 container: Lutece 7.1 already reads MicroProfile Config, so the
+    # environment overrides its .properties there too. Without this the v7 artefact calls the real outside
+    # systems while the v8 one calls the stand-ins, and every such scenario reads as "corrigé".
+    env_file:
+      - app.env
     environment:
       E2E_V7_INIT_DB: "${E2E_V7_INIT_DB:-1}"
     ports:

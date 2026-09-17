@@ -70,6 +70,14 @@ mkdir -p "$SITE/webapp/WEB-INF/plugins"
 # A bench whose artefact has no screen proves it through a probe JSP under harness/site/webapp/jsp/e2e. The v7
 # site needs the same probe, or every probe scenario fails on the v7 leg and the comparison reads "corrigé"
 # where only the v7 site was missing the page. The probe is the bench's, not the artefact's: it is copied as is.
+# The bench's own property overrides belong to both legs: the v8 site gets them from
+# harness/site/webapp/WEB-INF/conf/override, and Lutece 7 reads the same directory. Without them the v7 artefact
+# calls the real outside systems instead of the bench's stand-ins, and every such scenario reads as "corrigé".
+if [ -d "$E2E/harness/site/webapp/WEB-INF/conf/override" ]; then
+  mkdir -p "$SITE/webapp/WEB-INF/conf/override"
+  cp -a "$E2E/harness/site/webapp/WEB-INF/conf/override/." "$SITE/webapp/WEB-INF/conf/override/"
+  echo ">> property overrides copied to the v7 site"
+fi
 if [ -d "$E2E/harness/site/webapp/jsp/e2e" ]; then
   mkdir -p "$SITE/webapp/jsp/e2e" && cp -a "$E2E/harness/site/webapp/jsp/e2e/." "$SITE/webapp/jsp/e2e/"
   echo ">> probe pages copied to the v7 site ($(ls "$SITE/webapp/jsp/e2e" | tr '\n' ' '))"
