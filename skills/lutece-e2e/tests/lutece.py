@@ -493,6 +493,10 @@ CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
 ))
 
 
+FAILED_RESOURCE_ECHO = re.compile(r"Failed to load resource", re.I)
+"""The console line the browser writes for a failed sub-request: it names no url, so it is judged with the requests."""
+
+
 def console_noise(page, baseline=None):
     """Console messages and JS errors worth failing on: everything the bench did not declare, minus a baseline.
     On the v7 leg, the surrounding site's own noise is excluded (see V7_ENV_NOISE)."""
@@ -508,6 +512,11 @@ def console_noise(page, baseline=None):
     bad = [r for r in page.obs["requests"]
            if (r["status"] != 0 or "error" in r) and r["url"] not in (base.get("requests") or [])
            and not allowed(r["url"])]
+    # The browser echoes every failed sub-request in the console as a line that names no url. Once every failed
+    # request of the page is accounted for, that echo adds nothing and must not fail the screen on its own —
+    # otherwise an asset the bench declared is reported twice, once by name and once anonymously.
+    if not bad:
+        noise = [n for n in noise if not FAILED_RESOURCE_ECHO.search(n or "")]
     return errs, noise, bad
 
 
