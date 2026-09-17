@@ -109,6 +109,18 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - `expect_message` : le thème n'expose que la couleur de la carte (`bg-danger`/`bg-warning`) ; la confirmation se reconnaît à ses deux formulaires (valider / annuler).
 
 ### Pièges des benchs de plugin
+- Une sonde du bench écrite avec les API v8 ne compile pas sur la jambe v7 : les scénarios qui passent par elle
+  s'arrêtent avec une raison écrite au lieu de virer au rouge, sinon la comparaison lit « corrigé » sur du code
+  de bench. Sur la version visée par le bench, la même sonde cassée reste rouge.
+- La configuration d'un site v7 vit dans ses `.properties` et ses contextes Spring : aucune variable
+  d'environnement ne l'atteint. `harness/v7-overlay/` est posé sur la webapp v7 assemblée pour la pointer vers
+  les doublures, comme `app.env` le fait côté v8.
+- Un pom v7 déclare souvent ses dépendances en intervalles ouverts dont le haut a bougé : la jambe ne compile
+  plus. `E2E_V7_DEP_PINS` fige ces versions dans le worktree jetable, en intervalle à une valeur (une version
+  simple perd face à un intervalle).
+- Le créneau de ports d'un bench est enregistré, pas choisi sur les ports libres du moment : sinon tous les bancs
+  initialisés sur une machine au repos prennent le créneau 0 et deux d'entre eux ne peuvent jamais tourner
+  ensemble.
 - `gen-site.sh` prenait `project.parent.version` pour le core : c'est la version du global-pom, pas du core. Résolu par `mvn dependency:list`.
 - Un bench de plugin scanne aussi la webapp éclatée du site : sans marquage `origin`, 80 rouges du core noyaient les 4 du plugin dans le rapport.
 - TinyMCE recopie le contenu de l'éditeur dans le textarea au submit : un `fill` DOM sur le textarea caché est écrasé. Le pas `fill` alimente aussi l'éditeur.
