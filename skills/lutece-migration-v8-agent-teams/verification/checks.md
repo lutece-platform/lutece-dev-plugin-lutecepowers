@@ -127,7 +127,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 |----|----------|-------------|---------|-------|
 | MV01 | FAIL | new HashMap in JspBean/XPage | `new HashMap` in MVCAdminJspBean/MVCApplication files | *.java |
 | MV02 | WARN | AbstractPaginatorJspBean | `AbstractPaginatorJspBean` | *.java |
-| MV03 | WARN | Explicit CSRF token | `SecurityTokenService\.MARK_TOKEN` | *.java |
+| MV03 | WARN | CSRF token carried by hand inside an MVC bean, or `securityTokenEnabled = false` | `SecurityTokenService\.MARK_TOKEN` in a file that has `@Controller` / `MVCAdminJspBean` / `MVCApplication` | *.java |
 | MV04 | FAIL | FileItem (not MultipartItem) | `import.*FileItem[^P]` | *.java |
 
 ## Web / Config (WB)
@@ -149,6 +149,15 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | ST04 | WARN | Service without CDI scope | (cross-file check) | *.java |
 | ST05 | FAIL | files created by the migration excluded by .gitignore (they would never be committed) | `git check-ignore` | beans.xml, test microprofile-config |
 | LE01 | WARN | line endings converted in a changed file (diff widened to the whole file) | `git diff --numstat` vs `--ignore-cr-at-eol` | changed files |
+
+**MV03** — an MVC bean gets its token from the framework, so a token put in the model or validated by hand
+there means the framework's own is off or duplicated. A bean that is not MVC — a portlet admin bean, a servlet —
+has no framework token and must carry it by hand: that is the pattern, not a finding, and the check leaves it
+alone. `securityTokenEnabled = false` is always a finding.
+
+**LE01** — the fix is `scripts/restore-line-endings.sh`: it puts back the endings HEAD has on the files whose
+diff collapses once endings are ignored, and touches nothing else. Run it before the final gate, then verify
+again: a review that has to read a whole rewritten file does not happen.
 
 **ST02** — `final` is legal and is the core's own pattern when the bean is resolved only
 through its interface (`@ApplicationScoped public final class XDAO implements IXDAO`, twelve
@@ -210,7 +219,7 @@ model. The check fails on a class extending `PortletJspBean` that never calls
 `getSecurityTokenService( ).validate( request, … )`. Recipe and traps in `mvc-patterns.md` §11.
 
 **I18N01** — keys in `<plugin>_messages.properties` are relative to the bundle, so
-`childpages.message.x` written there resolves as `childpages.childpages.message.x` and renders
+`<plugin>.message.x` written there resolves as `<plugin>.<plugin>.message.x` and renders
 as the raw key: nothing fails and nothing logs. The same grep catches a key appended without a
 trailing newline, glued to the value of the line above, which corrupts both entries.
 

@@ -56,6 +56,29 @@ def test_classifier_requires_footer(bo):
     assert lutece.classify(bo) == "truncated"
 
 
+def test_screen_skip_is_scoped_to_the_versions_it_declares():
+    """A skip rule carrying `versions` applies on those versions only: the other leg still has to open the screen."""
+    import os
+    saved = lutece._RULES.get("r")
+    before = os.environ.get("E2E_VERSION")
+    lutece._RULES["r"] = {"skip": [{"match": "page=one", "versions": ["v7"], "reason": "one leg only"},
+                                   {"match": "page=two", "reason": "every leg"}]}
+    try:
+        os.environ["E2E_VERSION"] = "v7"
+        assert lutece.screen_skip("jsp/site/Portal.jsp?page=one")
+        os.environ["E2E_VERSION"] = "v8"
+        assert not lutece.screen_skip("jsp/site/Portal.jsp?page=one"), "a version-scoped skip leaked to the other leg"
+        assert lutece.screen_skip("jsp/site/Portal.jsp?page=two")
+    finally:
+        if saved is None:
+            lutece._RULES.pop("r", None)
+        else:
+            lutece._RULES["r"] = saved
+        os.environ.pop("E2E_VERSION", None)
+        if before is not None:
+            os.environ["E2E_VERSION"] = before
+
+
 def test_scenario_variables_expand_in_selectors():
     """{{var}} placeholders must expand in dict keys (fill selectors) as well as in values."""
     import test_scenarios

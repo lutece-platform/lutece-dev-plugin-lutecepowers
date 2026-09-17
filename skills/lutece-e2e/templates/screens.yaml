@@ -27,9 +27,14 @@ params: []
 # another artefact's flow and has no standalone entry point: an XPage reached from a calendar with the chosen
 # slot already in its parameters, for instance. The reason is printed in the summary, so a skipped screen stays
 # visible instead of quietly disappearing from the coverage.
+# `versions` restricts the rule to the versions listed, for a screen only one leg of the comparison can open:
+# excluding it everywhere would drop a screen the other leg proves.
 #   skip:
 #     - match: 'page=myxpage'
-#       reason: 'step of the appointment booking flow: needs starting_date_time from a real slot'
+#       reason: 'step of the booking flow: needs starting_date_time from a real slot'
+#     - match: 'page=myotherxpage'
+#       versions: [v7]
+#       reason: 'v7 leg only: redirects to an external identity provider the bench cannot reach'
 skip: []
 
 # Rendering findings the bench accepts, as regexes, each with its reason in a comment. For a screen that shows a

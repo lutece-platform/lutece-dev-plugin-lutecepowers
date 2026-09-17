@@ -457,7 +457,7 @@ def test_scenario(bo, browser, request, record, sc):
     record["description"] = sc.get("description", "")
     version = os.environ.get("E2E_VERSION", "v8")
     if sc.get("versions") and version not in [str(v) for v in sc["versions"]]:
-        pytest.skip("not for %s: scenario declares versions %s" % (version, sc["versions"]))
+        pytest.skip(lutece.DECLARED_SKIP + "not for %s: scenario declares versions %s" % (version, sc["versions"]))
     assert not sc.get("_invalid"), "scenario rejected by the oracle rule: " + "; ".join(sc["_invalid"])
     vars_ = {"rand": "".join(random.choices(string.ascii_lowercase + string.digits, k=6)), "rand_int": str(random.randint(10000, 999999)),
              "base": lutece.BASE}

@@ -14,6 +14,19 @@ import statistics
 
 import report_page
 
+DECLARED_SKIP = "declared exclusion: "
+"""Prefix the suites put on a skip the bench declared on purpose (tests/lutece.py), as opposed to one the run caused."""
+
+
+def declared_skip(reason):
+    """True when that skip is an exclusion the bench wrote down, pytest's own "Skipped: " prefix removed."""
+    return str(reason or "").replace("Skipped: ", "", 1).startswith(DECLARED_SKIP)
+
+
+def skip_reason(reason):
+    """The written reason of a skip, without pytest's prefix nor the declared-exclusion marker."""
+    return str(reason or "").replace("Skipped: ", "", 1).replace(DECLARED_SKIP, "", 1)
+
 E2E = pathlib.Path(__file__).resolve().parents[1]
 A = E2E / "artifacts"
 BUDGET_MS = 1500
@@ -105,11 +118,18 @@ def summary(rows, perf, disc, inv):
         sk = [r for r in rs if r["status"] == "skipped"]
         note = (" %d ignorés" % len(sk)) if sk else ""
         if sk and len(sk) == len(rs):
-            # Same rule as run.sh skipped_suites: a fully skipped suite is a hole only when the inventory gave it something to prove.
+            # Same rule as run.sh skipped_suites: a fully skipped suite is a hole only when the inventory gave it
+            # something to prove, and only when the skips are not exclusions the bench declared on purpose.
             tgt = [x for x in inv.get("screens", []) if x.get("origin", "target") == "target"]
             needed = {"fo": any(x.get("surface") == "fo" for x in tgt), "screens": any(x.get("surface", "bo") == "bo" for x in tgt),
                       "forms": any(x.get("surface", "bo") == "bo" for x in tgt)}.get(s, True)
-            note = " **suite entièrement ignorée : rien de prouvé**" if needed else " (rien à prouver pour ce périmètre)"
+            declared = all(declared_skip(r.get("reason")) for r in sk)
+            if not needed:
+                note = " (rien à prouver pour ce périmètre)"
+            elif declared:
+                note = " (exclusions déclarées par le banc : %s)" % skip_reason(sk[0].get("reason"))[:120]
+            else:
+                note = " **suite entièrement ignorée : rien de prouvé**"
         L.append("| %s | %d | %d | %d | %.0f s |" % (s, len(rs), len(rs) - len(ko) - len(sk), len(ko), sum(r["duration_ms"] for r in rs) / 1000) + note)
     is_target = target_matcher(cov, inv)
     scoped = bool(cov) and any(x.get("origin") == "env" for k in ("screens", "actions") for x in cov.get(k, []))
@@ -207,8 +227,8 @@ def summary(rows, perf, disc, inv):
               "Ils ne concernent pas l'artefact testé ; à rapprocher du banc du core. Les %d premiers :" % min(len(env_fails), 15)]
         L += [line(r) for r in sorted(env_fails, key=lambda r: r["id"])[:15]]
     if skipped:
-        L += ["", "## Ignorés (%d) — la donnée qu'ils visaient a été consommée par un autre test" % len(skipped), ""]
-        L += ["- `%s` — %s" % (r["id"], r.get("reason", "")[:160]) for r in skipped[:20]]
+        L += ["", "## Ignorés (%d) — exclusion déclarée par le banc, ou donnée consommée par un autre test" % len(skipped), ""]
+        L += ["- `%s` — %s" % (r["id"], skip_reason(r.get("reason"))[:160]) for r in skipped[:20]]
 
     noisy = [r for r in rows if r.get("console") or r.get("js_errors") or r.get("bad_requests")]
     L += ["", "## Console navigateur (%d écrans non propres)" % len(noisy), ""]

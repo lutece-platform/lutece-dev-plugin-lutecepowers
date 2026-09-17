@@ -77,7 +77,7 @@ def test_form(bo, anon, record, pair):
     }""") or ""
     if mvc_action and DENY.search(mvc_action):
         record["denied_action"] = mvc_action
-        pytest.skip("action %s is denied by the bench (scenarios/screens.yaml, key deny)" % mvc_action)
+        pytest.skip(lutece.DECLARED_SKIP + "action %s is denied by the bench (scenarios/screens.yaml, key deny)" % mvc_action)
     record["filled"] = lutece.fill_form(bo, form)
     lutece.reset_obs(bo)
     navigated = lutece.submit(bo, form)

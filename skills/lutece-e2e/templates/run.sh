@@ -163,12 +163,18 @@ fo = any(s.get("surface") == "fo" for s in tgt)
 bo = any(s.get("surface", "bo") == "bo" for s in tgt)
 scen = any(p.name != "screens.yaml" and not p.name.startswith("coverage-") for p in pathlib.Path("scenarios").glob("*.yaml"))
 bad = []
+DECLARED = "declared exclusion: "
 for suite, needed in (("fo", fo), ("scenarios", scen), ("screens", bo)):
     f = pathlib.Path("artifacts/junit-%s.xml" % suite)
     if not f.exists() or not needed: continue
     r = ET.parse(f).getroot(); ts = r if r.tag == "testsuite" else r.find("testsuite")
     n, sk = int(ts.get("tests", 0)), int(ts.get("skipped", 0))
-    if n and sk == n: bad.append("%s (%d/%d skipped)" % (suite, sk, n))
+    if not n or sk != n: continue
+    # A skip the bench declared and justified is an exclusion, not a silence: it is written in the bench, printed in
+    # the report and reviewable. The gate is there for a suite that went quiet on its own (data missing, state lost).
+    msgs = [s.get("message", "") for tc in ts for s in tc.findall("skipped")]
+    if msgs and all(m.startswith(DECLARED) for m in msgs): continue
+    bad.append("%s (%d/%d skipped)" % (suite, sk, n))
 if bad:
     print("SUITE ENTIRELY SKIPPED with something to prove: " + ", ".join(bad) + " — a skip is not a proof"); sys.exit(1)
 PY

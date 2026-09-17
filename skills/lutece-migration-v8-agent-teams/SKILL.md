@@ -290,6 +290,7 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `verify-file.sh` | Per-file verification subset | All teammates |
 | `final-gate.sh` | Postcondition: checks + compiler warnings + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase G, after every fix) |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
+| `restore-line-endings.sh` | Restores the endings HEAD had on files the editor converted (check LE01) | Verifier |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |
 
 ## Pattern Locations

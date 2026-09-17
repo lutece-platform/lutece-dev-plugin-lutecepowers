@@ -369,7 +369,23 @@ if [ "$COUNT" -eq 0 ]; then emit "MV01" "PASS" "new HashMap in JspBean/XPage (us
 else emit "MV01" "FAIL" "new HashMap in JspBean/XPage (use @Inject Models)" "$COUNT" "$MV01_MATCHES"; fi
 
 check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "WARN" "AbstractPaginatorJspBean -> @Pager IPager"
-check_grep "MV03" 'SecurityTokenService\.MARK_TOKEN\|getSecurityTokenService( )\.\(getToken\|validate\)\|_securityTokenService\.\(getToken\|validate\)\|securityTokenEnabled\s*=\s*false' "src/" "WARN" "Manual CSRF token or securityTokenEnabled=false (policy: @Controller securityTokenEnabled = true, no MARK_TOKEN/getToken/validate; manual token only in non-MVC beans)"
+# MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
+# token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
+# must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.
+MV03_TOKEN='SecurityTokenService\.MARK_TOKEN|getSecurityTokenService\( \)\.(getToken|validate)|_securityTokenService\.(getToken|validate)'
+MV03_MATCHES=""
+if [ -d "src/" ]; then
+    MV03_MATCHES=$({ grep -rlE "$MV03_TOKEN" src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+        if grep -qE '@Controller|MVCAdminJspBean|MVCApplication' "$f" 2>/dev/null; then
+            grep -nE "$MV03_TOKEN" "$f" | head -3 | sed "s|^|$f:|"
+        fi
+    done)
+    MV03_OFF=$({ grep -rnE 'securityTokenEnabled[[:space:]]*=[[:space:]]*false' src/ --include="*.java" 2>/dev/null || true; })
+    [ -n "$MV03_OFF" ] && MV03_MATCHES="$MV03_MATCHES${MV03_MATCHES:+$'\n'}$MV03_OFF"
+fi
+COUNT=0; [ -n "$MV03_MATCHES" ] && COUNT=$(echo "$MV03_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "MV03" "PASS" "CSRF token left to the framework in the MVC beans" 0
+else emit "MV03" "WARN" "Manual CSRF token in an MVC bean, or securityTokenEnabled=false (the framework owns the token there)" "$COUNT" "$MV03_MATCHES"; fi
 
 # MV04: FileItem still used (not MultipartItem). Excludes MemoryFileItem from library-httpaccess (v8 in-memory helper).
 check_grep "MV04" 'import\s\+org\.apache\.commons\.fileupload[0-9]*\(\.core\)\?\.FileItem' "src/" "FAIL" "FileItem -> MultipartItem (use MemoryFileItem from library-httpaccess for in-memory cases)" "--include=*.java"
@@ -596,7 +612,7 @@ if [ "$COUNT" -eq 0 ]; then emit "CS01" "PASS" "Portlet JspBean mutations carry 
 else emit "CS01" "FAIL" "Portlet JspBean without CSRF token (mvc-patterns.md 11)" "$COUNT" "$CS01_MATCHES"; fi
 
 # I18N01: a key of <plugin>_messages.properties is relative to the bundle, so it never repeats the plugin name.
-# Writing childpages.message.x in childpages_messages.properties resolves as childpages.childpages.message.x and
+# Writing <plugin>.message.x in <plugin>_messages.properties resolves as <plugin>.<plugin>.message.x and
 # the message silently renders as the raw key. The same grep catches a key appended without a newline, glued to
 # the value of the line above, which corrupts both entries at once.
 I18N01_MATCHES=""

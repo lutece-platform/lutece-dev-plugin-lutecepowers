@@ -96,9 +96,8 @@ leave it empty otherwise (a core bench never needs them).
   the opposite: nothing left. `/health` answers 200.
 
   **Check first whether the artefact calls anything at all.** A module named after an external system is often a
-  *provider*: it feeds markers to another plugin's task and issues no request of its own (module
-  notifygru-appointment is exactly that — it computes e-mail, SMS and URLs for the notifygru workflow task). Its
-  bench needs the consuming plugin installed, not a fake.
+  *provider*: it computes the markers another plugin's task will send (addresses, texts, urls) and issues no
+  request of its own. Its bench needs the consuming plugin installed, not a fake.
 - `oauth2` — `ghcr.io/navikt/mock-oauth2-server`, an OpenID Connect provider with an interactive login page and
   two issuers configured in `harness/fakes/oauth2.json`: `paris` (a citizen account through mylutece-oauth2) and
   `franceconnect`. Any username logs in; the claims are fixed (`e2e-citoyen`, `citoyen@e2e.local`, born
@@ -155,9 +154,9 @@ broken screen — a false defect that hides the real coverage.
 
 ```yaml
 params:
-  - match: 'CreatePortletChildPages\.jsp'
-    query: 'page_id=1&portlet_type_id=CHILDPAGES_PORTLET'
-  - match: 'ModifyPortletChildPages\.jsp'
+  - match: 'CreatePortlet[A-Za-z]*\.jsp'
+    query: 'page_id=1&portlet_type_id=<THE PORTLET TYPE OF THE ARTEFACT>'
+  - match: 'ModifyPortlet[A-Za-z]*\.jsp'
     query: 'portlet_id=9001'
 ```
 
@@ -174,7 +173,7 @@ the same file:
 
 ```yaml
 fragment:
-  - 'PortletChildPages\.jsp'
+  - 'Portlet[A-Za-z]*\.jsp'
 ```
 
 The same key covers the **front office**: a page the artefact serves as its own complete document — an
@@ -536,7 +535,9 @@ Two traps this step exposes, each worth reporting on its own:
 - CI: `junit 'e2e/artifacts/junit-*.xml'`, publish `report.html`, archive `summary.md`, `compare.md`,
   `fingerprint.json`; `run.sh` exit codes tell the cause apart (see its header).
 - **A skip is not a proof.** A suite with something to prove (the fo suite when the inventory has a front
-  office, the scenarios, the screens) whose every test is skipped fails the run with code 8.
+  office, the scenarios, the screens) whose every test is skipped fails the run with code 8. An exclusion the bench
+  declared and justified is not that silence: when every skip of the suite comes from a rule written in
+  `scenarios/screens.yaml` or from a scenario's `versions`, the run stays green and the summary names the reason.
 - `report.html` is written for the person who reviews the bench without having run it: the
   verdict and one tile per suite; the failures first, each with its readable title, its suite, its reason and the
   confirmed server-side cause; the scenarios by title, right and description with **their steps in plain words**

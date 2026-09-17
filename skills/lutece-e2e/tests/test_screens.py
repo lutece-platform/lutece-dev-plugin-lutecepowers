@@ -48,7 +48,7 @@ def test_screen(bo, record, target):
     reason = lutece.screen_skip(target)
     if reason:
         record["url"] = target
-        pytest.skip("not opened standalone: " + reason)
+        pytest.skip(lutece.DECLARED_SKIP + "not opened standalone: " + reason)
     t0 = lutece.now_ms()
     q = lutece.screen_query(target)
     opened = target if not q or "?" in target else target + "?" + q
@@ -107,7 +107,7 @@ SCOPED = not lutece.scope()("jsp/admin/AdminLogin.jsp")
 """True on a plugin bench: the core's public screens (login, lost password, contact) belong to the core bench."""
 
 
-@pytest.mark.skipif(SCOPED, reason="core public screen, out of the plugin scope")
+@pytest.mark.skipif(SCOPED, reason=lutece.DECLARED_SKIP + "core public screen, out of the plugin scope")
 def test_login_screen(anon, record):
     """The login screen renders and rejects a wrong password with a Lutece message, not an error page."""
     resp = anon.goto(lutece.url("jsp/admin/AdminLogin.jsp"), wait_until="load")
@@ -119,7 +119,7 @@ def test_login_screen(anon, record):
     assert "AdminLogin.jsp" in anon.url or lutece.admin_message(anon) in ("error", "stop", "message"), anon.url
 
 
-@pytest.mark.skipif(SCOPED, reason="core public screen, out of the plugin scope")
+@pytest.mark.skipif(SCOPED, reason=lutece.DECLARED_SKIP + "core public screen, out of the plugin scope")
 @pytest.mark.parametrize("target", ["jsp/admin/AdminForgotLogin.jsp", "jsp/admin/AdminForgotPassword.jsp",
                                     "jsp/admin/AdminFormContact.jsp"])
 def test_sessionless_screen(anon, record, target):

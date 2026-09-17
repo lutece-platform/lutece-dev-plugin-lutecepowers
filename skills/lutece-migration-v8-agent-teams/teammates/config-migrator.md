@@ -127,8 +127,8 @@ When the Lead reports that ALL Java Migrators have completed, delete every `*_co
 ## Step 18: an i18n key never repeats the plugin prefix
 
 Keys in `<plugin>_messages.properties` are relative to the bundle: the Java constant
-`"childpages.message.portletNotFound"` is the line `message.portletNotFound=…`. Writing
-`childpages.message.portletNotFound=…` there resolves as `childpages.childpages.…` and the
+`"<plugin>.message.notFound"` is the line `message.notFound=…`. Writing
+`<plugin>.message.notFound=…` there resolves as `<plugin>.<plugin>.…` and the
 message silently renders as the raw key — nothing fails, nothing logs.
 
 Two rules when you add a key:

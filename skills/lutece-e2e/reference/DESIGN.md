@@ -86,7 +86,8 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 16. **Un constat doit survivre à une base propre** : le seed de référence se rejoue avant chaque `test`, et un constat
     sur une donnée seedée n'est retenu qu'après vérification de sa présence.
 17. **Un saut ne prouve rien** : une suite qui avait quelque chose à prouver et dont tous les tests sont ignorés fait
-    échouer le run (code 8) ; le résumé la marque.
+    échouer le run (code 8) ; le résumé la marque. Exception : une exclusion écrite et justifiée dans le banc
+    (`screens.yaml` clé `skip`, ou `versions` d'un scénario) reste verte, avec sa raison dans le résumé.
 18. **Le rapport dit ce qui a été testé** (`artifacts/fingerprint.json`) : commit des sources, hash du war, digests des
     images. Les codes de retour distinguent les causes (3 oracle, 4 invariant, 5 erreurs serveur,
     6 smoke, 7 revue, 8 suite ignorée) ; `compare` propage le code de la jambe v8.

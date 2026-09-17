@@ -512,14 +512,28 @@ def bench_rules():
     return _RULES["r"]
 
 
+DECLARED_SKIP = "declared exclusion: "
+"""Prefix of a skip the bench wrote down on purpose, as opposed to one the run caused (data consumed, state missing).
+
+A suite where every test is skipped proves nothing, so the run fails on it (run.sh, `skipped_suites`). That gate must
+not fire on exclusions the bench declared and justified: it exists to catch a suite that went silent by accident. The
+prefix is the only thing that tells the two apart in the junit report, so every deliberate skip carries it."""
+
+
 def screen_skip(url):
     """Reason the bench declares for not opening a screen standalone, or "" when it should be opened.
 
-    `scenarios/screens.yaml`, key `skip`: a list of `{match: <regex on the url>, reason: <why>}`. For a screen that
-    is a step inside another artefact's flow and carries no standalone entry point — an XPage reached from a
-    calendar with the chosen slot in its parameters, for instance. A reason is mandatory: the summary prints it, so
-    a skipped screen stays visible instead of quietly disappearing from the coverage."""
+    `scenarios/screens.yaml`, key `skip`: a list of `{match: <regex on the url>, reason: <why>, versions: [...]}`. For
+    a screen that is a step inside another artefact's flow and carries no standalone entry point — an XPage reached
+    from a calendar with the chosen slot in its parameters, for instance. A reason is mandatory: the summary prints
+    it, so a skipped screen stays visible instead of quietly disappearing from the coverage. `versions` restricts the
+    rule to the versions listed, for a screen only one leg of the comparison cannot open: excluding it everywhere
+    would drop a screen the other leg proves."""
+    version = os.environ.get("E2E_VERSION", "v8")
     for rule in (bench_rules().get("skip") or []):
+        vs = rule.get("versions")
+        if vs and version not in vs:
+            continue
         try:
             if rule.get("match") and re.search(rule["match"], url, re.I):
                 return rule.get("reason") or "declared in screens.yaml without a reason"

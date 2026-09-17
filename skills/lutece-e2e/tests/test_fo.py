@@ -49,7 +49,7 @@ def test_fo_screen(anon, record, fo_theme_baseline, target):
     reason = lutece.screen_skip(target)
     if reason:
         record["url"] = target
-        pytest.skip("not opened standalone: " + reason)
+        pytest.skip(lutece.DECLARED_SKIP + "not opened standalone: " + reason)
     t0 = lutece.now_ms()
     resp = anon.goto(lutece.url(target), wait_until="load")
     record["ms"] = round(lutece.now_ms() - t0)

@@ -326,7 +326,7 @@ def screens_section(rows, inv, title, anchor_id, note="", collapsed=False, empty
     skipped_html = ""
     if skipped:
         skipped_html = '<details class=skipped><summary>Non ouverts (%d)</summary><ul>%s</ul></details>' % (len(skipped), "".join(
-            "<li><code>%s</code> — %s</li>" % (esc(re.sub(r"^test_\w+\[(.*)\]$", r"\1", r["id"])), esc((r.get("reason") or "").replace("Skipped: ", "")[:200])) for r in skipped))
+            "<li><code>%s</code> — %s</li>" % (esc(re.sub(r"^test_\w+\[(.*)\]$", r"\1", r["id"])), esc((r.get("reason") or "").replace("Skipped: ", "").replace("declared exclusion: ", "")[:200])) for r in skipped))
     body = "%s<div class=grid>%s</div>%s" % ("<p class=note>%s</p>" % note if note else "", "".join(cards), skipped_html)
     if rows:
         count = '%d écran%s, %d famille%s, %d en échec' % (len(rows), "s" if len(rows) > 1 else "", len(groups), "s" if len(groups) > 1 else "", ko)
