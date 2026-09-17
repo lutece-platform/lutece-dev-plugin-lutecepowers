@@ -205,6 +205,7 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | TL01 | FAIL | ThreadLocal not cleared with remove() | (cross-file check) | *.java |
 | CS01 | FAIL | portlet JspBean mutations without a CSRF token | (cross-file check) | *.java |
 | I18N01 | FAIL | i18n key repeating the plugin prefix | (cross-file check) | *_messages*.properties |
+| I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
 
 **XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second
 option.** `core_style`, `core_style_mode_stylesheet` and `core_stylesheet` left the core for
@@ -235,6 +236,13 @@ model. The check fails on a class extending `PortletJspBean` that never calls
 `<plugin>.message.x` written there resolves as `<plugin>.<plugin>.message.x` and renders
 as the raw key: nothing fails and nothing logs. The same grep catches a key appended without a
 trailing newline, glued to the value of the line above, which corrupts both entries.
+
+**I18N02** — a `#i18n{...}` of a template, or a `MESSAGE_*` / `INFO_*` / `ERROR_*` / `TITLE_*` constant, naming a
+key no bundle declares: Lutece prints the raw key on the screen and nothing fails at build time. WARN, because
+most of these predate the migration. Only the plugin's own prefix is checked, and only those two sources — bean
+names and CSRF action names are strings of the same shape and are not keys. Every grep of the check passes `-a`:
+a bundle saved in ISO-8859 counts as binary for grep, which then reports nothing at all — the same trap turns a
+manual search in those files into a false "the key is missing".
 
 ## JSP (JS)
 

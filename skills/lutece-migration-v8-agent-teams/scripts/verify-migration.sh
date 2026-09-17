@@ -698,6 +698,34 @@ if [ "$COUNT" -eq 0 ]; then emit "I18N01" "PASS" "No i18n key repeating the plug
 else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the line above): it never resolves" "$COUNT" "$I18N01_MATCHES"; fi
 echo ""
 
+# I18N02: a key a template or a message constant asks for, that no bundle of this plugin declares. Lutece then
+# renders the raw key on screen and nothing fails at build time. Two sources only, both unambiguous: `#i18n{}` in
+# the templates, and the Java constants whose name says they hold a message key (MESSAGE_, INFO_, ERROR_,
+# WARNING_, TITLE_, PROPERTY_PAGE_TITLE_). Bean names and CSRF action names are strings too, and are not keys.
+# Every grep here is `-a`: a bundle written in ISO-8859 counts as binary for grep, which then reports nothing and
+# the check would silently pass — the same trap applies to any manual search in these files.
+I18N02_MATCHES=""
+if [ -d "src/java" ]; then
+    BUNDLE=$(find src/java -name "*_messages.properties" 2>/dev/null | head -1)
+    PLUGIN=$(basename "${BUNDLE:-}" 2>/dev/null | sed 's/_messages.properties//')
+    if [ -n "$PLUGIN" ] && [ -n "$BUNDLE" ]; then
+        DECLARED=$(mktemp); ASKED=$(mktemp)
+        find src/java -name "*_messages*.properties" -exec sed -nE 's/^([A-Za-z0-9_.-]+) *=.*/\1/p' {} \; | sort -u > "$DECLARED"
+        grep -arhoE "#i18n\{$PLUGIN\.[A-Za-z0-9_.-]+\}" webapp src 2>/dev/null | sed -E "s/^#i18n\{$PLUGIN\.//; s/\}$//" >> "$ASKED"
+        grep -arhoE "(MESSAGE|INFO|ERROR|WARNING|TITLE|PROPERTY_PAGE_TITLE)_[A-Z0-9_]+ *= *\"$PLUGIN\.[A-Za-z0-9_.-]+\"" src/java --include="*.java" 2>/dev/null \
+            | grep -oE "\"$PLUGIN\.[A-Za-z0-9_.-]+\"" | tr -d '"' | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
+        I18N02_MATCHES=$(sort -u "$ASKED" | while read -r k; do
+            [ -n "$k" ] || continue
+            grep -qxF "$k" "$DECLARED" || echo "$PLUGIN.$k: asked for by a template or a message constant, declared in no bundle"
+        done)
+        rm -f "$DECLARED" "$ASKED"
+    fi
+fi
+COUNT=0; [ -n "$I18N02_MATCHES" ] && COUNT=$(echo "$I18N02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N02" "PASS" "Every i18n key the plugin asks for is declared" 0
+else emit "I18N02" "WARN" "i18n key asked for but declared nowhere: the raw key shows on screen" "$COUNT" "$I18N02_MATCHES"; fi
+echo ""
+
 # ─── JSP ─────────────────────────────────────────────────
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
