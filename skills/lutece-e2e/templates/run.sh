@@ -330,7 +330,15 @@ cmd_report() {
 APP7="${E2E_NAME}-lutece7-1"
 wait_healthy() {
   local c=$1
-  until [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null || echo missing)" != starting ]; do sleep 3; done
+  # Docker only declares the container unhealthy after start_period + retries × interval, about eight minutes. A
+  # site whose Liquibase run stopped, or whose application never deployed, is known lost from the first line that
+  # says so: stop waiting right there instead of letting the health check run out.
+  local fatal='LiquibaseRunner failed|Migration failed for changeset|CWWKZ0002E|startup failed due to previous errors'
+  until [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null || echo missing)" != starting ]; do
+    [ "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = true ] || break
+    docker logs "$c" 2>&1 | grep -qE "$fatal" && break
+    sleep 3
+  done
   # The whole log is kept beside the last lines: when the site does not come up, the cause (a Liquibase
   # changeset that stopped, a bean that failed to start) is hundreds of lines above the tail and would otherwise
   # be gone with the container.
