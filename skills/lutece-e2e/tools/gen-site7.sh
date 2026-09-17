@@ -45,12 +45,21 @@ for pin in ${_PINS//,/ }; do
   python3 - "$WT/pom.xml" "$PG" "$PA" "$PV" <<'PYPIN'
 import re, sys
 pom, g, a, v = sys.argv[1:5]
+# A plain version is only a soft requirement: another dependency asking for the same artefact through a range
+# wins over it, and the pin changes nothing. Written as a one-value range it is a hard requirement, which is
+# what pinning means here.
+v = v if v.startswith(("[", "(")) else "[%s]" % v
 t = open(pom, encoding="utf-8").read()
 pat = re.compile(r"(<dependency>(?:(?!</dependency>).)*?<groupId>\s*%s\s*</groupId>(?:(?!</dependency>).)*?<artifactId>\s*%s\s*</artifactId>(?:(?!</dependency>).)*?<version>)([^<]*)(</version>)"
                  % (re.escape(g), re.escape(a)), re.S)
 t2, n = pat.subn(lambda m: m.group(1) + v + m.group(3), t)
 if not n:
-    sys.exit("gen-site7.sh: no dependency %s:%s in the v7 pom to pin" % (g, a))
+    # Not declared: the version comes through another dependency's range, and the top of that range has moved on.
+    # A direct dependency wins over a transitive one, so declaring it here is what pins it.
+    dep = "        <dependency>\n            <groupId>%s</groupId>\n            <artifactId>%s</artifactId>\n            <version>%s</version>\n        </dependency>\n" % (g, a, v)
+    if "</dependencies>" not in t:
+        sys.exit("gen-site7.sh: the v7 pom has no <dependencies> to add %s:%s to" % (g, a))
+    t2 = t.replace("</dependencies>", dep + "    </dependencies>", 1)
 open(pom, "w", encoding="utf-8").write(t2)
 PYPIN
   echo ">> v7 dependency pinned: $PG:$PA -> $PV"

@@ -33,21 +33,36 @@ if [ -z "$TARGET" ]; then
 fi
 # -- ports: first free slot, or the offset implied by --port ------------------------------------------
 port_free( ) { ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
-SLOT=0
+# The slot decides every host port of the bench. A free port is not enough to choose it: a bench that is not
+# running holds no port, so every bench initialised on a quiet machine would take slot 0 and no two of them
+# could ever run at the same time. The slots taken are therefore recorded, one line per bench, and a bench keeps
+# the slot it was given.
+SLOTS="${E2E_SLOTS_FILE:-$HOME/.lutece-e2e-slots}"
+touch "$SLOTS" 2>/dev/null || SLOTS=/dev/null
+KEY=$(cd "$DIR" && pwd)
+SLOT=$(awk -v k="$KEY" '$1 == k {print $2}' "$SLOTS" | tail -1)
 if [ -n "$PORT" ]; then
     SLOT=$(( (PORT - 18080) / 100 ))
     [ "$SLOT" -ge 0 ] || SLOT=0
-else
+elif [ -z "$SLOT" ]; then
+    SLOT=0
     while [ "$SLOT" -lt 40 ]; do
         S=$(( SLOT * 100 ))
-        if port_free $(( 18080 + S )) && port_free $(( 13306 + S )) && port_free $(( 18025 + S )); then break; fi
+        if ! awk -v s="$SLOT" '$2 == s {found=1} END {exit !found}' "$SLOTS" \
+           && port_free $(( 18080 + S )) && port_free $(( 13306 + S )) && port_free $(( 18025 + S )); then break; fi
         SLOT=$(( SLOT + 1 ))
     done
+fi
+if [ "$SLOTS" != /dev/null ]; then
+    grep -v "^$KEY " "$SLOTS" > "$SLOTS.tmp" 2>/dev/null || true
+    printf '%s %s\n' "$KEY" "$SLOT" >> "$SLOTS.tmp"; mv "$SLOTS.tmp" "$SLOTS"
 fi
 S=$(( SLOT * 100 ))
 PORT=${PORT:-$(( 18080 + S ))}
 DBPORT=${DBPORT:-$(( 13306 + S ))}
-MAILPORT=$(( 18025 + S )); FAKESPORT=$(( 19030 + S )); OAUTH2PORT=$(( 19080 + S ))
+# Every base ends on a different pair of digits: two ports of different families are then never equal, whatever
+# the slots (18080 + 1000 and 19080 + 0 were the same port before oauth2 moved to 19085).
+MAILPORT=$(( 18025 + S )); FAKESPORT=$(( 19030 + S )); OAUTH2PORT=$(( 19085 + S )); PORT7=$(( 18081 + S ))
 SOLRPORT=$(( 18983 + S )); ESPORT=$(( 19200 + S ))
 
 ARTIFACT=$(grep -oE "<artifactId>[^<]+" "$DIR/pom.xml" | sed -n 2p | sed 's/<artifactId>//')
@@ -78,6 +93,7 @@ fi
 if [ ! -f "$E2E/e2e.conf" ]; then
   sed -e "s/@@TARGET@@/$TARGET/" -e "s/@@NAME@@/$NAME/" -e "s/@@PORT@@/$PORT/" -e "s/@@DBPORT@@/$DBPORT/" \
       -e "s/@@MAILPORT@@/$MAILPORT/" -e "s/@@FAKESPORT@@/$FAKESPORT/" -e "s/@@OAUTH2PORT@@/$OAUTH2PORT/" \
+      -e "s/@@PORT7@@/$PORT7/" \
       -e "s/@@SOLRPORT@@/$SOLRPORT/" -e "s/@@ESPORT@@/$ESPORT/" \
       "$SKILL/templates/e2e.conf.tpl" > "$E2E/e2e.conf"
 fi

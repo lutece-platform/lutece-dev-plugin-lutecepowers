@@ -131,7 +131,7 @@ endpoint is written in the bean definition. Check the key the artefact really re
 **Fixtures live in `app.py`**: CAS accounts (`CAS_USERS`), the pro GUID (`E2E_PRO_GUID` in `e2e.conf`). Add a case
 there when a scenario needs another user; state is in memory (tickets, payments) and starts empty at each `up`.
 A look from the host: `http://localhost:19030/cas/login`, `http://localhost:19030/health`,
-`http://localhost:19080/paris/debugger` (`E2E_FAKES_PORT`, `E2E_OAUTH2_PORT`).
+`http://localhost:19085/paris/debugger` (`E2E_FAKES_PORT`, `E2E_OAUTH2_PORT`, the values of `e2e.conf`).
 
 ## Search engines — the real ones
 
