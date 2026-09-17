@@ -482,7 +482,8 @@ else emit "LE01" "WARN" "Line endings converted (restore them: the diff must sho
 XT01_MATCHES=""
 if ! grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null; then
     XT01_MATCHES=$({ grep -rlE 'XmlTransformerService|XmlTransformer\b|XslExportService' src/ --include="*.java" 2>/dev/null || true; } | sed 's/$/: uses the XSL services that moved to plugin-xmltransformer, undeclared/')
-    SQL_XT=$({ grep -rliE 'INSERT INTO core_style|core_stylesheet|core_style_mode_stylesheet' src/sql 2>/dev/null || true; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
+    # Statements only: a leftover `-- Dumping data for table core_style` comment writes nothing.
+    SQL_XT=$({ grep -rlE '^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER|CREATE)[^;]*core_style' src/sql 2>/dev/null || true; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
     [ -n "$SQL_XT" ] && XT01_MATCHES="$XT01_MATCHES${XT01_MATCHES:+$'\n'}$SQL_XT"
 fi
 COUNT=0; [ -n "$XT01_MATCHES" ] && COUNT=$(echo "$XT01_MATCHES" | wc -l)
