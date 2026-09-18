@@ -135,4 +135,4 @@ Common: `pencil`, `edit`, `trash`, `plus`, `eye`, `search`, `download`, `upload`
 
 ## JavaScript Migration (jQuery → Vanilla ES6)
 
-Conversion table: `skills/lutece-update-template-fo/SKILL.md` § jQuery → Vanilla JS. Neither the admin theme nor the site frameset loads jQuery. Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) is a **WARN / manual port**: it will fail at runtime as-is; port it to a vanilla equivalent or a core macro, or add `library-theme-jquery` as an explicit dependency. Never mark it as PASS.
+Conversion table: `skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS. Neither the admin theme nor the site frameset loads jQuery. Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) is a **WARN / manual port**: it will fail at runtime as-is; port it to a vanilla equivalent or a core macro, or add `library-theme-jquery` as an explicit dependency. Never mark it as PASS.

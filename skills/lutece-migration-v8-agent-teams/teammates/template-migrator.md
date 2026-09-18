@@ -121,7 +121,7 @@ Follow `rules/template-front-office.md`. Wrap front-office templates with `<@cTp
 
 ## Step 5: JavaScript Migration
 
-Replace jQuery with vanilla ES6 JS. Conversion table: `${LUTECEPOWERS_ROOT}/skills/lutece-update-template-fo/SKILL.md` § jQuery → Vanilla JS. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: report it as WARN with a manual port proposal, never leave it as-is (jQuery is not loaded by the theme).
+Replace jQuery with vanilla ES6 JS. Conversion table: `${LUTECEPOWERS_ROOT}/skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: report it as WARN with a manual port proposal, never leave it as-is (jQuery is not loaded by the theme).
 
 ## Step 6: SuggestPOI Migration (conditional)
 
