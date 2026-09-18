@@ -246,12 +246,20 @@ missing and Weld aborts before any test runs, with four `SRCFG02000` deployment 
 mp.config.profile=test
 daemon.zoneId=Europe/Paris
 lutece.defaultFileServiceProvider.fileStoreService=localDatabaseFileService
-lutece.defaultFileServiceProvider.downloadService=defaultDownloadService
-lutece.defaultFileServiceProvider.rbacService=defaultRBACService
+lutece.defaultFileServiceProvider.downloadService=defaultFileDownloadService
+lutece.defaultFileServiceProvider.rbacService=defaultFileNoRBACService
 ```
 
 Add any other key the deployment exceptions name. This file is new, so it must be staged with
 `git add`; `ST05` fails while it is untracked.
+
+**Each value is a CDI bean name and has to be one that exists**, because the core's
+`DefaultFileStoreServiceProviderProducer` only checks the three keys are non-blank at deployment
+and resolves them by name later. A wrong name therefore costs nothing until something touches
+`FileService`, and then fails as an unsatisfied resolution far from this file. Copy the values from
+the core's own `webapp/WEB-INF/conf/config.properties` rather than from memory — they are
+`localDatabaseFileService`, `defaultFileDownloadService` and `defaultFileNoRBACService`, and the
+`@Named` annotations that declare them are in `fr.paris.lutece.portal.service.file.implementation`.
 
 ## Step 8c: Clear the thread context
 
@@ -274,7 +282,7 @@ host.setPageTemplateId( 2 );
 _pageService.createPage( host );
 ```
 
-Same rule as the e2e bench (`lutece-e2e`, section on front-office proofs). And when the code
+Same rule as the e2e bench (`lutece-e2e`, `reference/traps.md` § A front-office proof targets the portlet). And when the code
 under test changes how it renders — an XSL portlet ported to HTML, for instance — **re-read
 every assertion written against the old output before trusting the result either way**.
 
@@ -285,9 +293,30 @@ every assertion written against the old output before trusting the result either
 `PluginService.init( )`, which only the portal startup calls. A static field initializer makes it
 worse — the class fails to load and every test of the class errors at once.
 
-Pass `null` as the `Plugin` to the Home and DAO methods that still take one. `DAOUtil` falls back on
-the portal pool, which is the pool those queries use anyway. Keep the explanation in the field's
-javadoc so the next reader does not "fix" it back.
+**Read the log above the failure before working around it.** `AppInit.initServices` ends in a bare
+`catch( Exception e )` that logs `Error ininitialised service` and then continues, so a service that
+throws takes every service after it down in silence: `PluginService.init` sits roughly halfway, and a
+failure there also skips `FilterService`, `ServletService`, `SecurityService`,
+`AppTemplateService.initMacros`, `AppDaemonService`, `AdminAuthenticationService`, `FileImageService`
+and `PostStartUpServiceManager`. The cause is logged **once**, in a stack of its own; the NPE the test
+shows is a different stack entirely, not a deeper frame of the same one. The plugin cache is only
+where that particular test happened to touch the damage first — a test that renders a template or
+needs a daemon would fail somewhere else, with the same single swallowed line as its only explanation.
+
+The usual cause in a v8 test container is a missing JAXB implementation: ehcache 107 parses its XML
+configuration through JAXB, so without `org.glassfish.jaxb:jaxb-runtime` in test scope (Step 8) the
+cache constructor throws and `_pluginCache` is never assigned. Add the dependency and the container
+initialises like a real deployment. Never weaken a DAO to route around a half-started container.
+
+There is a cheap way to tell a fully started container from a half-started one, and it costs one grep:
+a complete `AppInit.initServices` prints `LUTECE SERVER started successfully` and
+`Lutece application services started in : <n> secondes`. When a service threw, the run continues and
+those two lines never appear. Grep the test log for that banner before trusting a green suite — a
+suite can pass simply by never touching the part of the container that was skipped.
+
+When the cache genuinely cannot exist, pass `null` as the `Plugin` to the Home and DAO methods that
+still take one. `DAOUtil` falls back on the portal pool, which is the pool those queries use anyway.
+Keep the explanation in the field's javadoc so the next reader does not "fix" it back.
 
 ```java
 /**
