@@ -138,6 +138,20 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | WB02 | FAIL | application-class | `<application-class>` | plugins/*.xml |
 | WB03 | FAIL | ContextLoaderListener | `ContextLoaderListener` | web.xml |
 | WB04 | WARN | min-core-version not 8.0.0 | (custom check) | plugins/*.xml |
+| WB05 | FAIL | descriptor filter under /rest/ | (custom check) | plugins/*.xml |
+
+**WB05** — a `<filters>` entry of the plugin descriptor whose `<url-pattern>` is deeper than `/rest/*`. It cannot
+fire in v8: `MainFilter.matchMapping` compares the pattern to `request.getServletPath( )`, which is `/rest` for
+every call routed to the application mounted by `@ApplicationPath( "/rest/" )`, the rest of the url being in
+`getPathInfo( )`. The filter is still read, instantiated and registered — the log even says
+`New Filter registered` — and it simply never runs. Measured on one bench, same module and same descriptor: an
+unsigned call answers **401** on the v7 leg and **200** on the v8 one.
+
+FAIL rather than WARN because the failure is silent and it opens whatever the filter protected. Removing the block
+is only half the fix: replace it with the `@NameBinding` `ContainerRequestFilter` of `rest-patterns.md` §3, with
+the same parameters, so the contract holds even though the mechanism changed. Declaring a REST filter in the
+descriptor is over — the core is not going back to it, so there is nothing to wait for. `/rest/*` itself still matches and is
+not reported, nor is any pattern outside `/rest/` — a filter on `/jsp/site/*` works as before.
 
 ## Structure (ST)
 
@@ -244,6 +258,13 @@ names and CSRF action names are strings of the same shape and are not keys. Ever
 a bundle saved in ISO-8859 counts as binary for grep, which then reports nothing at all — the same trap turns a
 manual search in those files into a false "the key is missing".
 
+**A sweep that finds nothing has to be trusted, so do not sweep with a bare `grep -r`.** In an interactive shell
+`grep` is often a function or an alias over ripgrep or ugrep, which skip dotted files and directories and honour
+`.gitignore` by default: `.migration/`, `.settings/` and anything the project ignores are searched silently past.
+The scripts are safe — a shell function is not exported to `bash script.sh` — but a teammate checking its own work
+is not. When the answer "nothing left" is the point of the search, run it as
+`find . -type f -print0 | xargs -0 grep -an <pattern>`.
+
 ## JSP (JS)
 
 | ID | Severity | Description | Pattern | Files |
@@ -298,6 +319,6 @@ The counts come from `verify-migration.sh --json` (`.migration/verify-latest.jso
 | `*.html` (admin) | TM01, TM02, TM04, TM06 |
 | `*.html` (skin) | TM02, TM04 |
 | `*.jsp` | JS01, JS02 |
-| `*.xml` (plugins) | WB02, WB04 |
+| `*.xml` (plugins) | WB02, WB04, WB05 |
 | `web.xml` | WB01, WB03 |
 | `pom.xml` | PM01-PM12 |

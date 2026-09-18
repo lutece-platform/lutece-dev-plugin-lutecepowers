@@ -245,6 +245,100 @@ def app_java(root):
         yield java, rel
 
 
+REST_VERB = re.compile(r'@(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b')
+REST_PATH = re.compile(r'@Path\s*\(([^)]*)\)')
+JAVA_CONST = re.compile(r'static\s+final\s+String\s+(\w+)\s*=\s*([^;]+);')
+NAME_BINDING = re.compile(r'@NameBinding')
+REST_METHOD = re.compile(r'((?:@\w+(?:\s*\([^)]*\))?\s*)+)(?:public|protected)\s+[\w<>\[\], .?]+\s+(\w+)\s*\(')
+
+
+def rest_constants(root):
+    """Every `static final String NAME = "value"` of the artefact, so a @Path built by concatenating constants
+    resolves to the url a client actually calls. Plus the two plugin-rest constants, whose values are the reason
+    a v8 @Path looks empty: BASE_PATH is "" and the /rest/ prefix lives on @ApplicationPath."""
+    consts = {"RestConstants.BASE_PATH": "", "RestConstants.APP_PATH": "/rest/",
+              "BASE_PATH": "", "APP_PATH": "/rest/"}
+    # PLUGIN_NAME carries the path segment and usually lives in the plugin a module extends, outside this tree.
+    # `XxxPlugin.PLUGIN_NAME` is the convention, and its value is the class prefix in lowercase — a module's own
+    # descriptor name is NOT it (module-workflow-rest is named workflow-rest and serves /rest/workflow).
+    for java, _ in app_java(root):
+        for m in re.finditer(r"(\w+)Plugin\.PLUGIN_NAME", java.read_text(errors="replace")):
+            consts.setdefault("%sPlugin.PLUGIN_NAME" % m.group(1), m.group(1).lower())
+    for java, _ in app_java(root):
+        text = java.read_text(errors="replace")
+        for m in JAVA_CONST.finditer(text):
+            consts.setdefault(m.group(1), m.group(2).strip())
+            consts.setdefault("%s.%s" % (java.stem, m.group(1)), m.group(2).strip())
+    return consts
+
+
+def resolve_path(expr, consts, depth=0):
+    """Resolves a @Path expression: string literals and constants joined by +, recursively, because a constant is
+    often itself a concatenation (`VERSION_PATH = "/v{" + VERSION + "}"`). Returns None when a term is unknown —
+    half a url is worse than none, it would send the bench at a path that does not exist."""
+    if depth > 8:
+        return None
+    out = []
+    for term in expr.split("+"):
+        term = term.strip()
+        if not term:
+            continue
+        if len(term) > 1 and term[0] == '"' and term[-1] == '"':
+            out.append(term[1:-1])
+            continue
+        value = consts.get(term, consts.get(term.split(".")[-1]))
+        if value is None:
+            return None
+        if '"' in value or "+" in value:
+            value = resolve_path(value, consts, depth + 1)
+            if value is None:
+                return None
+        out.append(value)
+    return "".join(out)
+
+
+def rest_inventory(root):
+    """JAX-RS resources of the artefact: one entry per resource method, with the url a client calls and whether
+    the class carries a @NameBinding annotation of this artefact. That binding is what makes an authentication
+    filter run on the resource; a resource without one is served unauthenticated and nothing in the build says so."""
+    consts = rest_constants(root)
+    bindings = set()
+    for java, _ in app_java(root):
+        text = java.read_text(errors="replace")
+        if NAME_BINDING.search(text) and "@interface" in text:
+            m = re.search(r'@interface\s+(\w+)', text)
+            if m:
+                bindings.add(m.group(1))
+    screens, actions = [], []
+    for java, rel in app_java(root):
+        text = java.read_text(errors="replace")
+        if "jakarta.ws.rs.Path" not in text:
+            continue
+        head = text.split("public ", 1)[0]
+        cm = REST_PATH.search(head)
+        if not cm:
+            continue
+        base = resolve_path(cm.group(1), consts)
+        if base is None:
+            continue
+        bound = sorted(b for b in bindings if re.search(r'@%s\b' % b, head))
+        for block in REST_METHOD.finditer(text):
+            anns, meth = block.group(1), block.group(2)
+            vm = REST_VERB.search(anns)
+            if not vm:
+                continue
+            pm = REST_PATH.search(anns)
+            sub = resolve_path(pm.group(1), consts) if pm else ""
+            if sub is None:
+                continue
+            url = "rest/" + "/".join(x for x in (base.strip("/"), sub.strip("/")) if x)
+            entry = {"id": "%s.%s" % (java.stem, meth), "url": url, "kind": "rest", "verb": vm.group(1),
+                     "bean": java.stem, "method": meth, "right": None, "surface": "rest",
+                     "name_bindings": bound, "unbound": not bound}
+            (screens if vm.group(1) in ("GET", "HEAD", "OPTIONS") else actions).append(entry)
+    return screens, actions
+
+
 def mvc_inventory(root):
     """MVC controllers, front and back. A controller is front office when it carries xpageName (its screens are
     Portal.jsp?page=<name>&view=<v>), back office when it carries controllerJsp. @View/@Action are only read when
@@ -402,7 +496,8 @@ def main():
     roots = [root] + [pathlib.Path(x).resolve() for x in args.extra if pathlib.Path(x).exists()]
 
     feats, screens, actions, links, templates = {}, [], [], {}, {}
-    seen = set()
+    rest = []
+    seen, seen_rest = set(), set()
     for n, r in enumerate(roots):
         origin = "target" if n == 0 else "env"
         for k, v in list(features_from_sql(r).items()) + list(features_from_plugin_xml(r).items()):
@@ -411,7 +506,11 @@ def main():
         js, ja = jsp_inventory(r)
         ms, ma = mvc_inventory(r)
         fs, fa = fo_pages(r)
-        for e in js + ms + fs:
+        rs, ra = rest_inventory(r)
+        for e in rs + ra:                                  # never in screens/actions: no browser suite may open a
+            if e["url"] not in seen_rest:                  # REST endpoint, it negotiates a representation nobody
+                e["origin"] = origin; seen_rest.add(e["url"]); rest.append(e)   # asked for and judges markup that
+        for e in js + ms + fs:                             # does not exist. The http step of a scenario tests it.
             if e["url"] not in seen:
                 e["origin"] = origin; seen.add(e["url"]); screens.append(e)
         for e in ja + ma + fa:
@@ -453,18 +552,22 @@ def main():
                "admin_templates_named_from_java": len(jsurf["admin_cited"]),
                "admin_templates_unnamed": sorted(set(admin_tpl) - {"admin/" + c.split("admin/", 1)[1]
                                                                    for c in jsurf["admin_cited"]}),
+               "rest_endpoints": sum(1 for x in rest if x["origin"] == "target"),
+               "rest_unbound": sorted({x["bean"] for x in rest if x["origin"] == "target" and x.get("unbound")}),
                "package": pkg, "markers": marks,
                "testable_urls": {"screens": len(tgt), "actions": len(tga)}}
     surface.update(decl)
     inv = {"root": str(root), "extra": [str(r) for r in roots[1:]], "surface": surface,
            "features": sorted(feats.values(), key=lambda f: f["right"]),
            "screens": sorted(screens, key=lambda s: s["id"]), "actions": sorted(actions, key=lambda a: a["id"]),
+           "rest": sorted(rest, key=lambda r: (r["url"], r["verb"])),
            "stats": {"features": len(feats), "screens": len(screens), "actions": len(actions),
                      "templates_with_links": len(links),
                      "target_screens": sum(1 for s in screens if s["origin"] == "target"),
                      "target_actions": sum(1 for a in actions if a["origin"] == "target"),
                      "fo_screens": sum(1 for s in screens if s.get("surface") == "fo"),
-                     "fo_actions": sum(1 for a in actions if a.get("surface") == "fo")}}
+                     "fo_actions": sum(1 for a in actions if a.get("surface") == "fo"),
+                     "rest": len(rest)}}
     if args.markdown:
         u = surface["testable_urls"]
         print("# Surface de `%s`\n" % pathlib.Path(inv["root"]).name)
@@ -475,6 +578,19 @@ def main():
         print("| front-office | %d | | front-office (MVC) | %d |" % (surface["screens_fo"], surface["actions_fo"]))
         print("| points d'entrée JSP admin | %d | | **URLs testables** | **%d écrans / %d actions** |"
               % (surface["jsp_admin_entrypoints"], u["screens"], u["actions"]))
+        rest_tgt = [x for x in inv["rest"] if x["origin"] == "target"]
+        if rest_tgt:
+            print("\n## Points REST\n")
+            print("Une ressource JAX-RS n'est pas un écran : un navigateur ne la juge pas. Elle se teste avec l'étape")
+            print("`http` d'un scénario, et `sign` quand le plugin la protège.\n")
+            print("| Verbe | URL | Liaison d'authentification |\n|---|---|---|")
+            for e in rest_tgt:
+                print("| %s | `%s` | %s |" % (e["verb"], e["url"], ", ".join(e["name_bindings"]) or "**aucune**"))
+            if surface["rest_unbound"]:
+                print("\n**%d classe(s) sans liaison d'authentification** : %s. Leurs points sont servis sans contrôle,"
+                      % (len(surface["rest_unbound"]), ", ".join(surface["rest_unbound"])))
+                print("et rien dans la construction ne le signale. C'est à vérifier, pas à supposer : soit le plugin")
+                print("n'a jamais rien protégé, soit sa protection est tombée à la migration.")
         print("\n| Socle déclaré | n |\n|---|---|")
         for k, label in (("admin_features", "entrées de menu admin"), ("applications", "applications front"),
                          ("rbac_resources", "ressources RBAC"), ("dashboards", "dashboards"),

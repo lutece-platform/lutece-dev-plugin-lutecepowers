@@ -406,6 +406,19 @@ COUNT=0; [ -n "$WB04_MATCHES" ] && COUNT=$(echo "$WB04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB04" "PASS" "min-core-version set to 8.0.0" 0
 else emit "WB04" "WARN" "min-core-version not set to 8.0.0" "$COUNT" "$WB04_MATCHES"; fi
 
+# WB05: a descriptor filter mapped under the JAX-RS application path never fires in v8.
+# MainFilter.matchMapping compares the url-pattern to request.getServletPath( ), which is "/rest" for every call
+# routed to the application mounted by @ApplicationPath( "/rest/" ). A pattern deeper than that can never match,
+# so the filter is registered at startup and silently never runs: measured 401 on a v7 site, 200 on v8.
+# Replace it with a @NameBinding ContainerRequestFilter on the resource (patterns/rest-patterns.md 3 and 6).
+WB05_MATCHES=""
+if [ -d "webapp/WEB-INF/plugins/" ]; then
+    WB05_MATCHES=$(grep -rn '<url-pattern>/rest/..*</url-pattern>' webapp/WEB-INF/plugins/ --include="*.xml" 2>/dev/null | grep -v '<url-pattern>/rest/\*</url-pattern>') || WB05_MATCHES=""
+fi
+COUNT=0; [ -n "$WB05_MATCHES" ] && COUNT=$(echo "$WB05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "WB05" "PASS" "no descriptor filter mapped under the JAX-RS application path" 0
+else emit "WB05" "FAIL" "descriptor filter under /rest/ never fires in v8 -> @NameBinding ContainerRequestFilter" "$COUNT" "$WB05_MATCHES"; fi
+
 check_file_exists "ST01" "src/main/resources/META-INF/beans.xml" "FAIL" "beans.xml exists"
 echo ""
 

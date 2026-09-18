@@ -28,6 +28,17 @@ Step vocabulary (one key per step):
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
                                    {subject: text} restricts to a subject; state that lives in the mail queue
   http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...,
+         poll: seconds, multipart: {field: value|path}, capture: var,
+         sign: {elements: [...], private_key: ...}}
+                                   `capture` stores the answer's body in a variable, which chains two REST calls.
+                                   `multipart` sends a multipart/form-data body — a value naming a file under
+                                   e2e/ is sent as that file, anything else as a text field — which is how an
+                                   upload endpoint is called.
+                                   `sign` adds a Lutece signrequest signature — sha1 of the named parameters'
+                                   values in order, then the private key, then the timestamp, in the
+                                   Lutece-Request-Signature and Lutece-Request-Timestamp headers. Without it a
+                                   protected REST endpoint answers 401 and the scenario proves nothing; with a
+                                   deliberately wrong key it proves the refusal.
          poll: seconds}          `poll` repeats the call until the assertions hold (an asynchronous action:
                                    a daemon, an @Asynchronous task); without it one call, one verdict
                                    call an endpoint as a client would, not as a browser: the Accept header is yours,
@@ -69,7 +80,9 @@ rule is collected as a failing test that names the step: "the screen looked norm
 import os
 import pathlib
 import random
+import hashlib
 import re
+import urllib.parse
 import time
 import string
 
@@ -262,7 +275,35 @@ def run_step(page, step, vars_, record):
         times = int(arg.get("repeat", 1))
         # `follow: false` stops at the redirect itself, so the bench can assert WHERE the application sends the
         # client without leaving the bench — a target outside it would simply not answer.
+        # `sign` makes the call carry a Lutece signrequest signature, which is the only way a bench can drive an
+        # endpoint its plugin protects. The scheme is the library's: sha1 of the values of the signature elements
+        # in the declared order, then the private key, then the timestamp in epoch milliseconds, lowercase hex,
+        # carried by Lutece-Request-Signature and Lutece-Request-Timestamp. An element the request does not carry
+        # contributes nothing, exactly as HeaderHashAuthenticator drops a null parameter — so the values come from
+        # the query string and, for a urlencoded body, from that body; a multipart part is never a signature value.
+        if arg.get("sign"):
+            sign = arg["sign"]
+            params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(arg["url"]).query, keep_blank_values=True))
+            if isinstance(arg.get("body"), str) and "multipart/" not in str(headers.get("Content-Type", "")):
+                params.update(dict(urllib.parse.parse_qsl(arg["body"], keep_blank_values=True)))
+            stamp = str(int(time.time() * 1000))
+            raw = "".join(params[e] for e in (sign.get("elements") or []) if e in params)
+            headers["Lutece-Request-Timestamp"] = stamp
+            headers["Lutece-Request-Signature"] = hashlib.sha1(
+                (raw + str(sign.get("private_key", "")) + stamp).encode("utf-8")).hexdigest()
+
         fetch = {"method": method, "headers": headers, "data": arg.get("body")}
+        # `multipart` sends a multipart/form-data body, which is how an upload endpoint is called. A value that
+        # names a file under e2e/ is read and sent as that part; anything else is sent as a text field. The
+        # container builds the boundary, so no Content-Type is set here.
+        if arg.get("multipart"):
+            parts = {}
+            for name, value in arg["multipart"].items():
+                path = lutece.E2E / str(value)
+                parts[name] = ({"name": path.name, "mimeType": "application/octet-stream",
+                                "buffer": path.read_bytes()} if path.is_file() else str(value))
+            fetch["multipart"] = parts
+            fetch.pop("data", None)
         if arg.get("follow") is False:
             fetch["max_redirects"] = 0
         def call():
@@ -300,6 +341,11 @@ def run_step(page, step, vars_, record):
             record["http_status"] = status
             try:
                 check(body, status, location)
+                # `capture` stores the answer's body in a variable, which is what chains two REST calls: an
+                # endpoint that returns the key of what it just created, then the endpoint that reads or deletes
+                # it. Whitespace is stripped, because a plain-text answer often carries a trailing newline.
+                if arg.get("capture"):
+                    vars_[arg["capture"]] = body.strip()
                 break
             except AssertionError:
                 if time.time() >= deadline:
