@@ -1,7 +1,6 @@
 ---
 name: lutece-update-template-bo
 description: "Converts a Lutece Back Office (admin) template to the BO FreeMarker macros of lutece-core (Tabler theme). Discovers the macros from the core sources rather than from a fixed list, so it never goes stale, and applies the house rules that are not readable from the macro files: manageFeature versus table, the mandatory empty state, the page hierarchy, the offcanvas navigation rule, and the e-mail templates that must never be converted. Takes the template path as argument. Triggers on 'migrer un template BO', 'convertir un template admin', 'macros BO', 'thème tabler', 'update back office template'."
-allowed-tools: Bash(ls *) Bash(grep *) Bash(sed *) Bash(find *)
 ---
 
 # Updating a Lutece BO template
