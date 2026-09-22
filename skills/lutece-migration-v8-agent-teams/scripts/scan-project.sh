@@ -218,6 +218,7 @@ while IFS= read -r file; do
     grep -q 'class="panel\|class="btn ' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"bootstrap3\""; }
     grep -q '@pageContainer\|@tform\|@table' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"v8macros\""; }
     grep -q 'autocomplete-js\.jsp\|createAutocomplete\|\.autocomplete(' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"old_suggestpoi\""; }
+    grep -q '\.fileupload(\|jquery\.fileupload\|jQuery-File-Upload\|SWFUpload\|swfupload\.js\|plupload\|new Dropzone(\|\.uploadify(' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"upload_widget\""; }
     grep -q '@suggestPOIInput\|@setupSuggestPOI' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"v8_suggestpoi\""; }
     FLAGS="$FLAGS]"
     $FIRST_AT || ADMIN_TPL_JSON="$ADMIN_TPL_JSON,"
@@ -236,6 +237,7 @@ while IFS= read -r file; do
     FIRST_FL=true
     grep -q 'jQuery\|\$(' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"jquery\""; }
     grep -q '<@cTpl>' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"v8wrap\""; }
+    grep -q '\.fileupload(\|jquery\.fileupload\|jQuery-File-Upload\|SWFUpload\|swfupload\.js\|plupload\|new Dropzone(\|\.uploadify(' "$file" 2>/dev/null && { $FIRST_FL || FLAGS="$FLAGS,"; FIRST_FL=false; FLAGS="$FLAGS\"upload_widget\""; }
     FLAGS="$FLAGS]"
     $FIRST_ST || SKIN_TPL_JSON="$SKIN_TPL_JSON,"
     FIRST_ST=false

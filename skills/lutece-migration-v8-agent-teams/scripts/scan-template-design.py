@@ -58,6 +58,8 @@ Both sides
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
+  TD45 WARN  jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, Dropzone, uploadify), in a template or
+             vendored under webapp/: the v8 upload component is plugin-asynchronousupload (Uppy, no jQuery)
   TD38 INFO  inline style= in params
   TD39 INFO  the same <#macro> defined in several templates                     -> one shared macro_<plugin>.html
 SQL
@@ -395,10 +397,38 @@ def check_jquery(text, findings, jquery_declared):
     if not hits:
         return
     lines = sorted(hits)
-    if jquery_declared:
+    if UPLOAD_WIDGET.search(re.sub(r"#i18n\{[^}]*\}", "", text)):
+        add(findings, "TD12", "WARN", lines[0], "jQuery call(s) in %d place(s) driving an upload widget: %s" % (len(lines), UPLOAD_ADVICE))
+    elif jquery_declared:
         add(findings, "TD12", "INFO", lines[0], "jQuery call(s) in %d place(s); the project declares library-theme-jquery, so the theme loads it (adminHeader.ftl, page_frameset.html): keep it only for a widget that has no vanilla equivalent, and say so" % len(lines))
     else:
         add(findings, "TD12", "WARN", lines[0], "jQuery call(s) in %d place(s) and no library-theme-jquery dependency in pom.xml: neither theme loads jQuery, the code fails at runtime" % len(lines))
+
+
+UPLOAD_WIDGET = re.compile(r"\.fileupload\(|jquery\.fileupload|jQuery-File-Upload|blueimp|SWFUpload|swfupload|plupload|new Dropzone\(|Dropzone\.options|\.uploadify\(|qq\.FineUploader")
+UPLOAD_ADVICE = "the v8 upload component is plugin-asynchronousupload (Uppy, no jQuery): @addFileBOInputAndfilesBox in the back office, @addFileInputAndfilesBox in the front office, the generic AsynchronousUploadHandler injected in the bean (fileupload-patterns.md). Adding library-theme-jquery only keeps the old widget alive"
+
+
+def check_upload_widget(text, findings):
+    """A jQuery-era upload widget: it needs jQuery, and v8 has a component made for the job."""
+    match = UPLOAD_WIDGET.search(re.sub(r"#i18n\{[^}]*\}", lambda m: " " * len(m.group(0)), text))
+    if match:
+        add(findings, "TD45", "WARN", line_of(text, match.start()), "upload widget '%s': %s" % (match.group(0), UPLOAD_ADVICE))
+
+
+def vendored_upload_widgets(root):
+    """Upload widget libraries copied under webapp/ (outside the templates): one finding per library directory or file."""
+    base = os.path.join(root, "webapp")
+    out = []
+    for dirpath, dirs, files in os.walk(base):
+        if "/WEB-INF/" in dirpath + "/":
+            continue
+        for name in list(dirs) + files:
+            if re.search(r"(?i)jquery[-.]?file[-.]?upload|swfupload|plupload|dropzone|uploadify|fine-?uploader", name):
+                out.append(os.path.relpath(os.path.join(dirpath, name), root))
+                if name in dirs:
+                    dirs.remove(name)
+    return sorted(out)
 
 
 def check_admin(text, findings, kind, opened_in_iframe, know):
@@ -591,6 +621,7 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
     findings = []
     if kind == "js":
         check_jquery(text, findings, jquery_declared)
+        check_upload_widget(text, findings)
     elif kind == "sql":
         check_sql(text, findings)
     elif kind == "email":
@@ -602,10 +633,12 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
         check_skin(text, findings, know)
         check_common(text, findings, kind, know)
         check_jquery(text, findings, jquery_declared)
+        check_upload_widget(text, findings)
     else:
         check_admin(text, findings, kind, os.path.basename(rel).rsplit(".", 1)[0] in iframe_targets, know)
         check_common(text, findings, kind, know)
         check_jquery(text, findings, jquery_declared)
+        check_upload_widget(text, findings)
     findings.sort(key=lambda item: (item["line"], item["code"]))
     return {"path": rel, "kind": kind, "findings": findings}
 
@@ -676,6 +709,8 @@ def main():
     for files, scope in ((admin_files, "admin"), (skin_files, "skin"), (js_files, "js"), (sql_files, "sql")):
         for rel in files:
             entries.append(scan_file(root, rel, scope, iframe_targets, know, jquery_declared))
+    for rel in vendored_upload_widgets(root):
+        entries.append({"path": rel, "kind": "vendored", "findings": [{"code": "TD45", "severity": "WARN", "line": 1, "message": "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component"}]})
     dupes = duplicate_macros(root, admin_files + skin_files)
     for entry in entries:
         if entry["path"] in dupes:

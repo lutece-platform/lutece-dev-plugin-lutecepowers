@@ -201,7 +201,7 @@ Fix any FAIL results before moving to the next file. Mark each file task as **co
 | `patterns/cache-patterns.md` | If `cachePatterns: true` on any file |
 | `patterns/rest-patterns.md` | If `restPatterns: true` on any file |
 | `patterns/mvc-patterns.md` | If migrating JspBeans or XPages |
-| `patterns/fileupload-patterns.md` | If `fileupload` in deprecatedPatterns |
+| `patterns/fileupload-patterns.md` | If `fileupload` in deprecatedPatterns, or a template carries the `upload_widget` flag |
 | `patterns/json-patterns.md` | If a file imports `net.sf.json` (Step 11) |
 | `patterns/persistence-patterns.md` | If `jpaPatterns: true` on any file (Step 6b) |
 

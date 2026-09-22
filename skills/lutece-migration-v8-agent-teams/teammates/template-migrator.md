@@ -166,6 +166,14 @@ line per file changed, one line per finding kept with the reason, what needs a J
 the gaps you found in the skills or the rules. A gap is worth a change in the plugin repository, not a workaround
 here.
 
+## Step 4a: Upload widget (conditional)
+
+**Only if tasks-template.json shows files with the `upload_widget` flag** (jQuery File Upload, SWFUpload, plupload,
+Dropzone, uploadify; TD45 in the design scan). Replace the widget with `plugin-asynchronousupload`, never revive it
+with `library-theme-jquery`: `patterns/fileupload-patterns.md` § Replacing a jQuery-era upload widget. It needs a pom
+and a bean change: hand those to the Java migrator with the recipe, and delete the vendored library once the screen
+uses the component.
+
 ## Step 4: SuggestPOI Migration (conditional)
 
 **Only if tasks-template.json shows files with `old_suggestpoi` flag.** (jQuery in general is the Polisher's Step 6: it cross-checks the pom for `library-theme-jquery` before deciding to port or to keep.)

@@ -113,3 +113,37 @@ The `addFileBOInput` / `addBOUploadedFilesBox` macros are NOT in the core: they 
 Signatures: `addFileBOInput fieldName handler cssClass multiple=false submitBtnName hasError=false required=false`, `addBOUploadedFilesBox fieldName handler listFiles submitBtnName noJs=false`. `handler` is the injected `IAsyncUploadHandler` put in the model, `listFiles` the files already uploaded for the field. Reference: forms `forms_commons.html:304-324`. Without the plugin, use the core `@inputDropFiles name handler ...` (`forms/upload/inputDropFiles.ftl`).
 
 Note: `enctype="multipart/form-data"` is required on the form.
+
+## Replacing a jQuery-era upload widget
+
+jQuery File Upload (blueimp), SWFUpload, plupload, Dropzone, uploadify: all need jQuery or Flash, v8 loads neither,
+and the screen dies on load ("jQuery is not defined"). `scan-template-design.py` flags them as **TD45**, in templates
+and as libraries vendored under `webapp/`. The replacement is `plugin-asynchronousupload` (Uppy, no jQuery). Adding
+`library-theme-jquery` to revive the old widget is not a migration.
+
+1. **pom**: `plugin-asynchronousupload`, `[2.0.0-SNAPSHOT,)`, type `lutece-plugin`.
+2. **Bean**: when files only need to be collected per session and field, the plugin's own handler does it, no
+   subclass to write:
+   ```java
+   @Inject
+   private AsynchronousUploadHandler _uploadHandler;
+   ```
+   Put it in the model as `uploadHandler` (the files box macro reads a variable of that exact name), with
+   `_uploadHandler.getListUploadedFiles( FIELD, request.getSession( ) )` as the list of files already sent.
+3. **Template**:
+   ```html
+   <#include "/admin/plugins/asynchronousupload/upload_commons.html" />
+   <@addFileBOInputAndfilesBox fieldName='my_files' handler=uploadHandler listUploadedFiles=uploaded_files![] multiple=true />
+   ...
+   <@addRequiredBOJsFiles />
+   <script src="jsp/admin/plugins/asynchronousupload/GetMainUploadJs.jsp?handler=${uploadHandler.handlerName}"></script>
+   ```
+   The input must sit **inside the form that is submitted**: without JavaScript, its button posts the files to that
+   form's action. The script accepts **one file per selection** unless the input carries `data-nof` (the macro has no
+   parameter for it): set `document.getElementById('my_files').dataset.nof = '<max>'` in a script placed after the
+   input, before `DOMContentLoaded`.
+4. **Action** (the form's `Do*`): `hasAddFileFlag` / `hasRemoveFlag` first (the no-JavaScript path:
+   `addFilesUploadedSynchronously`, `doRemoveFile`, then back to the screen); otherwise read
+   `getListUploadedFiles( FIELD, session )`, do what the old upload endpoint did with each file, then
+   `removeSessionFiles( session )`. Cancel and reset also call `removeSessionFiles`.
+5. **Delete** the old upload endpoint (its `Upload.jsp`) and the vendored library directories.

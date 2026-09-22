@@ -309,7 +309,7 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `cache-patterns.md` | EhCache→JCache | Java Migrators (if cache) |
 | `rest-patterns.md` | Jersey→JAX-RS, filters, providers | Java Migrators (if REST) |
 | `mvc-patterns.md` | @RequestParam, CSRF auto-filter, @ModelAttribute | Java Migrators (if JspBean/XPage) |
-| `fileupload-patterns.md` | FileItem→MultipartItem | Java Migrators (if fileupload) |
+| `fileupload-patterns.md` | FileItem→MultipartItem, jQuery upload widget → asynchronousupload | Java Migrators (if fileupload), Template Migrator (if upload_widget) |
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
 | `deprecation-fixes.md` | What each deprecated API is replaced by (RBAC/workgroup `User` overloads, `getModel()`, `Strings.CS`, `getInstance()`, reflection, task signatures) | Java Migrators (always, short) |
 | `core-8x-moves.md` | Core APIs that moved or shrank (XSL to plugin-xmltransformer, ContentService without cache, Parser in library-core-utils), reflection-instantiated classes | Java Migrators + Config Migrator (always, short) |
