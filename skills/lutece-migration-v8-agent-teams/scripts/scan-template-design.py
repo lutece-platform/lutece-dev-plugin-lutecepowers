@@ -58,6 +58,7 @@ Both sides
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
+  TD46 WARN  a copy of jQuery shipped by the project (a page loading its own jquery*.js, or the file under webapp/)
   TD45 WARN  jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, Dropzone, uploadify), in a template or
              vendored under webapp/: the v8 upload component is plugin-asynchronousupload (Uppy, no jQuery)
   TD38 INFO  inline style= in params
@@ -83,7 +84,9 @@ BO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/admin/themes/tabler"
 FO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/skin/themes/macros")
 TABLER_CSS = os.path.join(CORE, "webapp/themes/shared/css/tabler-icons.min.css")
 
-EMAIL_MARKERS = ("cellpadding=", "<!--[if mso", "x-apple-disable-message-reformatting", "email-container", "darkmode-bg", "<html", "@portal_url@")
+EMAIL_MARKERS = ("cellpadding=", "<!--[if mso", "x-apple-disable-message-reformatting", "email-container", "darkmode-bg", "@portal_url@")
+INTERACTIVE = re.compile(r"<script\b|<form\b|<select\b|<input\b|<button\b", re.I)
+SELF_JQUERY = re.compile(r"<script\b[^>]*\bsrc=['\"][^'\"]*jquery[-.]?(\d[\d.]*)?(\.min)?\.js", re.I)
 RAW_BO_TAGS = ("option", "table", "form", "input", "select", "button", "textarea")
 RAW_FO_TAGS = ("form", "input", "select", "option", "button", "table")
 ROW_MARKERS = ("<@tr", "<tr", "<@manageFeatureItem", "<@li", "<li", "<@card", "<@row", "<@columns", "<@div")
@@ -341,8 +344,10 @@ def looks_like_a_page(text):
 
 
 def is_email(text):
-    """Tell an e-mail body template from a back-office screen."""
-    return any(marker in text for marker in EMAIL_MARKERS)
+    """Tell an e-mail body template from a screen: a mail marker, or an <html> root with nothing interactive in it."""
+    if any(marker in text for marker in EMAIL_MARKERS):
+        return True
+    return "<html" in text and not INTERACTIVE.search(text)
 
 
 def classify(text, scope):
@@ -353,6 +358,8 @@ def classify(text, scope):
         return "sql"
     if is_email(text):
         return "email"
+    if re.search(r"<html\b", text, re.I):
+        return "standalone"
     if scope == "skin":
         return "fo"
     if "<@pageContainer" not in text:
@@ -397,6 +404,10 @@ def check_jquery(text, findings, jquery_declared):
     if not hits:
         return
     lines = sorted(hits)
+    own = SELF_JQUERY.search(text)
+    if own:
+        add(findings, "TD46", "WARN", line_of(text, own.start()), "the page loads its own copy of jQuery%s for %d call(s): a vendored library the platform does not update (jQuery before 3.5 carries known XSS flaws); port the calls to vanilla JS and delete the copy" % (" " + own.group(1) if own.group(1) else "", len(lines)))
+        return
     if UPLOAD_WIDGET.search(re.sub(r"#i18n\{[^}]*\}", "", text)):
         add(findings, "TD12", "WARN", lines[0], "jQuery call(s) in %d place(s) driving an upload widget: %s" % (len(lines), UPLOAD_ADVICE))
     elif jquery_declared:
@@ -416,8 +427,8 @@ def check_upload_widget(text, findings):
         add(findings, "TD45", "WARN", line_of(text, match.start()), "upload widget '%s': %s" % (match.group(0), UPLOAD_ADVICE))
 
 
-def vendored_upload_widgets(root):
-    """Upload widget libraries copied under webapp/ (outside the templates): one finding per library directory or file."""
+def vendored_libraries(root):
+    """(code, path) of each upload widget library or jQuery copy shipped under webapp/, outside the templates."""
     base = os.path.join(root, "webapp")
     out = []
     for dirpath, dirs, files in os.walk(base):
@@ -425,9 +436,13 @@ def vendored_upload_widgets(root):
             continue
         for name in list(dirs) + files:
             if re.search(r"(?i)jquery[-.]?file[-.]?upload|swfupload|plupload|dropzone|uploadify|fine-?uploader", name):
-                out.append(os.path.relpath(os.path.join(dirpath, name), root))
-                if name in dirs:
-                    dirs.remove(name)
+                out.append(("TD45", os.path.relpath(os.path.join(dirpath, name), root)))
+            elif re.search(r"(?i)^jquery([-.]\d[\d.]*)?(\.min)?\.js$", name):
+                out.append(("TD46", os.path.relpath(os.path.join(dirpath, name), root)))
+            else:
+                continue
+            if name in dirs:
+                dirs.remove(name)
     return sorted(out)
 
 
@@ -624,6 +639,9 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
         check_upload_widget(text, findings)
     elif kind == "sql":
         check_sql(text, findings)
+    elif kind == "standalone":
+        check_jquery(text, findings, jquery_declared)
+        check_upload_widget(text, findings)
     elif kind == "email":
         add(findings, "TD10", "INFO", 1, "e-mail body template: out of scope, never convert to macros")
         for offset, _ in macro_calls(text, "cTpl"):
@@ -709,8 +727,9 @@ def main():
     for files, scope in ((admin_files, "admin"), (skin_files, "skin"), (js_files, "js"), (sql_files, "sql")):
         for rel in files:
             entries.append(scan_file(root, rel, scope, iframe_targets, know, jquery_declared))
-    for rel in vendored_upload_widgets(root):
-        entries.append({"path": rel, "kind": "vendored", "findings": [{"code": "TD45", "severity": "WARN", "line": 1, "message": "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component"}]})
+    for code, rel in vendored_libraries(root):
+        message = "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component" if code == "TD45" else "jQuery shipped by the project: nothing updates this copy (jQuery before 3.5 carries known XSS flaws); port its callers to vanilla JS and delete it"
+        entries.append({"path": rel, "kind": "vendored", "findings": [{"code": code, "severity": "WARN", "line": 1, "message": message}]})
     dupes = duplicate_macros(root, admin_files + skin_files)
     for entry in entries:
         if entry["path"] in dupes:
