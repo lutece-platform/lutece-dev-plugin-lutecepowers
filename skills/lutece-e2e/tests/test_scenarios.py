@@ -545,7 +545,7 @@ def test_scenario(bo, browser, request, record, sc):
         lutece.reset_obs(bo)
         try:
             run_step(bo, step, vars_, record)
-            pending += [lutece.nav_key(n["url"]) for n in bo.obs.get("nav", []) if n["status"] < 400]
+            pending += [lutece.nav_key(n["url"], n.get("mvc", "")) for n in bo.obs.get("nav", []) if n["status"] < 400]
             if list(step)[0] in ORACLE:
                 record.setdefault("proven", []).extend(pending)
                 pending = []

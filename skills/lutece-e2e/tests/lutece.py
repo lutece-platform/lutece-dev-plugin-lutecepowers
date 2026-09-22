@@ -262,11 +262,14 @@ def get_form_urls(page):
     }).filter(u => u)""")
 
 
-def nav_key(u):
-    """Coverage key of a navigated url: the path plus its routing parameters (page=, view=, action=) only."""
+def nav_key(u, mvc=""):
+    """Coverage key of a navigated url: the path plus its routing parameters (page=, view=, action=) only; a form that
+    posts its action in a field instead of the url is keyed on that field (mvc, recorded from the request body)."""
     import urllib.parse
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)
     parts = ["%s=%s" % (k, q[k][0]) for k in ("page", "view", "action") if k in q]
+    if mvc and not any(p.startswith(("view=", "action=")) for p in parts):
+        parts.append(mvc)
     return normalize(u).split("?")[0] + ("?" + "&".join(parts) if parts else "")
 
 
