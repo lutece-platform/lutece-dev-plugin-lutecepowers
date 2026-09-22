@@ -81,6 +81,19 @@ elif echo "$FILE" | grep -qE '\.(html|ftl)$'; then
     fi
     check "TM02" 'jQuery\|\$(' "WARN" "jQuery usage"
     check "TM04" 'errors?size\|infos?size\|warnings?size' "FAIL" "Unsafe null access"
+    for RULE in "TM10 offcanvas Offcanvas: @modal for the page's content, a plain link for another page" "TM11 fo-forms Front-office form without @cForm validation" "TM12 inline-forms Inline form: one field per row"; do
+        RID=${RULE%% *}; REST=${RULE#* }; RNAME=${REST%% *}; RDESC=${REST#* }
+        RCOUNT=$(python3 "$(dirname "$0")/template_rules.py" "$RNAME" "$FILE" 2>/dev/null | wc -l)
+        $FIRST || DETAILS="$DETAILS,"
+        FIRST=false
+        if [ "$RCOUNT" -eq 0 ]; then
+            DETAILS="$DETAILS{\"id\":\"$RID\",\"status\":\"PASS\",\"description\":\"$RDESC\"}"
+            PASS=$((PASS + 1))
+        else
+            DETAILS="$DETAILS{\"id\":\"$RID\",\"status\":\"FAIL\",\"description\":\"$RDESC\",\"count\":$RCOUNT}"
+            FAIL=$((FAIL + 1))
+        fi
+    done
     PARSE_OUT=$(bash "$(dirname "$0")/check-template-parse.sh" "$FILE" 2>/dev/null | grep '^PARSE_ERROR' | head -1)
     $FIRST || DETAILS="$DETAILS,"
     FIRST=false

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """template_rules.py — house rules on Lutece 8 templates that block a migration.
 
-Usage: template_rules.py <rule> [project_root]      rule: offcanvas | fo-forms | inline-forms
+Usage: template_rules.py <rule> [project_root | template_file]      rule: offcanvas | fo-forms | inline-forms
 
 Prints one line per breach, `path:line: excerpt`, and exits 1 when there is one. FreeMarker and HTML comments are
 ignored. Shared by verify-migration.sh (TM10, TM11, TM12) and scan-template-design.py (TD48, TD49, TD50).
@@ -78,19 +78,21 @@ def main():
         return 2
     rule = RULES[sys.argv[1]]
     root = sys.argv[2] if len(sys.argv) > 2 else "."
+    if os.path.isfile(root):
+        paths, base = [root], os.path.dirname(root)
+    else:
+        paths, base = [], root
+        for sub in ("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"):
+            for dirpath, _, files in os.walk(os.path.join(root, sub)):
+                paths += [os.path.join(dirpath, n) for n in sorted(files) if n.endswith((".html", ".ftl"))]
     found = 0
-    for sub in ("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"):
-        for dirpath, _, files in os.walk(os.path.join(root, sub)):
-            for name in sorted(files):
-                if not name.endswith((".html", ".ftl")):
-                    continue
-                path = os.path.join(dirpath, name)
-                raw = open(path, encoding="utf-8", errors="replace").read()
-                text = blank_comments(raw)
-                for hit in rule(text, "/templates/skin/" in path):
-                    line = hit[0] if isinstance(hit, tuple) else hit
-                    print("%s:%d: %s" % (os.path.relpath(path, root), line, raw.splitlines()[line - 1].strip()[:100]))
-                    found += 1
+    for path in paths:
+        raw = open(path, encoding="utf-8", errors="replace").read()
+        text = blank_comments(raw)
+        for hit in rule(text, "/templates/skin/" in os.path.abspath(path)):
+            line = hit[0] if isinstance(hit, tuple) else hit
+            print("%s:%d: %s" % (os.path.relpath(path, base), line, raw.splitlines()[line - 1].strip()[:100]))
+            found += 1
     return 1 if found else 0
 
 
