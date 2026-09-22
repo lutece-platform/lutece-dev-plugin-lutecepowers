@@ -178,7 +178,7 @@ from the artefact's main workflow, played end to end the way a user plays it (up
 
 Work the "à couvrir" list of `summary.md` down to zero: every inventory element ends up covered by a test, or
 listed in `scenarios/coverage-exclusions.yaml` with a written reason (a defect found by the suites, a plugin
-not on the bench, a dead template). Exclusions stay visible in the report as debt; they never lower the totals. `python3 tools/coverage.py` prints the to-do list; `python3 tools/causes.py`
+not on the bench, a dead template). Exclusions stay visible in the report as debt; they never lower the totals. **A defect of the artefact itself is never an exclusion**, in `coverage-exclusions.yaml` or under `skip` in `screens.yaml`: a screen that dies on load ("jQuery is not defined") is opened and fails red, and the defect is fixed or reported, not written down as a reason to look away. `python3 tools/coverage.py` prints the to-do list; `python3 tools/causes.py`
 prints the server exception behind each failure; `bash tools/forms.sh <src> <feature>` prints the forms and
 field names of a feature's templates. When a real defect blocks the middle of a lifecycle, split the scenario
 so the actions after the defect stay covered. `sql_exec` arranges data the UI cannot create (a broken create screen), never asserts.

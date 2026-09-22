@@ -27,6 +27,8 @@ params: []
 # another artefact's flow and has no standalone entry point: an XPage reached from a calendar with the chosen
 # slot already in its parameters, for instance. The reason is printed in the summary, so a skipped screen stays
 # visible instead of quietly disappearing from the coverage.
+# Never skip a screen because it is broken: a defect of the artefact is a red test, not an exclusion. A screen that
+# throws on load (a missing library, a dead script) is opened, fails, and is fixed or reported.
 # `versions` restricts the rule to the versions listed, for a screen only one leg of the comparison can open:
 # excluding it everywhere would drop a screen the other leg proves.
 #   skip:
