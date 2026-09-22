@@ -15,7 +15,11 @@ Root: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/themes/mac
 
 One file per macro, the filename is the macro name, grouped by domain. **Every FO macro name starts
 with `c`** — `cForm`, `cBtn`, `cAlert`, `cCard`, `cSelect`. A name without that prefix is almost always
-a Back Office macro, which does not exist here.
+a Back Office macro: it resolves (the admin commons are auto-included everywhere) but renders admin
+markup in a site page. Treat it as a defect.
+
+A macro file is loaded only when `skin/themes/theme_commons_macros.ftl` registers it (`<@cMacro name=...>`):
+a `.ftl` present in the tree but absent from that list is unreachable.
 
 ```bash
 cd ~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/themes/macros
@@ -51,10 +55,12 @@ If the clone is missing, the theme also ships in any assembled site under
 ## Cross-cutting conventions
 
 ### Global structure
-- **Always** wrap the template in `<@cTpl>...</@cTpl>`
-- `<@cContainer>` is optional, use it only if the content requires a centered container
-- You can go directly from `<@cTpl>` to `<@cCol>`, `<@cRow>`, or `<@cCard>` as needed
-- For full-page forms: `<@cTpl>` → `<@cCol>` → `<@cForm>` → `<@cRow>` → `<@cCol>` → content
+- **Always** wrap a page template in `<@cTpl>...</@cTpl>`: it is the theme override hook (`skin/themes/<code>/tpl/<same path>`, `global_theme_commons.ftl`). Page-local `<#macro>` and `<#assign>` live inside it; FreeMarker hoists macro definitions, their position is style
+- A page is `<@cTpl>` → `<@cContainer>` → `<@cRow>` → `<@cCol cols=...>` → content: the shape of every core `skin/site/*.html` since LUT-33132 and of every recent front-end rewrite (examples.md § Page skeleton). Only a fragment included by another template (portlet body, component) skips `cTpl` and `cContainer`
+- Titles: `level=2` for the page title (the `h1` belongs to the frameset), `level=3` below
+- Forms: `<@cForm>` → `<@cField for= required=true>` → input → a `<@cRow>` of `<@cBtn>` at the end. No `<@cFieldset>` around a whole form
+- Models to copy: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/site/*.html` and `skin/search/search_results.html`; the live catalogue of every macro is `skin/site/page_template_component.html`
+- The theme ships component CSS under `webapp/themes/skin/lutece/css/{components,layout}` and `themes/skin/shared/css` (`bl-*`, `search-*`, `tile*`, `lutece-ds-empty`): target those classes through `class=`, never inline styles
 
 ### Bootstrap 3 → Bootstrap 5 classes
 - `help-block` → `form-text` (help text under a field)
@@ -90,7 +96,9 @@ If the clone is missing, the theme also ships in any assembled site under
 - **Expand the `<#list>` with conditional logic** across multiple lines, do not leave compact inline blocks when they contain nested `<#if>`
 
 ### BO vs FO macros - Do not mix
-- **Never use BO macros** (admin/Tabler) in an FO (skin) template. BO macros such as `<@messages>`, `<@aButton>`, `<@button>`, `<@box>`, `<@formGroup>`, `<@tform>`, `<@select>`, `<@option>` are **not** available in the FO context
+- **Never use BO macros** (admin/Tabler) in an FO (skin) template: any macro whose name does not start with `c` (`<@p>`, `<@div>`, `<@ul>`, `<@li>`, `<@h>`, `<@messages>`, `<@aButton>`, `<@button>`, `<@box>`, `<@formGroup>`, `<@tform>`, `<@select>`, `<@option>`...). They **do** resolve in a skin template, because the admin commons are auto-included for the whole FreeMarker configuration (`core.xml` `freemarker-macro-files`, `CommonsService`), which is exactly why the misuse is silent: the page renders with admin markup and admin CSS hooks
+- BO `<@p>` → `<@cText>`, `<@div>` → `<@cBlock>`, `<@ul>/<@li>` → `<@chList>/<@chItem>`, `<@h level=n>` → `<@cTitle level=n>`, `<@icon style=>` → `<@cIcon name=>`
+- **Exception, the cross-context fragment**: a skin file included by an *admin* template (of this plugin or another — grep the references for `<#include "/skin/<path>"`) keeps the `c*` macros but drops `cTpl`, `cContainer` and `cForm`. The first two are the page-override hooks of a site page and a fragment is not a page; `cForm` injects the front-office validation modules, which an admin page does not load. Every other `c*` macro emits the same Bootstrap 5 in both contexts.
 - BO → FO equivalents:
   - `<@messages infos=infos errors=errors />` →
     ```freemarker
@@ -143,6 +151,7 @@ If the clone is missing, the theme also ships in any assembled site under
   <#if entry.helpMessage?? && entry.helpMessage != ''>
   ```
 - Applies everywhere: variables, object properties, optional parameters
+- `??` tests presence, not content. On an XML `NodeModel` (portlet templates fed by `NodeModel`, `${quicklinks.entry}`-style paths) a missing child is an **empty node list**, present and non-null: `node.child??` is true and `node.child!` is not the default. Only `?has_content` tells an empty node list from a filled one; use it for XML-backed values
 
 ### Dynamic classes (conditional concatenation)
 - **Always pre-build** the `class` string with `<#assign>` rather than inline FreeMarker in the `class` parameter
@@ -166,6 +175,8 @@ If the clone is missing, the theme also ships in any assembled site under
 - Remove `<!-- TOC -->`, `<!-- BODY -->` etc. comments whose intent is obvious in the structured FreeMarker code
 
 ### What NOT to do
+- Do not copy a front-end commit blindly: the reference commits also carry defects. Seen upstream and rejected: `imgTitle=` on `cCard` (not a parameter, svg dropped), `@parisIcon` (undefined in the core), `cBtn class='btn btn-primary'` (renders `btn btn-btn btn-primary`), `cCol class='12 col-sm-5'`, stray `" />` text after an icon, `name='back'` on `cBtn`, `arrow-right` for a back button, French copy in `home=`/`title=`, `<@cIcon name='#i18n{...}'>`
+- Do not flip the line endings of a file (CRLF stays CRLF) and do not overwrite a plugin's templates with wholesale copies of the theme's: both widen the diff and have reintroduced fixed bugs upstream
 - Do not add JavaScript unless requested or required by a macro
 - Do not use deprecated macro parameters
 - Do not wrap a `<@cAlert>` in an unnecessary `<@cBlock>` or `<@cCard>`

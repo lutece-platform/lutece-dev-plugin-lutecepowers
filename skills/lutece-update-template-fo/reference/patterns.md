@@ -10,9 +10,15 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - cLabel - Labels
 - cField - Fields with label
 - cInputGroup - Input groups
+- cInputPassword - Password fields
+- cBreadCrumb - Page path
+- cRadio / cImg - Generated ids
+- Model access
 - cProgress - Progress bar
 - cBtn - Buttons
 - cCard - Cards
+- cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme now registers
+- cForm - Validation and encoding
 - cInput - errorMsg and helpMsg
 - cInput - Native size and validation parameters
 - cInput - Extra HTML attributes
@@ -22,7 +28,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - cCheckbox - Checkboxes
 - cStepDone / cStepCurrent / cStepNext - Multi-step forms
 - chList / chItem - Replacing orphan `<li>`
-- cInput hidden - Mandatory empty class
+- cInput hidden - Empty class
 - cFieldset - Replacing fieldset/legend
 - form-group → cRow/cCol
 - cols - Invalid formats
@@ -41,20 +47,26 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - Use the format `cols='12 col-md-X'` (not `cols='xs-12 col-md-X'` — the `xs-` prefix no longer exists in Bootstrap 5)
 - **Replace `cols='xs-12 ...'` with `cols='12 ...'`** systematically
 - **Replace `<@cCol cols='12'>` with `<@cCol>`** — full-width column by default, no need for `cols`
-- For class only: `<@cCol class='12 col-md-6'>`
+- The size always goes in `cols`, never in `class`: `<@cCol class='12 col-md-6'>` renders `class="col 12 col-md-6"` (`cCol.ftl:33`, signature `cols='' default='col' class=''`)
 - Extra utility classes go in `class`: `<@cCol cols='12 col-md-6' class='pt-5 mt-5'>`
 
 ### cAlert - Alerts
-- Use the `type` parameter: `<@cAlert type='warning'>`, `<@cAlert type='danger'>`
-- Inline icon SVGs are unnecessary, the macro handles the display
-- The `title` parameter lets you add a title to the alert
+- Signature (`components/alert/cAlert.ftl`): `id title isHtmlTitle=false htmlTitleLevel=3 type='primary' iconType='informative' class classText dismissible=false params`
+- `title` is the main message; nested content is secondary (`alert-content`). Self-closing when there is no body: `<@cAlert type='warning' title=msg />`
+- `type` is one of the `<#case>` branches of `cAlert.ftl` (`warning`, `danger`, `success`, default `primary`): there is no `info` type, `type='info'` falls back to the default icon and colour. A first class token in `class` (`class='danger'`) overrides `type`; both work, prefer `type`
+- `isHtmlTitle=true` when the message carries markup; `dismissible=true` for a closable alert
+- Inline icon SVGs are unnecessary, the macro handles the icon (`iconType`)
+- The DOM is `alert > alert-header (alert-icon, alert-text) + alert-content`: CSS written for the old flat `.alert > .alert-title` no longer applies
 
 ### cInput - Hidden fields
-- **Always** add `class=''` on hidden inputs: `<@cInput type='hidden' name='x' value='y' class='' />`
+- `class=''` on hidden inputs drops the default `form-control`; no visual effect, optional
 
 ### cIcon - Tabler icons
-- **Prefer `<@cIcon>`** over `<@cInline type='i' class='ti ti-xxx' />`
+- **Prefer `<@cIcon>`** over `<@cInline type='i' class='ti ti-xxx' />`; `@parisIcon` does not exist in the core
 - The `ti ti-` prefix is added automatically: `<@cIcon name='eye' />` → `<span class="ti ti-eye">`
+- `name` must be a Tabler name (`webapp/themes/shared/css/tabler-icons.min.css`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
+- `name` is the glyph, never a label: `<@cIcon name='#i18n{...}' />` is wrong
+- Vocabulary in use: submit `check`, send `mail`, search `search`, reset `refresh`, edit `edit`, view `eye`, delete `trash`, top `chevron-up`, back `arrow-left`, forward/login `arrow-right`
 - Extra classes via `class`: `<@cIcon name='settings' class='me-1' />`
 - By default `name='check'`: `<@cIcon />` displays the check icon
 
@@ -67,18 +79,36 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - **Prefer `<@cField>`** to group a label and an input rather than cBlock + cLabel + cInput manually
 - Use `required=true` for mandatory fields — **do not append ` *` manually to the label**
 - `for='<input id>'` links the label to the nested input (`cField.ftl` passes it to `cLabel`); give it whenever the input has an `id`
+- The header of `cField.ftl` says `class` defaults to `mb-3`; the signature says `class=''`. Pass `class='mb-3'` yourself or the fields touch
 - Can contain a nested `<@cInputGroup>` for fields with addons (password toggle, generator, etc.)
 
 ### cInputGroup - Input groups
 - Replaces `<div class="input-group">`
-- Contains a `<@cInput>` and one or more `<@cBtn>` **directly** nested
+- Contains a `<@cInput>` and, directly nested, `<@cBtn>` buttons or a prefix icon. `<@cInputGroupAddon addonText='...'>` wraps a text addon; with nested content only it prints `<#nested>` bare (`cInputGroupAddon.ftl`), so a bare `<@cIcon name='user' />` gives the same HTML, which is what `cInputPassword.ftl` itself does:
+  ```freemarker
+  <@cInputGroup>
+      <@cIcon name='user' />
+      <@cInput name='username' id='username' />
+  </@cInputGroup>
+  ```
 - **Do not use `<@cInputGroupAddonText>`** to wrap the buttons
+
+### cInputPassword - Password fields
+- Replaces the hand-rolled pattern (cInputGroup + eye `cBtn` + `cProgress` + `LutecePassword` module): `forms/inputs/cInputPassword.ftl`
+  ```freemarker
+  <@cInputPassword label='#i18n{...password}' name='password' id='password' icon='lock' passwordMeter=true pmConfirmFieldId='confirmation_password' helpMsg='#i18n{portal.theme.labelPasswordHelp}' />
+  ```
+- `btnShowPassword=true` and `required=true` by default (pass `required=false` for an optional field); `passwordMeter=true` renders the strength bar; `pmConfirmFieldId` pairs the confirmation field
+- `helpMsg='#i18n{portal.theme.labelPasswordHelp}'` is the *new password* rule text (8 characters...): registration and change-password forms only, never a login form. On a login form pass `autocomplete='current-password'`
+- The strength-meter script and the toggler script are emitted by the first `cInputPassword` call of the page (`isTogglePasswordLoaded` guard): when the first field is an old password without meter, the next field with `passwordMeter=true` has no script. Put the field that needs the meter first, or say so in the report
+- A feature the old JS had and the macro lacks (a "generate password" button) is a judgment call: say so, do not keep both
 
 ### cProgress - Progress bar
 - `label` (required): text displayed above the bar
 - `progressId`: ID of the bar (used by JS for DOM manipulation)
 - `color`: Bootstrap color (`'primary'`, `'danger'`, `'warning'`, etc.)
 - `value`: initial value (0 by default)
+- Not for password strength any more: `cInputPassword passwordMeter=true` carries its own
 
 ### cBtn - Buttons
 - The class is prefixed automatically with `btn btn-`: `class='primary'` → `class="btn btn-primary"`
@@ -92,10 +122,40 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - **Self-closing** when there is no nested content: `<@cBtn label='My text' ... />` (no `</@cBtn>`)
 
 ### cCard - Cards
+- Signature (`components/card/cCard.ftl`): `title titleClass titleLevel=3 titleUrl titleUrlTitle subtitle ... class id img imgType imgClass imgAlt header headerLevel=0 headerClass headerLabelClass headerImg subHeader footer footerClass orientation='v' ...`
 - Use `header` for the header text, `headerLevel` for its heading level (0 = span, >0 = hN)
 - `headerLabelClass` to style the header: e.g. `'text-danger fw-bold h2'`
-- `title` for the main title (rendered in card-body), `titleLevel` and `titleClass` for styling
+- `title` for the main title (rendered in card-body), `titleLevel` and `titleClass` for styling, `titleUrl` to make it a link
+- An image or an inline svg goes in `img=` with `imgType='svg'` (`cCard.ftl:69-77`). `imgTitle=` is not a parameter: the svg is silently dropped
+- `orientation='h'` for an image beside the body
 - Add `class='border border-danger'` for colored borders
+- A grid of cards: `<@cCardLayout type='deck' rowCols='md-2 row-cols-lg-3'>` around `<@cCol><@cCard .../></@cCol>` items (`cCardLayout.ftl:41`)
+
+### cBreadCrumb - Page path
+- Never pass `home=`: the default is `#i18n{portal.theme.home}`, a literal (`home='Home'`, `home='Accueil'`) is untranslated copy
+- On an XPage the frameset already prints the page path (`page.setPathLabel`); a `cBreadCrumb` in the template is a second navigation landmark. Use it only on pages the frameset does not path (standalone pages, `minimal_header`)
+- `items=` is a list of `{title, url}` built with `<#assign items = items + [{...}]>`; the last item is the current page
+
+### cRadio / cImg - Generated ids
+- `cRadio` without `id`: several radios sharing a `name` get the same id from `cFormCheck`; give each an `id`
+- `cImg` derives its `id` from `alt` when `id` is empty: two images with the same `alt` collide; pass `id`
+
+### Model access
+- Prefer property access to getter calls: `authentication.lostPasswordPageUrl`, not `authentication.getLostPasswordPageUrl()`. Both work on a bean, only the first works on a hash (JSON model of the offline renderer, `Map` put in the model)
+
+### cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme now registers
+- `<@cTile title url level=3 imgName badge horizontal=false />` — clickable tile (`components/tile/cTile.ftl`, registered in `theme_commons_macros.ftl`)
+- `<@cEmpty title subtitle iconName='mood-empty' actionTitle actionUrl actionIcon='plus' />` — empty state of a list (`components/empty/cEmpty.ftl`, class `lutece-ds-empty`)
+- `<@cErrorMessage title text linkUrl linkLabelUrl>` — error pages; nested content for the technical cause (`components/error/cErrorMessage.ftl`, see examples.md)
+- `<@cAccordion id title titleLevel=3 state=true hasCollapse=true class border=false>` — collapsible block; `state=false` starts collapsed (`components/accordion/cAccordion.ftl`)
+- `<@noScriptMessage id='myForm' linkUrl='...' />` — `<noscript>` fallback with an alert and a reload link (`components/javascript/noScriptMessage.ftl`)
+- `<@cBlock type='blockquote'|'aside'|'section' class=...>` — semantic wrapper, the tag is `type` (`elements/text/cBlock.ftl`)
+
+### cForm - Validation and encoding
+- Signature (`forms/layout/cForm.ftl`): `class id params name method='post' role action enctype foValidation=true`
+- `foValidation=true` (default) loads `theme-form-validation.js` and `theme-form-observer.js` and exposes `window.__formValidationConfig`; set `foValidation=false` only for a form validated elsewhere
+- Uploads: `enctype='multipart/form-data'` is a parameter, no need for `params`
+- The BO `class='form-validation'` on buttons is an offcanvas-iframe mechanism of the admin theme: it has no meaning in a skin template
 
 ### cInput - errorMsg and helpMsg
 - **`errorMsg`**: error message displayed under the field — automatically adds the `is-invalid` class and `aria-invalid`. Pass an empty string if no error.
@@ -203,7 +263,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
       ...
   </@cStepDone>
   ```
-- **The `<#assign>` always go inside `<@cTpl>`**, never before — `<@cTpl>` must be on line 1 of the file, the assigns on the following lines
+- **The `<#assign>` go inside `<@cTpl>`**, never before: `<@cTpl>` wraps the whole output, so it opens the file. Whether `<#macro>` definitions sit before or after the `<#assign>` is style (FreeMarker hoists them)
 
 ### chList / chItem - Replacing orphan `<li>`
 - **Never** leave a `<li>` without a parent `<ul>` — always wrap in `<@chList>` + `<@chItem>`
@@ -220,8 +280,8 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
   </@chList>
   ```
 
-### cInput hidden - Mandatory empty class
-- **Always** add `class=''` on hidden inputs to prevent the macro from adding the default `form-control` class:
+### cInput hidden - Empty class
+- `class=''` on hidden inputs prevents the default `form-control` class; a hidden input is not displayed, so this is cosmetic and optional:
   ```freemarker
   <@cInput type='hidden' name='token' value='${token}' class='' />
   ```

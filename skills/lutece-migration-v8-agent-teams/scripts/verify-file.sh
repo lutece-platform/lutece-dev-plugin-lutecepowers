@@ -73,7 +73,7 @@ if echo "$FILE" | grep -q '\.java$'; then
         check "MV01" 'new HashMap' "FAIL" "new HashMap -> @Inject Models"
     fi
 
-elif echo "$FILE" | grep -q '\.html$'; then
+elif echo "$FILE" | grep -qE '\.(html|ftl)$'; then
     # Template checks
     if echo "$FILE" | grep -q 'templates/admin/'; then
         check "TM01" 'class="panel' "WARN" "Old Bootstrap panels"
@@ -81,6 +81,16 @@ elif echo "$FILE" | grep -q '\.html$'; then
     fi
     check "TM02" 'jQuery\|\$(' "WARN" "jQuery usage"
     check "TM04" 'errors?size\|infos?size\|warnings?size' "FAIL" "Unsafe null access"
+    PARSE_OUT=$(bash "$(dirname "$0")/check-template-parse.sh" "$FILE" 2>/dev/null | grep '^PARSE_ERROR' | head -1)
+    $FIRST || DETAILS="$DETAILS,"
+    FIRST=false
+    if [ -z "$PARSE_OUT" ]; then
+        DETAILS="$DETAILS{\"id\":\"TM09\",\"status\":\"PASS\",\"description\":\"FreeMarker parses the template\"}"
+        PASS=$((PASS + 1))
+    else
+        DETAILS="$DETAILS{\"id\":\"TM09\",\"status\":\"FAIL\",\"description\":\"FreeMarker cannot parse the template (answers 500)\",\"count\":1}"
+        FAIL=$((FAIL + 1))
+    fi
 
 elif echo "$FILE" | grep -q '\.jsp$'; then
     check "JS01" 'jsp:useBean' "FAIL" "jsp:useBean"

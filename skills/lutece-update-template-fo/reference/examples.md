@@ -3,46 +3,61 @@
 Complete templates to copy from.
 
 ## Contents
+- Page skeleton
 - Typical error page
 - Typical choice list
-- Typical registration form (with input-group and progress)
+- Typical registration form
 - Typical login form
 - Typical multi-step recap page (with cStepDone, cStepCurrent, cStepNext)
 - Article / rich content page (semantic HTML5 + dynamic breadcrumb)
 
+### Page skeleton
+
+Every page the core ships (`skin/site/page_template1.html`, `page_home.html`) and every recent front-end rewrite:
+
+```freemarker
+<@cTpl>
+<#-- page-local macros and <#assign> first; FreeMarker hoists macro definitions, position is style -->
+<@cContainer>
+    <@cRow>
+        <@cCol cols='12 col-md-9'>
+            <@cTitle level=2>#i18n{myplugin.xpage.title}</@cTitle>
+            <#-- content -->
+        </@cCol>
+        <@cCol cols='12 col-md-3'>
+            <@cBlock type='aside' class='article-list'>...</@cBlock>
+        </@cCol>
+    </@cRow>
+</@cContainer>
+<#-- scripts after the markup, inside cTpl: <script type="module"> vanilla JS, guarded if (el) -->
+</@cTpl>
+```
+
+`cTpl` looks up a site override under `skin/themes/<code>/tpl/<same path>` and renders `<#nested>` otherwise
+(`skin/themes/global_theme_commons.ftl`). `cContainer` performs the same lookup itself. A fragment included by
+another template (portlet body, component) has no `cTpl` and no `cContainer`.
+
 ### Typical error page
+
+`skin/site/page_error500.html` on the core `develop` branch:
 
 ```freemarker
 <#include "minimal_header.html" />
 <@cTpl>
-<@cContainer class='vh-80 pt-5'>
-    <@cRow class='pt-5 mt-5'>
-        <@cCol cols='12 col-md-3' class='pt-5 mt-5'>
-            <@cImg src='themes/skin/shared/images/500.png' alt='#i18n{portal.util.error500.title}' id='error500-img' />
-        </@cCol>
-        <@cCol cols='12 col-md-6' class='pt-5 mt-5'>
-            <@cCard class='border border-danger mt-5' header='Error 500' headerLevel=1 headerLabelClass='text-danger fw-bold h2' title='#i18n{portal.util.error500.title}' titleClass='h2' titleLevel=2>
-                <@cText class='my-5 fs-2'>#i18n{portal.util.error500.text}</@cText>
-                <#if error_cause??>
-                <@cAlert type='danger' class='fs-3'>${error_cause}</@cAlert>
-                </#if>
-                <@cText class='text-center mt-5'>
-                    <@cBtn href='./' label='#i18n{portal.util.labelBackHome}'>
-                        <@cIcon name='home' />
-                    </@cBtn>
-                </@cText>
-            </@cCard>
-        </@cCol>
-    </@cRow>
-</@cContainer>
+<@cErrorMessage title='#i18n{portal.theme.error500.title}' text='#i18n{portal.theme.error500.text}<br><small>(code: ${.now?long})</small>' linkUrl=footerLinkContact linkLabelUrl='#i18n{portal.theme.labelContact}' >
+<#if error_cause??><@cAccordion id='expert' title='#i18n{portal.theme.error500.more}' class='alert alert-outline alert-warning' state=false>${error_cause!}</@cAccordion></#if>
+</@cErrorMessage>
 </@cTpl>
 <#include "minimal_footer.html" />
 ```
+
+`footerLinkContact` is a theme variable of `skin/themes/lutece/_theme.ftl`.
 
 ### Typical choice list
 
 ```freemarker
 <@cTpl>
+<@cContainer>
 <@cRow>
     <@cCol>
         <@cTitle level=2>#i18n{mylutece.xpage.create_account.pageTitle}</@cTitle>
@@ -61,92 +76,83 @@ Complete templates to copy from.
         <@cAlert type='warning' title='#i18n{mylutece.xpage.create_account.noAuthentication}' />
     </@cCol>
 </@cRow>
+</@cContainer>
 </@cTpl>
 ```
 
-### Typical registration form (with input-group and progress)
+### Typical registration form
+
+The password field is one macro (`cInputPassword`, strength meter and confirmation pairing included); every
+field has `for=` and `required=true`; the size of a column is `cols`, the class of a button is the colour only.
 
 ```freemarker
 <@cTpl>
-<@cRow>
-    <@cCol cols='12 col-md-4 offset-md-4'>
-        <#if error_code?has_content>
-            <@cAlert type='danger'>#i18n{...errorMessage}</@cAlert>
-        </#if>
+<@cContainer>
+<@cRow class='justify-content-center'>
+    <@cCol cols='12 col-md-6'>
         <@cTitle level=2>#i18n{...pageTitle}</@cTitle>
-        <@cForm id='createAccount' action='...' method='post' params='name="createAccount"'>
+        <#if error_code?has_content>
+            <@cAlert type='danger' title='#i18n{...errorMessage}' />
+        </#if>
+        <@cForm id='createAccount' name='createAccount' action='...'>
             <@cInput type='hidden' name='plugin_name' value='${plugin_name}' class='' />
-            <@cField label='#i18n{...email}' required=true>
-                <@cInput type='text' name='email' id='email' class='form-control ${classEmail?if_exists}' params='maxlength="100"' value='${(user.email)?if_exists}' />
+            <@cField label='#i18n{...email}' for='email' required=true>
+                <@cInput type='email' name='email' id='email' maxlength=100 value='${(user.email)!}' />
             </@cField>
-            <@cField label='#i18n{...password}' required=true>
-                <@cInputGroup>
-                    <@cInput type='password' id='password' name='password' class='form-control ${classPassword?if_exists}' params='maxlength="100"' />
-                    <@cBtn href='#' class='secondary btn-sm p-2' id='lutece-password-toggler' label='' params='title="Show / hide the password"'>
-                        <@cIcon name='eye' />
-                    </@cBtn>
-                    <@cBtn href='#' class='secondary btn-sm p-2' id='generate_password' label='' params='title="Generate a password"'>
-                        <@cIcon name='settings' class='me-1' />
-                        <@cInline class='d-none'>Generate a password</@cInline>
-                    </@cBtn>
-                </@cInputGroup>
-            </@cField>
-            <@cBlock class='py-3'>
-                <@cProgress label='#i18n{...passwordComplexity}' progressId='progress_bar_first_password' color='danger' value=0 />
-            </@cBlock>
-            <@cRow>
+            <@cInputPassword label='#i18n{...password}' name='password' id='password' icon='lock' passwordMeter=true pmConfirmFieldId='confirmation_password' helpMsg='#i18n{portal.theme.labelPasswordHelp}' />
+            <@cInputPassword label='#i18n{...confirmation}' name='confirmation_password' id='confirmation_password' icon='lock' passwordMeter=false />
+            <@cRow class='mt-3'>
                 <@cCol>
-                    <@cBtn class='primary' type='submit' label='' params='name="createAccountBtn"'>
-                        <@cIcon name='user-check' /> #i18n{...btnCreateAccount}
+                    <@cBtn class='primary' type='submit' label='#i18n{...btnCreateAccount}'>
+                        <@cIcon name='user-check' />
                     </@cBtn>
-                    <@cBtn class='secondary' type='button' label='' params='name="back" onclick="javascript:history.go(-1)"'>
-                        <@cIcon name='circle-x' /> #i18n{...btnBack}
+                    <@cBtn class='secondary' href='${url_back}' label='#i18n{...btnBack}'>
+                        <@cIcon name='arrow-left' />
                     </@cBtn>
                 </@cCol>
             </@cRow>
         </@cForm>
     </@cCol>
 </@cRow>
+</@cContainer>
 </@cTpl>
 ```
 
 ### Typical login form
 
+Shape of `lutece-auth-plugin-mylutece/.../login_form_multi.html` on `develop` (its hard-coded French strings
+replaced by keys; a template never carries literal copy):
+
 ```freemarker
 <@cTpl>
-<@cCol>
-    <@cForm method='post' action='${url_dologin}'>
-    <@cInput type='hidden' name='page' value='mylutece' class='' />
-    <@cInput type='hidden' name='action' value='doLogin' class='' />
-    <@cInput type='hidden' name='token' value='${token}' class='' />
-    <@cRow class='mt-xxl'>
-        <@cCol cols='12 col-md-6' class='mt-xxl'>
-            <#if error_message?? && error_message != ''>
-                <@cAlert type='warning' title='${error_message!}' />
+<@cContainer>
+<@cRow>
+    <@cCol cols='12 col-md-6'>
+        <@cTitle level=2>#i18n{mylutece.xpage.login_form.pageTitle}</@cTitle>
+        <@cForm method='post' action='${url_dologin}' class='login-form' params='autocomplete="on"'>
+            <@cInput type='hidden' name='page' value='mylutece' class='' />
+            <@cInput type='hidden' name='action' value='doLogin' class='' />
+            <@cInput type='hidden' name='token' value='${token}' class='' />
+            <#if error_message?has_content>
+                <@cAlert type='warning' title='${error_message}' />
             </#if>
-            <@cCard title='#i18n{mylutece.xpage.login_form.pageTitle}' class='my-l'>
-                <@cField label='#i18n{mylutece.xpage.login_form.labelAccessCode}' for='username'>
-                    <@cInput type='text' name='username' id='username' placeholder='name@example.com' />
-                </@cField>
-                <@cField label='#i18n{mylutece.xpage.login_form.labelPassword}' for='password'>
-                    <@cInput type='password' name='password' id='password' placeholder='#i18n{mylutece.xpage.login_form.labelPassword}' />
-                </@cField>
-                <@cBtn class='primary w-100 py-m mt-l' type='submit' label='#i18n{mylutece.xpage.login_form.labelButton}' />
-                <@cRow class='justify-content-center mt-l'>
-                    <@cCol class='d-flex justify-content-end'>
-                        <@cBtn href='${lostPasswordUrl!}' label='' params='title="..."'>
-                            <@cIcon name='password-user' /> #i18n{...labelButtonLostPassword}
-                        </@cBtn>
-                    </@cCol>
-                </@cRow>
-            </@cCard>
-        </@cCol>
-        <@cCol cols='12 col-md-3' class='mt-xxl'>
-            <@cImg src='themes/skin/lutece/images/signin.png' alt='#i18n{mylutece.xpage.login_form.labelButton}' />
-        </@cCol>
-    </@cRow>
-    </@cForm>
-</@cCol>
+            <@cField label='#i18n{mylutece.xpage.login_form.labelAccessCode}' for='username'>
+                <@cInputGroup>
+                    <@cIcon name='user' />
+                    <@cInput name='username' id='username' placeholder='name@example.com' />
+                </@cInputGroup>
+            </@cField>
+            <@cInputPassword label='#i18n{mylutece.xpage.login_form.labelPassword}' name='password' id='password' icon='lock' autocomplete='current-password' />
+            <@cBtn class='primary' type='submit' label='#i18n{mylutece.xpage.login_form.labelButton}' nestedPos='after'>
+                <@cIcon name='arrow-right' class='ms-2' />
+            </@cBtn>
+            <@cBlock class='lost-row'>
+                <#if lostPasswordUrl?has_content><@cLink href='${lostPasswordUrl}' label='#i18n{mylutece.xpage.login_form.labelButtonLostPassword}' /></#if>
+            </@cBlock>
+        </@cForm>
+    </@cCol>
+</@cRow>
+</@cContainer>
 </@cTpl>
 ```
 
@@ -210,7 +216,7 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                     <#if from_page_id??><#assign fromPageUrl = 'jsp/site/Portal.jsp?page_id=' + from_page_id?c></#if>
                     <#assign breadcrumbItems = breadcrumbItems + [{ 'title': from_page_name, 'url': fromPageUrl }]>
                 </#if>
-                <@cBreadCrumb home='Home' type='fluid' items=breadcrumbItems />
+                <@cBreadCrumb items=breadcrumbItems />
 
                 <@cHeader class='hero'>
                     <@cBlock>

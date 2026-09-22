@@ -85,10 +85,10 @@ From here the lead only orchestrates and never edits files (on Claude Code with 
    - Each gets a DISTINCT file partition — no overlap
    - Java Migrator 0 also owns `.migration/tasks-java-homes.json` (Home and interface files, excluded from the other partitions)
 
-4. **Template Migrator** (0-1, if templates/JSP exist)
+4. **Template Migrator** (0-1, if templates/JSP exist) — sole owner of the templates and of the `core_admin_right` icon
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/template-migrator.md`
    - Task file: `.migration/tasks-template.json`
-   - Runs `migrate-template-mechanical.sh` with `--no-webxml` (web.xml belongs to the Config Migrator)
+   - Two passes on the same files: the mechanical one (`migrate-template-mechanical.sh --no-webxml`, web.xml belongs to the Config Migrator, then the JSPs), then the design one — assemble, scan, apply the back-office and front-office rule sets, prove each file by parsing and rendering
 
 5. **Test Migrator** (0-1, if test files exist)
    - Instructions: `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/teammates/test-migrator.md`
@@ -119,10 +119,10 @@ Config Migrator ─────────────────────�
     ├──→ Java Migrator 1 ─┤ (blocked by Config Migrator)
     └──→ Java Migrator 2 ─┘
               │
-              ├──→ Template Migrator ─┐ (blocked by ALL Java Migrators)
-              └──→ Test Migrator ─────┤ (blocked by Config + at least 1 Java Migrator)
-                                      │
-                                      └──→ Verifier: Final Build (blocked by ALL above)
+              ├──→ Template Migrator ─┐ (blocked by ALL Java Migrators: mechanical pass, then design pass)
+              └──→ Test Migrator ──────┤ (blocked by Config + at least 1 Java Migrator)
+                                       │
+                                       └──→ Verifier: Final Build (blocked by ALL above)
 ```
 
 - Config Migrator runs first (POM, beans.xml, web.xml, context XML catalog)
@@ -285,6 +285,11 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `task-splitter.sh` | JSON scan → per-teammate task files | Lead (Phase B) |
 | `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI + net.sf.json imports | Java Migrators |
 | `migrate-template-mechanical.sh` | BO macros + null-safety (`--no-webxml` for the Template Migrator) | Template Migrator |
+| `ensure-exploded.sh` | Assembles the project's webapp (`mvn lutece:exploded`): the precondition of every template analysis, and the source of the macro signatures, the icon font and the dependency templates | Template Migrator |
+| `scan-template-design.py` | Design rules a macro-written template still breaks, per file with a kind (list, form, fragment, email, fo, sql); codes in its header; `--json`, `--flat`, `--warn-only` | Template Migrator, Verifier (TM08) |
+| `check-template-parse.sh` | Parses every template with FreeMarker itself (a template that does not parse answers 500); project or single file | Template Migrator, Verifier (TM09), `verify-file.sh` |
+| `check-i18n-keys.sh` | Every `#i18n` key of the project against the bundles the assembled webapp really carries, templates and Java alike; a key no bundle answers renders as an empty string, so the label is absent with nothing in the log. Separates the keys built from a variable and those owned by a plugin that is not here; assembles the project itself and stops with exit 2 when it cannot, because without the dependency bundles every key they own would be reported missing | Template Migrator, v8 Reviewer |
+| `render-template.sh` | Renders templates offline with the real core macros and a lenient model (optional JSON model per template); counts the wrong-argument warning comments the core macros emit, resolves the `#i18n` keys against the assembled bundles and names those that answer nothing | Template Migrator |
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
 | `verify-migration.sh` | every check of `verification/checks.md`, optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
@@ -304,7 +309,6 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `cache-patterns.md` | EhCache→JCache | Java Migrators (if cache) |
 | `rest-patterns.md` | Jersey→JAX-RS, filters, providers | Java Migrators (if REST) |
 | `mvc-patterns.md` | @RequestParam, CSRF auto-filter, @ModelAttribute | Java Migrators (if JspBean/XPage) |
-| `template-macros.md` | v8 Freemarker macros, jQuery→vanilla JS | Template Migrator |
 | `fileupload-patterns.md` | FileItem→MultipartItem | Java Migrators (if fileupload) |
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
 | `deprecation-fixes.md` | What each deprecated API is replaced by (RBAC/workgroup `User` overloads, `getModel()`, `Strings.CS`, `getInstance()`, reflection, task signatures) | Java Migrators (always, short) |

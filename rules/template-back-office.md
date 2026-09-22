@@ -12,7 +12,13 @@ Before writing or modifying a template, ALWAYS consult:
 - macro definitions (signatures): `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/{components,elements,forms,layout,utilities}/**/*.ftl`
 - template examples: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/<feature>/*.html` (e.g. `rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and `~/.lutece-references/lutece-form-plugin-forms/webapp/WEB-INF/templates/admin/plugins/forms/*.html`
 
-Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@alert` takes `color` (not `type`); `@aButton`/`@button` take `buttonIcon` + `title` (not `iconClass`/`labelKey`); `@formGroup`/`@input` take `mandatory` (not `required`); `@select` takes `items` (a `ReferenceList`) + `default_value`; `@radioButton`/`@checkBox` take `labelKey` (not `label`); `@offcanvas` takes `position` (not `placement`); there is no `@input type='richtext'` (use `type='textarea' richtext=true`).
+Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@alert` takes `color` (not `type`); `@aButton`/`@button` take `buttonIcon` + `title` (not `iconClass`/`labelKey`); `@formGroup`/`@input` take `mandatory` (not `required`); `@select` takes `items` (a `ReferenceList`) + `default_value`; `@radioButton`/`@checkBox` take `labelKey` (not `label`); `@offcanvas` takes `position` (not `placement`); `@input` takes `placeHolder` (not `placeholder`); there is no `@input type='richtext'` (use `type='textarea' richtext=true`).
+
+## Back-office macro bugs to work around (report upstream, do not copy the workaround into the FO)
+
+- **`@input pattern=` and `accept=` are emitted unquoted and with no leading space**: `forms/input/input.ftl` contains `<#if pattern!=''>pattern=${pattern}</#if>` and `<#if accept!='' && type='file'>accept=${accept}</#if>`, so the attribute is glued to the previous one and cannot carry a space, `"`, `'`, `` ` ``, `=` or `>`. A pattern with a space-bearing quantifier or any `accept` list breaks the tag. Pass them through `params='pattern="…"'` until the core is fixed. The front-office twin `skin/themes/macros/forms/inputs/cInput.ftl` emits ` pattern="${pattern}"` correctly.
+- **The neutral back-office button is `color='light'`, not `color='secondary'`**: `components/button/aButton.ftl` and `button.ftl` map `color='secondary'`, `color='default'`, `color='btn-secondary'` **and `cancel=true`** to the class `btn-default`, which no admin stylesheet defines — `.btn-default` exists only in the *site* theme (`themes/skin/lutece/css/themes/dark-theme.css`), while `tabler.min.css` and `bootstrap.min.css` define `.btn-secondary` and `.btn-light`. A back or cancel button written `color='secondary'` renders with no colour variant.
+- **The parameter is `placeHolder`, not `placeholder`** (the emitted attribute is lowercase; the macro parameter is camelCase).
 
 ## Bootstrap 5 & Tabler Icons — Already Loaded
 
@@ -41,6 +47,11 @@ Render model messages with the core macro, once per page, right after `@pageHead
 
 ## i18n Format
 `#i18n{prefix.key.subkey}` — always reuse existing portal i18n utility keys instead of creating new ones whenever possible. Existing keys (`lutece-core/.../portal/resources/util_messages.properties`): `portal.util.labelActions`, `labelModify`, `labelDelete`, `labelCreate`, `labelBack`, `labelValidate`, `labelCancel`, `labelClose`, `labelYes`, `labelNo`, `labelEnabled`, `labelDisabled`, `labelSearch`, `labelNoItem`. Keys that do NOT exist: `portal.util.labelActive`, `labelInactive`, `labelSave`, `labelAdd` (use `labelEnabled`/`labelDisabled`/`labelValidate`/`labelCreate`).
+
+
+**`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )` (`:272`, `:304`, `:334`), then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )` (`:277`, `:309`, `:339`), then `DatastoreService.replaceKeys( template.getHtml( ) )` (`:343`). Two consequences:
+- **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html:199` (`#i18n{${column.titleKey}}`) and `:216`, `:222`.
+- **A template never writes `_csrftoken` itself**: the token is injected into the rendered `<form>`.
 
 ## Null Safety
 
@@ -143,7 +154,11 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - **NEVER** use jQuery (`$`, `jQuery`, `$.ajax`, `.click()`, `.on()`, etc.)
 - Use native DOM APIs: `document.querySelector`, `addEventListener`, `fetch`, `classList`, `dataset`
 - Use ES6+: `const`/`let`, arrow functions, template literals, destructuring, `async`/`await`
-- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: port it manually to a vanilla equivalent or an existing core macro, or add `library-theme-jquery` as an explicit, documented dependency.
+- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI, Cropper, suggestPOI…) cannot be converted mechanically. Decide mechanically instead:
+  1. Grep the project's `pom.xml` for `library-theme-jquery`. **Declared**: the theme loads jQuery (`adminHeader.ftl` includes `<@jqueryHeader />` when `jqueryHeader??`, `page_frameset.html` loads `commons_theme_jquery.html` when it exists), the calls run, keep them and name in the report the widget that justifies the dependency.
+  2. **Not declared**: the calls fail silently at runtime. Port them with the conversion table (`skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS) when they are plain DOM work, which is the usual case for show/hide/val/append.
+  3. Not declared **and** the code drives a jQuery plugin that has no vanilla equivalent: the fix is a `pom.xml` dependency, not a template edit. Report it to the owner of the build; never leave the calls unflagged.
+  The scanner does this cross-check (`TD12`): WARN when jQuery appears and the pom does not declare the library, INFO when it does.
 
 ## Third-Party Libraries — No CDN
 
@@ -165,6 +180,8 @@ values, and four built-ins do not: `?html` and `?xhtml` are a **ParseException**
 | Print HTML unescaped | `${x?no_esc}` | `<#noautoesc>${x}</#noautoesc>` |
 | Escape explicitly | `${x?html}`, `${x?esc}` | `<#outputformat "HTML">${x}</#outputformat>` |
 | Escape inside a macro argument (a directive cannot sit in a string) | `params='title="${x?html}"'` | capture first: `<#assign p><#outputformat "HTML">title="${x}"</#outputformat></#assign>` then `params=p` |
+| URL-encode a value | `${x?url}` — **throws at render time**: the Lutece FreeMarker configuration sets no `url_escaping_charset` nor `output_encoding` (`AbstractFreeMarkerTemplateService` calls `setNumberFormat`, `setOutputFormat`, `setAutoEscapingPolicy`… and neither of those two) | `${x?url('UTF-8')}` |
+| Interpolate a value into JavaScript (string literal or identifier inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
 | Test a captured block | `c != ''`, `c = ''` | `c?has_content`, `!c?has_content` |
 | Pass a bundle of attributes to a macro | `<#assign p = 'title="x"'>` | `<#assign p>title="x"</#assign>` |
 

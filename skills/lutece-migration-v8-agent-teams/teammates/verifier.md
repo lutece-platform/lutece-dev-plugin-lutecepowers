@@ -29,6 +29,12 @@ Also run the progress report:
 bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/progress-report.sh .
 ```
 
+**`verify-migration.sh` exits 2 without a report when the project does not assemble** (`mvn lutece:exploded-lite`
+fails), because the template checks read the macro signatures from the assembled webapp and a report without them
+would read as a clean bill of health it has not earned. That is not a script defect: report it to the Lead at once
+as a blocker, with the Maven error the script printed. It usually means a dependency does not resolve, or the pom
+is half-migrated.
+
 ### Monitoring rules
 - If FAIL count **decreases** between runs: good progress
 - If FAIL count **stays the same** for 2+ runs: report to Lead

@@ -26,7 +26,7 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 					</@formGroup>
 					<@formGroup>
 						<@button type='submit' name='action_createItem' buttonIcon='check' title='#i18n{portal.admin.message.buttonValidate}' />
-						<@button type='submit' name='view_manageItems' buttonIcon='times' title='#i18n{portal.admin.message.buttonCancel}' color='secondary' cancel=true />
+						<@button type='submit' name='view_manageItems' buttonIcon='times' title='#i18n{portal.admin.message.buttonCancel}' color='light' cancel=true />
 					</@formGroup>
 				</@tform>
 			</@offcanvas>

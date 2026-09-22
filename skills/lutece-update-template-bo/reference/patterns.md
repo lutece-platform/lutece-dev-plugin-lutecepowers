@@ -104,7 +104,11 @@ template are in SKILL.md.
 
 ### Actions dropdown in lists (manageFeature, adminDashboardWidget)
 - In a `<@manageFeature>` or a `<@adminDashboardWidget>`, when a list item has **more than 2 action buttons**, group the actions in a dropdown menu
-- Use `<@aButton dropdownMenu=true>` as the container, then convert each `<@aButton>` into a `<@link>` with `class='dropdown-item'`
+- Two containers work: `<@button dropdownMenu=true>` is the native Bootstrap 5 form (`data-bs-toggle`, items wrapped in `<ul class="dropdown-menu">`, so each item is a `<@li>` holding a `<@link>`; forms `manage_forms.html`); `<@aButton dropdownMenu=true>` emits Bootstrap 4 `data-toggle="dropdown"` that `webapp/themes/admin/tabler/js/admin.js` shims (core `admin/user/manage_users.html`). The pattern below uses `@aButton`; with `@button`, wrap each `@link` in `<@li>`
+- Convert each action `<@aButton>` into a `<@link>` with `class='dropdown-item'`
+- A selection checkbox in a row: `<@checkBox orientation='switch' labelKey=<entity label> labelClass='visually-hidden' />`; `checkBox.ftl` copies `params` on both the `<label>` and the `<input>`, so `params='aria-label="..."'` would be emitted twice
+- A hierarchy of entities (parents and children in one list): one flat `<@manageFeature>`, each item showing its depth with an indent class on the first `<@manageFeatureItemColumn>` (`class='ps-3'`, `'ps-5'`...), never a `<@table>` or a `<@manageFeature>` nested in an item
+- Reorder arrows (up, down, in, out) are not actions for the dropdown: keep them visible in a `<@btnGroup size='sm' ariaLabel='#i18n{portal.util.labelActions}'>`, the dropdown takes modify, copy, export and, last with `text-danger`, delete
 - When converting to `<@link>`: remove the `buttonIcon`, `color`, `size` and `hideTitle` parameters (not applicable to dropdown links)
 - Keep `href` and use `label` instead of `title` for the link text
 - For the delete action, add `text-danger` to the `<@link>` class for visual signaling
@@ -148,7 +152,7 @@ template are in SKILL.md.
 ### @pageHeader - Multi-filter search (text, date, selection)
 - For a search form with several criteria, use one `<@formGroup>` per field (no nested `<@inputGroup>`)
 - Standard input types: `type='text'` for the name, `type='date'` for a date, `<@select>` for a status/category
-- Add a **Reset** button in `color='secondary'` next to the Search button `color='primary'` — the back-end clears the search values when `search_reset=1`
+- Add a **Reset** button in `color='light'` next to the Search button `color='primary'` — the back-end clears the search values when `search_reset=1`
 - **Always** reinject the current values into the inputs via `value='${search_xxx!}'` so the form re-displays with the active filters after submission
 - Pattern:
   ```freemarker
@@ -171,7 +175,7 @@ template are in SKILL.md.
                   </@formGroup>
                   <@formGroup>
                       <@button type='submit' buttonIcon='search' title='#i18n{portal.util.labelSearch}' color='primary' />
-                      <@button type='submit' name='search_reset' value='1' buttonIcon='x' title='#i18n{portal.util.labelReset}' color='secondary' />
+                      <@button type='submit' name='search_reset' value='1' buttonIcon='x' title='#i18n{portal.util.labelReset}' color='light' />
                   </@formGroup>
               </@tform>
           </@offcanvas>
@@ -322,3 +326,59 @@ The primary button (creation) stays visually the rightmost. The secondary button
   </@pageHeader>
   ```
 
+## Icon vocabulary
+
+Every name below exists in `webapp/themes/shared/css/tabler-icons.min.css` of the assembled webapp; check a new one
+there before using it, because an unknown name renders an empty glyph without an error.
+
+| Action | Icon |
+|---|---|
+| save | `device-floppy` |
+| create | `plus` |
+| modify | `edit` (offcanvas button), `pencil` (inline) |
+| delete | `trash` |
+| back | `arrow-left` |
+| cancel | `x` |
+| search | `search` |
+| import / export | `upload` / `download` |
+| actions menu | `dots-vertical` |
+| move | `chevron-up`, `chevron-down`, `chevron-left`, `chevron-right` |
+| reorder handle | `arrows-vertical` |
+| status | `info-circle`, `circle-check`, `circle-x` |
+| external link | `external-link` |
+| empty state | contextual: `message-off`, `folder-off`, `tags-off`, `archive-off`, `help-hexagon`, `search-off`, default `inbox-off` |
+
+`components/icon/icon.ftl` aliases 40 FontAwesome names (`times`, `cog`, `envelope`, `remove`…), so those still
+render. These do **not**, and are the ones found in the wild: `close`, `save`, `arrows-v`, `circle-info`,
+`check-circle`, `times-circle`, `exclamation-triangle`, `user-times`, `external-link-alt`, `minus-square`, `disk`.
+
+## @empty - The subtitle is never empty
+
+With no `subtitle`, the macro prints the generic `#i18n{portal.util.message.emptySubTitle}` ("Add a first
+element"). Pass a contextual subtitle, or `subtitle=' '` to show none.
+
+## Recursive trees
+
+A tree of entities is `<@div id='tree' class='lutece-tree'>` > `<@ul>` > `<@li class='lutece-tree-node'
+params='data-tree-icon="..."'>`, driven by `webapp/themes/shared/modules/luteceTree.js`. Select the current node
+with `selectTreeNode('#node-${id}')`, and guard the script with `if (tree)` so a page without the tree does not
+throw.
+
+## A form opened in an iframe panel stays a page
+
+`webapp/themes/shared/modules/bootstrap/luteceBSOffCanvas.js` injects a cleanup script into the iframe that removes
+`header`, `footer`, the navbar and — unless `keepPageHeader=true` — `.page-header`, `#page-header` and
+`.breadcrumb`. So a template opened through `@offcanvas useIframe=true` **keeps** its full
+`@pageContainer > @pageColumn > @pageHeader`: the panel strips what it does not want at runtime, and the template
+still serves its standalone URL. Its submit and back buttons carry `class='form-validation'` (same file) when the
+action leaves the panel; a form whose action returns to the same sub-page must not carry it.
+
+## The destructive action of a detail box
+
+Put it in `<@boxFooter>`, not in the body.
+
+## Models to copy
+
+forms `admin/plugins/forms/manage_forms.html`, core `admin/role/manage_roles.html` and `admin/user/manage_users.html`
+(actions dropdown). The core is not flawless: `admin/rbac/manage_roles.html` wraps `@empty` in `@box` and tests
+`?size gt 1`, so a single role shows the empty state. The rule above wins over the model.

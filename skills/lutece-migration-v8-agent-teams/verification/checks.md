@@ -283,6 +283,8 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
 | TM06 | FAIL | @addRequiredJsFiles (not BO) | (custom check) | admin/*.html |
 | TM07 | FAIL | MVCMessage `${error}` without `.message` | `${error}` not followed by `.` or `!` | *.html |
+| TM08 | WARN | Design rules a macro-written template still breaks (entity list in `@table`, list without `@empty`, `@checkBox` without switch or without an explicit value, raw HTML, undeclared or repeated macro parameter, a script looking up an element the template only emits under a condition, BO macro in skin, image icon in `core_admin_right`, jQuery without a `library-theme-jquery` dependency) | `scan-template-design.py --flat --warn-only` (codes TD01…TD43 in its header; needs the assembled webapp, see `ensure-exploded.sh`) | admin/*.html, skin/*.html, src/sql |
+| TM09 | FAIL | Template FreeMarker cannot parse (answers 500) | `check-template-parse.sh` (FreeMarker `Template` constructor on every file) | *.html |
 
 ## Logging (LG)
 
@@ -303,6 +305,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TS06 | FAIL | Test methods without @Test | (cross-line check) | *.java (test) |
 | TS07 | FAIL | SpringContextService in tests | `SpringContextService\.getBean` | *.java (test) |
 | TS08 | FAIL | Spring mock imports | `org\.springframework\.mock\.web` | *.java (test) |
+| TS09 | FAIL | Failing tests in the surefire reports (the parent POM sets `testFailureIgnore=true`, so `BUILD SUCCESS` proves nothing; WARN when no report, meaning the tests were never run) | `target/surefire-reports/*.txt` | test results |
 
 ---
 
@@ -316,8 +319,8 @@ The counts come from `verify-migration.sh --json` (`.migration/verify-latest.jso
 |-----------|---------------|
 | `*.java` (main) | JX01-09, JP01, JP04, SP01-02, SP04, CD04, DA01, LG01, DP03, MV01 (if JspBean/XPage) |
 | `*.java` (test) | Above + TS01-08 |
-| `*.html` (admin) | TM01, TM02, TM04, TM06 |
-| `*.html` (skin) | TM02, TM04 |
+| `*.html` (admin) | TM01, TM02, TM04, TM06, TM09 |
+| `*.html` (skin) | TM02, TM04, TM09 |
 | `*.jsp` | JS01, JS02 |
 | `*.xml` (plugins) | WB02, WB04, WB05 |
 | `web.xml` | WB01, WB03 |

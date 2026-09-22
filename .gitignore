@@ -35,3 +35,4 @@ package-lock.json
 # An organisation's own external-system stand-ins never leave its workstation (skills/lutece-e2e/harness/fakes/extra/README.md)
 skills/lutece-e2e/harness/fakes/extra/*
 !skills/lutece-e2e/harness/fakes/extra/README.md
+*.class

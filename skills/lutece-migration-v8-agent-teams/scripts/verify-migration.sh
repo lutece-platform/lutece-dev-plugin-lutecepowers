@@ -9,8 +9,22 @@ set -uo pipefail
 PROJECT_ROOT="${1:-.}"
 JSON_MODE=false
 [ "${2:-}" = "--json" ] && JSON_MODE=true
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 cd "$PROJECT_ROOT"
+
+# A verification that could not run must never look like one that passed. The template checks read the macro
+# signatures, the icon font and the dependency templates from the assembled webapp, so the precondition is
+# settled here, before any check, and its failure stops the script with the reason rather than turning green.
+if [ -d "webapp/WEB-INF/templates" ]; then
+    if ! EXPLODED_OUT=$(bash "$SCRIPT_DIR/ensure-exploded.sh" . 2>&1); then
+        echo "$EXPLODED_OUT" >&2
+        echo "" >&2
+        echo "verify-migration stopped: this project does not assemble, so TM08 and TM09 cannot be evaluated and" >&2
+        echo "the rest of the report would read as a clean bill of health it has not earned. Fix the build first." >&2
+        exit 2
+    fi
+fi
 
 PASS=0
 FAIL=0
@@ -494,6 +508,7 @@ COUNT=0; [ -n "$ST05_MATCHES" ] && COUNT=$(echo "$ST05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST05" "PASS" "Files created by the migration are not ignored by git" 0
 else emit "ST05" "FAIL" "Files created by the migration are excluded by .gitignore" "$COUNT" "$ST05_MATCHES"; fi
 
+
 # LE01: a converted line ending rewrites every line of the file and hides the migration in the diff. A file counts
 # as converted when HEAD and the work tree disagree on carriage returns, whatever else changed in it: the files
 # that also carry real changes are the ones where the review matters most.
@@ -814,6 +829,43 @@ fi
 COUNT=0; [ -n "$TM07_MATCHES" ] && COUNT=$(echo "$TM07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM07" "PASS" "MVCMessage \${error} uses .message" 0
 else emit "TM07" "FAIL" "\${error} without .message (MVCMessage)" "$COUNT" "$TM07_MATCHES"; fi
+
+# TM08: design rules a template already written with macros can still break (scan-template-design.py header lists
+# the codes). A check that could not run is never a PASS: the scan exits 2 when the project will not assemble, and
+# an empty output would otherwise read as "nothing found".
+if [ ! -d "webapp/WEB-INF/templates/" ]; then
+    emit "TM08" "PASS" "Template design rules (no templates in this project)" 0
+elif ! command -v python3 >/dev/null; then
+    emit "TM08" "WARN" "Template design rules NOT EVALUATED: no python3 on PATH" 0
+else
+    TM08_MATCHES=$(python3 "$SCRIPT_DIR/scan-template-design.py" . --flat --warn-only 2>/dev/null)
+    TM08_RC=$?
+    if [ "$TM08_RC" -ne 0 ]; then
+        emit "TM08" "FAIL" "Template design rules NOT EVALUATED although the project assembled: run scan-template-design.py by hand to see why" 0
+    else
+        COUNT=0; [ -n "$TM08_MATCHES" ] && COUNT=$(echo "$TM08_MATCHES" | wc -l)
+        if [ "$COUNT" -eq 0 ]; then emit "TM08" "PASS" "Template design rules (manageFeature, empty state, switch, raw HTML, macro params, FO macros)" 0
+        else emit "TM08" "WARN" "Template design rules broken -> design pass of the Template Migrator (scan-template-design.py)" "$COUNT" "$TM08_MATCHES"; fi
+    fi
+fi
+
+# TM09: a template FreeMarker cannot parse answers 500 on every request. The parse skips itself when no JDK or no
+# freemarker jar is around, which must not read as a green either.
+if [ ! -d "webapp/WEB-INF/templates/" ]; then
+    emit "TM09" "PASS" "Every template parses with FreeMarker (no templates in this project)" 0
+else
+    TM09_OUT=$(bash "$SCRIPT_DIR/check-template-parse.sh" . 2>/dev/null)
+    TM09_MATCHES=$(echo "$TM09_OUT" | grep '^PARSE_ERROR') || TM09_MATCHES=""
+    if echo "$TM09_OUT" | grep -q "^FMPARSE skipped"; then
+        echo "$TM09_OUT" | grep '^FMPARSE skipped' >&2
+        echo "verify-migration stopped: the templates could not be parsed, so a green report would be a lie." >&2
+        exit 2
+    else
+        COUNT=0; [ -n "$TM09_MATCHES" ] && COUNT=$(echo "$TM09_MATCHES" | wc -l)
+        if [ "$COUNT" -eq 0 ]; then emit "TM09" "PASS" "Every template parses with FreeMarker" 0
+        else emit "TM09" "FAIL" "Templates FreeMarker cannot parse" "$COUNT" "$TM09_MATCHES"; fi
+    fi
+fi
 echo ""
 
 # ─── Logging ─────────────────────────────────────────────
@@ -850,6 +902,27 @@ else emit "TS06" "FAIL" "Test methods without @Test annotation" "$COUNT" "$TS06_
 
 check_grep "TS07" 'SpringContextService\.getBean' "src/test/" "FAIL" "SpringContextService.getBean in tests -> @Inject"
 check_grep "TS08" 'org\.springframework\.mock\.web' "src/test/" "FAIL" "Spring mock imports -> fr.paris.lutece.test.mocks"
+
+# TS09: the parent POM sets testFailureIgnore=true, so `mvn test` prints BUILD SUCCESS whatever the tests did.
+# The reports are the only evidence. No report means the tests were never run, which is not a pass.
+TS09_MATCHES=""
+if [ ! -d "src/test/" ]; then
+    emit "TS09" "PASS" "Test results (no tests in this project)" 0
+elif [ ! -d "target/surefire-reports" ]; then
+    emit "TS09" "WARN" "Test results NOT EVALUATED: no target/surefire-reports, run mvn test (BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true)" 0
+else
+    TS09_TALLY=$(grep -h "Tests run" target/surefire-reports/*.txt 2>/dev/null | awk -F'[:,]' '{t+=$2; f+=$4; e+=$6} END {printf "%d %d %d", t, f, e}')
+    TS09_RUN=$(echo "$TS09_TALLY" | cut -d' ' -f1)
+    TS09_BAD=$(( $(echo "$TS09_TALLY" | cut -d' ' -f2) + $(echo "$TS09_TALLY" | cut -d' ' -f3) ))
+    TS09_MATCHES=$(grep -l "FAILURE\|ERROR" target/surefire-reports/*.txt 2>/dev/null | sed 's|target/surefire-reports/||;s|\.txt$||')
+    if [ "${TS09_RUN:-0}" -eq 0 ]; then
+        emit "TS09" "WARN" "Test results NOT EVALUATED: the reports record no test run" 0
+    elif [ "$TS09_BAD" -eq 0 ]; then
+        emit "TS09" "PASS" "Test results ($TS09_RUN tests, no failure, no error)" 0
+    else
+        emit "TS09" "FAIL" "Failing tests ($TS09_RUN run) -- BUILD SUCCESS is meaningless here, the parent POM sets testFailureIgnore=true" "$TS09_BAD" "$TS09_MATCHES"
+    fi
+fi
 echo ""
 
 # ─── Summary ─────────────────────────────────────────────

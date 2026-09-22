@@ -27,7 +27,11 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 - **NEVER** use jQuery (`$`, `jQuery`, `$.ajax`, `.click()`, `.on()`, etc.)
 - Use native DOM APIs: `document.querySelector`, `addEventListener`, `fetch`, `classList`, `dataset`
 - Use ES6+: `const`/`let`, arrow functions, template literals, destructuring, `async`/`await`
-- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI…) cannot be converted mechanically: port it manually or add `library-theme-jquery` as an explicit, documented dependency.
+- Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI, Cropper, suggestPOI…) cannot be converted mechanically. Decide mechanically instead:
+  1. Grep the project's `pom.xml` for `library-theme-jquery`. **Declared**: the theme loads jQuery (`page_frameset.html` loads `commons_theme_jquery.html` when it exists), the calls run, keep them and name in the report the widget that justifies the dependency.
+  2. **Not declared**: the calls fail silently at runtime. Port them with the conversion table (`skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS) when they are plain DOM work, which is the usual case for show/hide/val/append.
+  3. Not declared **and** the code drives a jQuery plugin that has no vanilla equivalent: the fix is a `pom.xml` dependency, not a template edit. Report it to the owner of the build; never leave the calls unflagged.
+  The scanner does this cross-check (`TD12`): WARN when jQuery appears and the pom does not declare the library, INFO when it does.
 
 ## Third-Party Libraries — No CDN
 
@@ -70,6 +74,8 @@ values, and four built-ins do not: `?html` and `?xhtml` are a **ParseException**
 | Print HTML unescaped | `${x?no_esc}` | `<#noautoesc>${x}</#noautoesc>` |
 | Escape explicitly | `${x?html}`, `${x?esc}` | `<#outputformat "HTML">${x}</#outputformat>` |
 | Escape inside a macro argument (a directive cannot sit in a string) | `params='title="${x?html}"'` | capture first: `<#assign p><#outputformat "HTML">title="${x}"</#outputformat></#assign>` then `params=p` |
+| URL-encode a value | `${x?url}` — **throws at render time**: the Lutece FreeMarker configuration sets no `url_escaping_charset` nor `output_encoding` (`AbstractFreeMarkerTemplateService` calls `setNumberFormat`, `setOutputFormat`, `setAutoEscapingPolicy`… and neither of those two) | `${x?url('UTF-8')}` |
+| Interpolate a value into JavaScript (string literal or identifier inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
 | Test a captured block | `c != ''`, `c = ''` | `c?has_content`, `!c?has_content` |
 | Pass a bundle of attributes to a macro | `<#assign p = 'title="x"'>` | `<#assign p>title="x"</#assign>` |
 
@@ -83,3 +89,9 @@ run with an undefined output format and print the value as it is — do not add 
 
 Do **not** put `<#ftl output_format="HTML" auto_esc=true>` at the top of plugin templates as a migration
 vehicle: a non-migrated caller feeding a migrated macro double-escapes, and nothing catches it.
+
+## i18n resolution order
+
+**`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )` (`:272`, `:304`, `:334`), then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )` (`:277`, `:309`, `:339`), then `DatastoreService.replaceKeys( template.getHtml( ) )` (`:343`). Two consequences:
+- **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html:199` (`#i18n{${column.titleKey}}`) and `:216`, `:222`.
+- **A template never writes `_csrftoken` itself**: the token is injected into the rendered `<form>`.

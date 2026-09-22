@@ -148,7 +148,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 - `hideTitle=['all']` for icon-only buttons in lists
 - `hideTitle=['xs','sm', 'md', 'lg']` for toolbar buttons (icon-only except on large screens)
 - `cancel=true` on the Cancel button of a form
-- `color`: `'primary'`, `'secondary'`, `'success'`, `'danger'`, `'warning'`, `'info'`
+- `color`: `'primary'`, `'light'`, `'success'`, `'danger'`, `'warning'`, `'info'`. **The neutral button is `color='light'`**: `aButton.ftl`/`button.ftl` turn `color='secondary'` and `cancel=true` into the class `btn-default`, which no admin stylesheet defines (`rules/template-back-office.md` § Back-office macro bugs)
 
 ### @paginationAdmin - Pagination
 - Always place after the `<@table>` or `<@manageFeature>`

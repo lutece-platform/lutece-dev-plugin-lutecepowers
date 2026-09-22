@@ -151,6 +151,7 @@ if [ "$TEMPLATE_TEAMMATES" -gt 0 ]; then
       adminTemplates: [.files.adminTemplates[]],
       skinTemplates: [.files.skinTemplates[]],
       jspFiles: [.files.jsp[]],
+      sqlFiles: [.files.sql[]?],
       patternsBase: $patterns
     }' "$SCAN_FILE" > "$OUTPUT_DIR/tasks-template.json"
     echo "  Created tasks-template.json"
