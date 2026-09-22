@@ -801,6 +801,16 @@ echo ""
 # ─── Templates ───────────────────────────────────────────
 echo "CATEGORY: Templates"
 check_grep "TM01" 'class="panel' "webapp/WEB-INF/templates/admin/" "FAIL" "Old Bootstrap panels -> v8 macros"
+# VL01: a copy of jQuery or of a jQuery-era upload widget shipped under webapp/: nothing updates it (jQuery before 3.5
+# carries known XSS flaws) and v8 has the component the widget stood for (plugin-asynchronousupload).
+VL01_MATCHES=""
+if [ -d "webapp/" ]; then
+    VL01_MATCHES=$(find webapp -path webapp/WEB-INF -prune -o \( -iname 'jquery.js' -o -iname 'jquery.min.js' -o -iname 'jquery-[0-9]*.js' -o -iname '*jquery*file*upload*' -o -iname '*swfupload*' -o -iname '*plupload*' -o -iname '*uploadify*' \) -print 2>/dev/null | grep -v '^webapp/WEB-INF$') || VL01_MATCHES=""
+fi
+COUNT=0; [ -n "$VL01_MATCHES" ] && COUNT=$(echo "$VL01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "VL01" "PASS" "No vendored jQuery or upload widget" 0
+else emit "VL01" "FAIL" "Vendored jQuery or jQuery-era upload widget: port to vanilla JS / plugin-asynchronousupload, delete the copy" "$COUNT" "$VL01_MATCHES"; fi
+
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
 check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"
