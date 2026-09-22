@@ -107,8 +107,13 @@ public class Render
         cfg.setNumberFormat( "0.######" );
         cfg.setTemplateExceptionHandler( TemplateExceptionHandler.RETHROW_HANDLER );
         cfg.setLogTemplateExceptions( false );
-        cfg.addAutoInclude( "commons_bs5_tabler.html" );
-        cfg.addAutoInclude( "skin/themes/global_theme_commons.ftl" );
+        for ( String include : new String[] { "commons_bs5_tabler.html", "commons_backport.html", "admin/util/calendar/macro_datetimepicker.html", "skin/themes/global_theme_commons.ftl" } )
+        {
+            if ( new File( core, include ).isFile( ) )
+            {
+                cfg.addAutoInclude( include );
+            }
+        }
         // The macro names a declared freemarker-macro-file defines. The application includes those files globally;
         // including them here would run their top-level code against an empty model, so they are only read for
         // their names, and a call to one renders its body instead of the unresolved marker.
