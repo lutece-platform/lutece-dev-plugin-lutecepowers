@@ -90,6 +90,7 @@ if [ -d "$DIR/.git" ] || git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 # Inside the bench too, for a checkout where the root rule is missing.
 [ -f "$E2E/.gitignore" ] || printf '.venv/\n__pycache__/\n*.pyc\nartifacts/\nharness/site/target/\nharness/site/pom.xml\nharness/site/webapp/WEB-INF/plugins/plugins.dat\n' > "$E2E/.gitignore"
+[ -f "$E2E/e2e.conf" ] && CONF_KEPT=1
 if [ ! -f "$E2E/e2e.conf" ]; then
   sed -e "s/@@TARGET@@/$TARGET/" -e "s/@@NAME@@/$NAME/" -e "s/@@PORT@@/$PORT/" -e "s/@@DBPORT@@/$DBPORT/" \
       -e "s/@@MAILPORT@@/$MAILPORT/" -e "s/@@FAKESPORT@@/$FAKESPORT/" -e "s/@@OAUTH2PORT@@/$OAUTH2PORT/" \
@@ -106,5 +107,9 @@ if [ -z "$(ls -A "$E2E/scenarios" 2>/dev/null)" ]; then
   printf '# Inventory elements the bench cannot reach, each with a written reason (read by tools/coverage.py).\nexclusions: []\n' > "$E2E/scenarios/coverage-exclusions.yaml"
 fi
 mkdir -p "$E2E/fixtures"; cp -n "$SKILL/templates/fixtures/"* "$E2E/fixtures/" 2>/dev/null || true
-echo "e2e bench initialised in $E2E (target=$TARGET, name=$NAME, slot=$SLOT, app=$PORT, db=$DBPORT, mail=$MAILPORT)"
+if [ -n "${CONF_KEPT:-}" ]; then
+  echo "e2e bench refreshed in $E2E (e2e.conf kept: $(grep -E '^E2E_(NAME|PORT|DB_PORT)=' "$E2E/e2e.conf" | tr '\n' ' '))"
+else
+  echo "e2e bench initialised in $E2E (target=$TARGET, name=$NAME, slot=$SLOT, app=$PORT, db=$DBPORT, mail=$MAILPORT)"
+fi
 echo "next: edit e2e/e2e.conf (plugins to assemble, plugins to enable), then ./e2e/run.sh"
