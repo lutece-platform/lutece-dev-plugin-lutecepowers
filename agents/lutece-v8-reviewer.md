@@ -42,13 +42,33 @@ Using the `LUTECEPOWERS_ROOT` path from Step 0, run both scripts in sequence:
 ```bash
 bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh" .
 bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh" .
+python3 "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-template-design.py" .
+bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/render-template.sh" .
+bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/check-i18n-keys.sh" .
 ```
 
 (If the variable is not exported in your shell, replace `${LUTECEPOWERS_ROOT}` with the literal path from Step 0.)
 
 Parse the output:
 - **scan-project.sh** gives the project inventory (type, files, dependencies, migration scope). Use this as context for Phase B.
-- **verify-migration.sh** gives PASS/FAIL/WARN for 80+ checks (POM, javax, Spring, events, cache, deprecated API, deprecated libraries, DAO, JPA, CDI patterns, web config, JSP, templates, logging, tests, structure). Collect all FAIL and WARN items — these go directly into the final report under their respective categories.
+- **scan-template-design.py** gives the template findings per file and per code, the detail behind the two check
+  lines TM08 and TM09: which screens carry an entity list in a `@table`, a list without an empty state, an argument
+  the macro does not declare, an icon name that renders nothing, a back-office macro in a skin template. It
+  assembles the project first (`ensure-exploded.sh`, `mvn lutece:exploded-lite`) so the macro signatures and the
+  icon font come from what this project resolves. Its header documents every code; WARN and INFO both go in the
+  report, INFO as a judgment call rather than a defect.
+- **render-template.sh** renders every template offline with those macros: `errors` are templates that do not
+  render at all, `wrongArguments` counts the warning comments the core macros emit for an argument they do not
+  declare, `unresolvedMacros` flags a macro defined in a file that is not auto-included, and `missingI18nKeys` names every
+  `#i18n` key the bundles do not answer -- the core swallows that failure and writes an empty string, so the label
+  is simply absent with nothing in the logs. Quote the counts. An `I18N` line saying the bundles came from the
+  sources rather than the assembled webapp means a missing key may just belong to a dependency: say so instead of
+  reporting it.
+- **check-i18n-keys.sh** answers the same question over every file rather than only the templates that render:
+  `unresolved` are keys no bundle answers, a label that is simply absent from the page; `dynamic` are keys built
+  from a variable, which no static pass can settle; `foreignBundle` are keys owned by a plugin this webapp does
+  not carry, which are not defects here. Report the first, mention the second, drop the third.
+- **verify-migration.sh** gives PASS/FAIL/WARN for 100+ checks (POM, javax, Spring, events, cache, deprecated API, deprecated libraries, DAO, JPA, CDI patterns, web config, JSP, templates, logging, tests, structure). Collect all FAIL and WARN items — these go directly into the final report under their respective categories.
 
 The script covers report checks **1, 2, 3 (partial), 4 (partial), 6, 7 (partial), 8, 9, 10** mechanically. Do NOT re-grep for patterns the script already checked.
 
@@ -444,6 +464,20 @@ Record the result:
 Include the build result in the report. Do NOT attempt to fix build/test failures — just report them.
 
 ---
+
+## Templates — what to report
+
+The template scripts of Phase A carry their own section in the report, separate from the conformity checks: a
+template that uses a `@table` where the house rule says `@manageFeature` is not non-compliant, it is not yet
+polished, and mixing the two blurs the PASS/FAIL. Give:
+
+- **Does not render**: the parse errors and the render errors, with the file and the reason. These are 500s.
+- **Silently wrong**: `wrongArguments` (the macro ignored the argument), icon names that render nothing, a
+  back-office macro in a skin template, a `.js` template under `WEB-INF/templates` that does not parse.
+- **Not polished**: the remaining WARN per code, counted, with the screens they land on.
+- **Judgment calls**: the INFO, listed, not counted as defects.
+
+The detail per file is in the scan output; the report gives the counts and names the screens a reader must open.
 
 ## Report format
 

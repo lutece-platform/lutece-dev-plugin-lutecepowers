@@ -128,11 +128,11 @@ Two skills are written as a lead that dispatches teammates described in `teammat
 | A — Scan | `scan-project.sh` → JSON inventory, dependency v8 check | lead |
 | B — Task decomposition | `task-splitter.sh` → per-teammate JSON task files | lead |
 | C — Dispatch | config-migrator, java-migrator (×1-3), template-migrator, test-migrator, verifier | lead |
-| D — Dependencies | config → java → template + test → verifier final build | lead |
+| D — Dependencies | config → java → template migrator → template reviewer + test → verifier final build | lead |
 | E — Monitoring | `progress-report.sh`, blocker resolution | lead |
 | F — Final gate | 0 FAIL on `verify-migration.sh`, compile success, 0 failures and 0 errors in the surefire reports, `lutece-v8-reviewer` | verifier + lead |
 
-Scripts (`skills/lutece-migration-v8-agent-teams/scripts/`): `scan-project.sh`, `task-splitter.sh`, `migrate-java-mechanical.sh`, `migrate-template-mechanical.sh`, `extract-context-beans.sh`, `verify-migration.sh` (78 checks, `--json`), `verify-file.sh`, `add-liquibase-headers.sh`, `progress-report.sh`.
+Scripts (`skills/lutece-migration-v8-agent-teams/scripts/`): `scan-project.sh`, `task-splitter.sh`, `migrate-java-mechanical.sh`, `migrate-template-mechanical.sh`, `scan-template-design.py`, `check-template-parse.sh`, `render-template.sh`, `check-i18n-keys.sh`, `extract-context-beans.sh`, `verify-migration.sh` (100+ checks, `--json`), `verify-file.sh`, `add-liquibase-headers.sh`, `progress-report.sh`.
 
 ### Scalability (`lutece-scalability-v8`)
 
