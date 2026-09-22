@@ -58,6 +58,8 @@ Both sides
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
+  TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
+             nor the assembled theme CSS defines: the style or the behaviour is silently lost
   TD46 WARN  a copy of jQuery or of a jQuery plugin shipped by the project (a page loading its own jquery*.js, a file
              under webapp/ named jquery*.js or defining $.fn.x)
   TD45 WARN  jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, Dropzone, uploadify), in a template or
@@ -295,6 +297,7 @@ class Knowledge:
         self.bo_icons = self.icons | icon_aliases(os.path.join(BO_MACRO_DIR, "components/icon/icon.ftl"))
         self.fo_icons = self.icons | icon_aliases(os.path.join(FO_MACRO_DIR, "components/icons/cIcon.ftl"))
         self.bo_only = set(self.bo) - set(self.fo) - set(self.local)
+        self.css_classes = theme_classes(CORE) if self.source.startswith("assembled") else set()
         self.switch_writes_empty_value = switch_always_writes_value(os.path.join(BO_MACRO_DIR, "forms/checkbox/checkBox.ftl")) if self.available else False
 
     def known(self, name):
@@ -429,6 +432,41 @@ def check_upload_widget(text, findings):
 
 
 JQUERY_PLUGIN = re.compile(r"(?:\$|jQuery)\.fn\.[A-Za-z_$][\w$]*\s*=|(?:\$|jQuery)\.fn\.extend\(")
+
+
+LEGACY_CLASS = re.compile(r"^(panel(-[a-z]+)?|well(-(sm|lg))?|glyphicon(-[a-z-]+)?|fa|fa-[a-z0-9-]+|btn-xs|btn-default|btn-block|col-xs-\d+|col-(xs|sm|md|lg)-(offset|push|pull)-\d+|"
+                          r"label|label-(default|primary|success|info|warning|danger)|pull-(left|right)|hidden(-(xs|sm|md|lg))?|visible-(xs|sm|md|lg)(-[a-z]+)?|img-responsive|"
+                          r"input-group-(addon|btn|append|prepend)|table-condensed|form-group|form-row|form-inline|custom-(select|control|checkbox|radio|switch|file|range)(-[a-z]+)?|"
+                          r"sr-only(-focusable)?|badge-(primary|secondary|success|danger|warning|info|light|dark|pill)|[mp][lr]-(\d|auto|sm-\d|md-\d|lg-\d)|"
+                          r"float-(left|right)|text-(left|right)|no-gutters|media(-body)?|jumbotron|card-deck|card-columns|dropdown-menu-(left|right)|"
+                          r"font-weight-[a-z]+|font-italic|embed-responsive(-[a-z0-9]+)?|close)$")
+LEGACY_DATA = re.compile(r"\sdata-(toggle|target|dismiss|ride|slide|slide-to|parent|spy|placement|content|original-title)\s*=")
+CLASS_ATTR = re.compile(r"""\bclass\s*=\s*(["'])(.*?)\1""", re.S)
+
+
+def theme_classes(base):
+    """Class names every CSS file of the assembled webapp defines: a legacy name the theme still styles is not lost."""
+    names = set()
+    for dirpath, _, files in os.walk(base):
+        if "/WEB-INF/" in dirpath + "/":
+            continue
+        for name in files:
+            if name.endswith(".css"):
+                names.update(re.findall(r"\.([A-Za-z_][\w-]*)", read(os.path.join(dirpath, name))))
+    return names
+
+
+def check_legacy_markup(text, findings, know):
+    """Bootstrap 3/4 and Font Awesome markup that Bootstrap 5 and the theme ignore."""
+    hits = {}
+    for match in CLASS_ATTR.finditer(text):
+        for token in re.split(r"\s+", re.sub(r"\$\{[^}]*\}|<#[^>]*>|</#[^>]*>", " ", match.group(2))):
+            if token and LEGACY_CLASS.match(token) and token not in know.css_classes:
+                hits.setdefault(token, line_of(text, match.start()))
+    for match in LEGACY_DATA.finditer(text):
+        hits.setdefault("data-" + match.group(1), line_of(text, match.start()))
+    for token, line in sorted(hits.items(), key=lambda kv: kv[1]):
+        add(findings, "TD47", "WARN", line, "'%s' is Bootstrap 3/4 or Font Awesome markup that Bootstrap 5 and the theme CSS do not define: use the v8 macro or its Bootstrap 5 / Tabler equivalent" % token)
 
 
 def vendored_libraries(root):
@@ -596,6 +634,8 @@ def check_common(text, findings, kind, know):
     add_grouped(findings, "TD36", "INFO", hits, "literal words in a label attribute without #i18n{}")
     hits = [line_of(text, m.start()) for m in re.finditer(r"params='[^']*style=", text)]
     add_grouped(findings, "TD38", "INFO", hits, "inline style= in params: the theme owns the CSS")
+    if know.css_classes:
+        check_legacy_markup(text, findings, know)
     for name, line in conditional_selectors(text):
         add(findings, "TD43", "WARN", line, "the script looks up '%s' unconditionally while the template only emits it inside a condition: the lookup returns null and the whole script block dies there" % name)
     if know.source.startswith("assembled"):
