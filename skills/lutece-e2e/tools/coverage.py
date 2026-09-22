@@ -64,10 +64,19 @@ def main():
     for kind in ("screens", "actions"):
         for e in inv[kind]:
             k = key(e["url"])
-            tests = sorted(hits.get(k, set()) if e.get("kind") == "mvc" else by_path.get(k.split("?")[0], set()) | hits.get(k, set()))
-            proven = sorted(proven_hits.get(k, set()) if e.get("kind") == "mvc" else proven_by_path.get(k.split("?")[0], set()) | proven_hits.get(k, set()))
-            red = sorted(red_hits.get(k, set()) if e.get("kind") == "mvc" else red_by_path.get(k.split("?")[0], set()) | red_hits.get(k, set()))
-            bare_red = sorted(bare_hits.get(k, set()) if e.get("kind") == "mvc" else bare_by_path.get(k.split("?")[0], set()) | bare_hits.get(k, set()))
+
+            def lookup(table, by_path_table):
+                """Tests that reached this element; the default view of a controller is also its JSP opened bare."""
+                if e.get("kind") != "mvc":
+                    return by_path_table.get(k.split("?")[0], set()) | table.get(k, set())
+                found = set(table.get(k, set()))
+                if e.get("default"):
+                    found |= table.get(k.split("?")[0], set())
+                return found
+            tests = sorted(lookup(hits, by_path))
+            proven = sorted(lookup(proven_hits, proven_by_path))
+            red = sorted(lookup(red_hits, red_by_path))
+            bare_red = sorted(lookup(bare_hits, bare_by_path))
             rule = next((x for x in excl if x["pattern"] in e["url"]), None)
             if proven:
                 status = "proven"
