@@ -151,7 +151,7 @@ public class I18nKeys
     static boolean readable( Path file )
     {
         String path = file.toString( );
-        if ( !Files.isRegularFile( file ) || path.contains( "/target/" ) || path.contains( "/.git/" ) || path.contains( "/e2e/harness/" ) ) return false;
+        if ( !Files.isRegularFile( file ) || path.contains( "/target/" ) || path.contains( "/.git/" ) || path.contains( "/e2e/" ) ) return false;
         return SUFFIXES.stream( ).anyMatch( path::endsWith );
     }
 
