@@ -57,6 +57,7 @@ Both sides
   TD35 WARN  stray text '" />' between tags (broken copy-paste)
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
+  TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
   TD38 INFO  inline style= in params
   TD39 INFO  the same <#macro> defined in several templates                     -> one shared macro_<plugin>.html
 SQL
@@ -255,6 +256,7 @@ class Knowledge:
     def __init__(self, root):
         global BO_MACRO_DIR, FO_MACRO_DIR, TABLER_CSS, CORE
         self.source = "reference clone"
+        self.webapps = []
         templates_root = os.path.join(CORE, "webapp/WEB-INF/templates")
         # lutece:exploded writes target/lutece, lutece:exploded-lite writes target/<artifactId>-<version>
         candidates = [(d, "assembled webapp (%s)" % os.path.relpath(d, root)) for d in
@@ -265,6 +267,7 @@ class Knowledge:
             fo = os.path.join(base, "WEB-INF/templates/skin/themes/macros")
             if os.path.isdir(bo) and os.path.isdir(fo):
                 CORE, BO_MACRO_DIR, FO_MACRO_DIR, self.source = base, bo, fo, label
+                self.webapps = [base, os.path.join(root, "webapp")]
                 templates_root = os.path.join(base, "WEB-INF/templates")
                 css = os.path.join(base, "themes/shared/css/tabler-icons.min.css")
                 if os.path.isfile(css):
@@ -544,12 +547,30 @@ def check_common(text, findings, kind, know):
     add_grouped(findings, "TD38", "INFO", hits, "inline style= in params: the theme owns the CSS")
     for name, line in conditional_selectors(text):
         add(findings, "TD43", "WARN", line, "the script looks up '%s' unconditionally while the template only emits it inside a condition: the lookup returns null and the whole script block dies there" % name)
+    if know.source.startswith("assembled"):
+        for jsp, line in dead_links(text, know.webapps):
+            add(findings, "TD44", "WARN", line, "link to %s, which the assembled webapp does not carry: the click answers 404" % jsp)
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
     hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
     add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp; (targetUrl of an @offcanvas keeps raw &: offcanvas.ftl copies it into a script string)")
     hits = [line_of(text, m.start()) for m in re.finditer(IFRAME_AMP, text, flags=re.S)]
     add_grouped(findings, "TD07", "WARN", hits, "&amp; inside the targetUrl of an @offcanvas useIframe: offcanvas.ftl sets it through JS setAttribute, the iframe URL keeps a literal &amp; and the parameter is lost")
+
+
+def dead_links(text, webapps):
+    """(jsp path, line) of each literal jsp/ link or form action that no webapp directory carries as a file or a servlet mapping."""
+    mapped = set()
+    for w in webapps:
+        for xml in [os.path.join(w, "WEB-INF/web.xml")] + glob.glob(os.path.join(w, "WEB-INF/plugins/*.xml")):
+            if os.path.isfile(xml):
+                mapped.update(p.strip().lstrip("/") for p in re.findall(r"<(?:servlet-)?url-pattern>([^<]+\.jsp)</", read(xml)))
+    out = {}
+    for match in re.finditer(r"""\b(?:href|action|targetUrl|url)\s*=\s*['"](?:\$\{[^}]*\}/?)?(jsp/(?:admin|site)/[A-Za-z0-9_/]+\.jsp)""", text):
+        jsp = match.group(1)
+        if jsp not in mapped and not any(os.path.isfile(os.path.join(w, jsp)) for w in webapps):
+            out.setdefault(jsp, line_of(text, match.start()))
+    return sorted(out.items(), key=lambda kv: kv[1])
 
 
 def check_sql(text, findings):

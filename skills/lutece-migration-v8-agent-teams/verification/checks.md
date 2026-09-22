@@ -283,7 +283,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
 | TM06 | FAIL | @addRequiredJsFiles (not BO) | (custom check) | admin/*.html |
 | TM07 | FAIL | MVCMessage `${error}` without `.message` | `${error}` not followed by `.` or `!` | *.html |
-| TM08 | WARN | Design rules a macro-written template still breaks (entity list in `@table`, list without `@empty`, `@checkBox` without switch or without an explicit value, raw HTML, undeclared or repeated macro parameter, a script looking up an element the template only emits under a condition, BO macro in skin, image icon in `core_admin_right`, jQuery without a `library-theme-jquery` dependency) | `scan-template-design.py --flat --warn-only` (codes TD01…TD43 in its header; needs the assembled webapp, see `ensure-exploded.sh`) | admin/*.html, skin/*.html, src/sql |
+| TM08 | WARN | Design rules a macro-written template still breaks (entity list in `@table`, list without `@empty`, `@checkBox` without switch or without an explicit value, raw HTML, undeclared or repeated macro parameter, a script looking up an element the template only emits under a condition, a link to a JSP the webapp does not carry, BO macro in skin, image icon in `core_admin_right`, jQuery without a `library-theme-jquery` dependency) | `scan-template-design.py --flat --warn-only` (codes TD01…TD44 in its header; needs the assembled webapp, see `ensure-exploded.sh`) | admin/*.html, skin/*.html, src/sql |
 | TM09 | FAIL | Template FreeMarker cannot parse (answers 500) | `check-template-parse.sh` (FreeMarker `Template` constructor on every file) | *.html |
 
 ## Logging (LG)
