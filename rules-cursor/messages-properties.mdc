@@ -24,7 +24,7 @@ message.confirmRemoveEntity=Are you sure?
 |------|--------------------------|---------------------|
 | **Plugin** | `pluginName.` | `resources/pluginName_messages.properties` |
 | **Module** | `module.pluginName.moduleName.` | `resources/moduleName_messages.properties` |
-| **Core** | `portal.` | `resources/portal_messages.properties` |
+| **Core** | `portal.<element>.` | `portal/resources/<element>_messages.properties` (one bundle per element: `users`, `site`, `theme`, `security`… 23 of them, there is no `portal_messages.properties`) |
 
 ## Key Naming
 
@@ -37,8 +37,29 @@ message.confirmRemoveEntity=Are you sure?
 - `message.error.*` / `message.success.*` — user messages
 - `permission.resourceType.xxx.*` — RBAC labels
 
-## Common Error
+## A missing key is invisible, not loud
+
+`I18nService.getLocalizedString` catches the lookup failure and returns an **empty string**. A key no bundle
+answers therefore shows nothing: no error page, no raw key on screen, no line in the log — just a label that is
+not there. It is the quietest defect of the platform, and the reason it survives releases.
+
+`check-i18n-keys.sh` resolves every `#i18n` key of a project against the bundles of the assembled webapp and
+names those that answer nothing. It reads templates, `.js`, `.java`, `.xml` and `.sql`, follows a Java constant
+to its literal, and sorts what it cannot settle apart: a key built from a variable, and a key whose bundle
+belongs to a plugin this webapp does not carry.
+
+## Editing a bundle
+
+- **Both languages, always.** A key added to `x_messages.properties` and forgotten in `x_messages_fr.properties`
+  falls back to the English text, which reads as a bug to a French user.
+- **Follow each file's own conventions**, they differ from one bundle to the next in the same directory: some are
+  CRLF and some LF, some escape accents as `\u00e9` and some carry them raw in UTF-8. A tool that rewrites a file
+  in the other convention turns two added lines into a diff of the whole file.
+
+## Common errors
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| The label is simply absent from the page | No bundle answers the key | Add it, or point the call at the key that already exists |
 | i18n key displayed as-is (e.g. `myplugin.label.name`) | Prefix included in `.properties` file | Remove prefix — keep only `label.name=Value` |
+| The label is there but a screen reader says nothing | The text sits in a `d-none` span | `display:none` leaves the accessibility tree; `visually-hidden` does not |
