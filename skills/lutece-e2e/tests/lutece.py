@@ -65,7 +65,8 @@ def observe(page):
             t = req.timing
             mvc = ""
             try:
-                body = req.post_data or ""
+                raw = req.post_data_buffer
+                body = raw.decode("latin-1") if raw else ""
                 m = (re.search(r"(?:^|&)(action|view)=([^&]+)", body) or re.search(r"(?:^|&)(action|view)_([^=&]+)=", body)
                      or re.search(r'name="(action|view)(?:_([^"]+))?"\r?\n\r?\n([^\r\n]*)', body))
                 if m:
