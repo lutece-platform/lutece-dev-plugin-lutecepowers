@@ -2,7 +2,10 @@
 """Coverage of the static inventory by the tests: which screens and actions were reached by at least one
 test navigation (results/*.jsonl `visited`, non-error status), and which were not. Writes
 artifacts/coverage.json and prints the uncovered elements: the to-do list for the scenarios. Elements of the artefact
-under test (origin target) are the scope; the core and the other plugins of the site (origin env) are counted apart."""
+under test (origin target) are the scope; the core and the other plugins of the site (origin env) are counted apart.
+With --gate, exits 1 when an action of the artefact is not proven by a green scenario (or tested red, or excluded
+with a written reason), or a screen of the artefact is reached by no test at all: the report names the gap, the gate
+refuses to call the bench delivered with it."""
 import json
 import pathlib
 import re
@@ -111,6 +114,22 @@ def main():
         env_todo = [x for x in out[kind] if x["origin"] == "env" and x["status"] == "todo"]
         if env_todo:
             print("  (environment: %d %s to do, listed in coverage.json)" % (len(env_todo), kind))
+    if "--gate" in sys.argv:
+        gaps = gate(out)
+        if gaps:
+            print("COVERAGE GATE: %d element(s) of the artefact neither proven nor excluded with a reason:" % len(gaps))
+            for g in gaps:
+                print("  - " + g)
+            print("drive each one through its real form with a state oracle, or write why it cannot be in scenarios/coverage-exclusions.yaml")
+            sys.exit(1)
+
+
+def gate(out):
+    """Elements of the artefact the bench claims nothing about: an action no green scenario proved, a screen no test reached."""
+    ok = {"actions": ("proven", "defect", "blocked", "unreachable"),
+          "screens": ("proven", "defect", "robustness", "reached", "blocked", "unreachable")}
+    return ["%s %s (%s)" % (kind[:-1], x["url"], x["status"]) for kind in ("actions", "screens")
+            for x in out[kind] if x["origin"] == "target" and x["status"] not in ok[kind]]
 
 
 if __name__ == "__main__":

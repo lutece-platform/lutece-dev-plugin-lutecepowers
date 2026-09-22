@@ -168,6 +168,14 @@ Before calling an "Internal error" a defect, drive the flow the way the interfac
 links of the previous screen): a screen called without a parameter it expects is a robustness finding, not a
 functional one — the two are reported apart.
 
+**The artefact's own actions are the point of the bench, and a run does not end green without them.** A plugin
+exists for one or two workflows — files2docs imports files, a form plugin submits a form — and a bench that opens its
+listings and stops has proved the menu, not the plugin. `run.sh all` fails with **rc=9** while an action of the
+artefact (`Do*`, an MVC `action=`, an upload endpoint) is neither proven by a green scenario, tested red, nor
+excluded with a written reason; `COVERAGE=skip` bypasses it to iterate, never to hand over. Start the scenarios
+from the artefact's main workflow, played end to end the way a user plays it (upload a real file from
+`fixtures/`, submit the wizard, read the created rows), before the CRUD of its settings screens.
+
 Work the "à couvrir" list of `summary.md` down to zero: every inventory element ends up covered by a test, or
 listed in `scenarios/coverage-exclusions.yaml` with a written reason (a defect found by the suites, a plugin
 not on the bench, a dead template). Exclusions stay visible in the report as debt; they never lower the totals. `python3 tools/coverage.py` prints the to-do list; `python3 tools/causes.py`

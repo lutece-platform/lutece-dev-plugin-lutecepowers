@@ -17,7 +17,8 @@
 # Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n, RUNNER=local (host venv instead of the container),
 # KEEP=1 (do not stop the stack after a full run). Everything else lives in e2e.conf.
 # Exit codes: 1 stack, 2 usage, 3 the bench's own oracle fails, 4 bench invariant broken, 5 unexpected server
-# errors, 6 smoke test, 7 visual review missing, 8 a suite with something to prove was entirely skipped;
+# errors, 6 smoke test, 7 visual review missing, 8 a suite with something to prove was entirely skipped,
+# 9 an action of the artefact proven by no scenario (COVERAGE=skip to iterate);
 # otherwise pytest's code (1 = a red test).
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")" && pwd)
@@ -512,6 +513,11 @@ case "${1:-all}" in
     check_server_errors || { [ "$rc" -eq 0 ] && rc=5; }
     # The bench is not delivered until a human-or-agent eye has judged the rendering of every screen family:
     # the assertions prove behaviour, not that the screens follow the design system and hold together visually.
+    # A green run that never played the artefact's own actions proves nothing about them: every action of the target
+    # is proven by a scenario, tested red, or excluded with a written reason, before the bench is delivered.
+    if [ "${COVERAGE:-}" != skip ]; then
+      python3 tools/coverage.py --gate > /dev/null || { python3 tools/coverage.py --gate | sed -n '/COVERAGE GATE/,$p'; [ "$rc" -eq 0 ] && rc=9; }
+    fi
     if [ "${REVIEW:-}" != skip ]; then
       python3 tools/review.py check || { [ "$rc" -eq 0 ] && rc=7; }
     fi
