@@ -280,12 +280,15 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TM01 | FAIL | Old Bootstrap panels | `class="panel` | admin/*.html |
 | TM02 | FAIL | jQuery in a template with no `library-theme-jquery` in the pom (WARN when declared): nothing loads it, the script dies | `jQuery\|\$(` | templates |
 | VL01 | FAIL | a copy of jQuery, of a jQuery plugin (a `.js` defining `$.fn.x`) or of a jQuery-era upload widget under `webapp/` | file names, `$.fn.` in *.js | webapp/ |
+| TM10 | FAIL | offcanvas (`@offcanvas`, `@cOffcanvas`, offcanvas markup): the content of the page goes in a `@modal` / `@cModal`, another page is reached by a plain link | `template_rules.py offcanvas` | admin, skin |
+| TM11 | FAIL | front-office form that is not a `@cForm` (raw `<form>`, `@tform`) or `foValidation=false`: no core form validation | `template_rules.py fo-forms` | skin |
+| TM12 | FAIL | inline form: two visible fields or more side by side (`@tform type` inline/flex, `form-inline`/`d-flex` on the form, `formStyle='inline'`) | `template_rules.py inline-forms` | admin, skin |
 | TM03 | FAIL | Old upload macros | (custom check) | *.html |
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
 | TM06 | FAIL | @addRequiredJsFiles (not BO) | (custom check) | admin/*.html |
 | TM07 | FAIL | MVCMessage `${error}` without `.message` | `${error}` not followed by `.` or `!` | *.html |
-| TM08 | WARN | Design rules a macro-written template still breaks (entity list in `@table`, list without `@empty`, `@checkBox` without switch or without an explicit value, raw HTML, undeclared or repeated macro parameter, a script looking up an element the template only emits under a condition, a link to a JSP the webapp does not carry, a jQuery-era upload widget, a vendored copy of jQuery, Bootstrap 3/4 or Font Awesome markup, BO macro in skin, image icon in `core_admin_right`, jQuery without a `library-theme-jquery` dependency) | `scan-template-design.py --flat --warn-only` (codes TD01…TD47 in its header; needs the assembled webapp, see `ensure-exploded.sh`) | admin/*.html, skin/*.html, src/sql |
+| TM08 | WARN | Design rules a macro-written template still breaks (entity list in `@table`, list without `@empty`, `@checkBox` without switch or without an explicit value, raw HTML, undeclared or repeated macro parameter, a script looking up an element the template only emits under a condition, a link to a JSP the webapp does not carry, a jQuery-era upload widget, a vendored copy of jQuery, Bootstrap 3/4 or Font Awesome markup, BO macro in skin, image icon in `core_admin_right`, jQuery without a `library-theme-jquery` dependency, offcanvas, a front-office form without `@cForm`, an inline form) | `scan-template-design.py --flat --warn-only` (codes TD01…TD47 in its header; needs the assembled webapp, see `ensure-exploded.sh`) | admin/*.html, skin/*.html, src/sql |
 | TM09 | FAIL | Template FreeMarker cannot parse (answers 500) | `check-template-parse.sh` (FreeMarker `Template` constructor on every file) | *.html |
 
 ## Logging (LG)

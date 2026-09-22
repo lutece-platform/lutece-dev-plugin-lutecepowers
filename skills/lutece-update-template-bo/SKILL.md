@@ -1,6 +1,6 @@
 ---
 name: lutece-update-template-bo
-description: "Converts a Lutece Back Office (admin) template to the BO FreeMarker macros of lutece-core (Tabler theme). Discovers the macros from the core sources rather than from a fixed list, so it never goes stale, and applies the house rules that are not readable from the macro files: manageFeature versus table, the mandatory empty state, the page hierarchy, the offcanvas navigation rule, and the e-mail templates that must never be converted. Takes the template path as argument. Triggers on 'migrer un template BO', 'convertir un template admin', 'macros BO', 'thème tabler', 'update back office template'."
+description: "Converts a Lutece Back Office (admin) template to the BO FreeMarker macros of lutece-core (Tabler theme). Discovers the macros from the core sources rather than from a fixed list, so it never goes stale, and applies the house rules that are not readable from the macro files: manageFeature versus table, the mandatory empty state, the page hierarchy, no offcanvas (a modal or a plain link), no inline form, and the e-mail templates that must never be converted. Takes the template path as argument. Triggers on 'migrer un template BO', 'convertir un template admin', 'macros BO', 'thème tabler', 'update back office template'."
 ---
 
 # Updating a Lutece BO template
@@ -19,7 +19,7 @@ One file per macro, the filename is the macro name, grouped by domain. Start her
 cd ~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler
 ls -d */*/                                     # every domain: components, forms, layout, elements, pages, utilities...
 grep -rh '^<#macro' components/table/          # every signature of one domain, with all its parameters
-grep -rl '^<#macro  *offcanvas\b' .            # which file defines one macro
+grep -rl '^<#macro  *modal\b' .            # which file defines one macro
 sed -n '1,25p' components/box/box.ftl          # its documented parameters and a snippet
 ```
 
@@ -41,8 +41,7 @@ If the clone is missing, the theme also ships in any assembled site under
 
 ## Additional resources
 
-- Situational patterns — bulk actions, search and filter headers, editor toolbars, the four offcanvas
-  placements: [reference/patterns.md](reference/patterns.md)
+- Situational patterns — bulk actions, search and filter headers, editor toolbars, modals: [reference/patterns.md](reference/patterns.md)
 - Complete page examples to copy from: [reference/examples.md](reference/examples.md)
 - List layout, messages and i18n keys that exist: `rules/template-back-office.md`
 
@@ -170,26 +169,31 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 - Do not write hardcoded text in the template
 - Reuse existing `portal.util.*` keys; the list of existing keys and of the ones that do NOT exist (`labelActive`, `labelInactive`, `labelSave`, `labelAdd`): `rules/template-back-office.md` § i18n
 
-### @aButton → @offcanvas - Converting navigation buttons
-- **Always** convert the navigation `<@aButton>` to creation or modification pages into `<@offcanvas>` with `useIframe=true`
-- This includes: the "Add" button in the `<@pageHeader>`, the "Modify" button in the actions columns
-- **Do not convert** the delete/confirmation buttons (they remain `<@aButton>` because they require a real navigation with confirmation)
-- "Add" button pattern in the header:
+### Navigation, dialogs and forms (blocking: `verify-migration.sh` TM10/TM12, scanner TD48/TD50)
+- **No offcanvas**, ever. Content written in the page itself (a search form, a small creation form, properties) goes
+  in a modal opened by a button:
   ```freemarker
-  <@offcanvas id='offcanvasCreate' targetUrl='jsp/admin/.../Create.jsp' useIframe=true title='#i18n{...buttonCreate}' btnTitle='#i18n{...buttonCreate}' btnIcon='plus' btnColor='primary' position='end' size='half' />
+  <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' params='data-bs-toggle="modal" data-bs-target="#searchModal"' />
+  <@modal id='searchModal'>
+      <@modalHeader modalTitle='#i18n{portal.util.labelSearch}' />
+      <@modalBody><@tform action='…'>…</@tform></@modalBody>
+  </@modal>
   ```
-- "Modify" button pattern in a list:
+- Content that is **another page** (a create or modify screen) is reached by a **plain link** to that page; the page
+  is a full screen with its own back link:
   ```freemarker
-  <@offcanvas id='offcanvasModify-${item.id}' targetUrl='jsp/admin/.../Modify.jsp?id=${item.id}' useIframe=true title='#i18n{portal.util.labelModify}' btnTitle='#i18n{portal.util.labelModify}' btnIcon='edit' btnColor='' btnClass='me-1' hideTitle=['all'] position='end' size='half' />
+  <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' buttonIcon='plus' title='#i18n{myplugin.manage_items.buttonCreate}' />
   ```
+- **No inline form**: no `<@tform type='inline'>` / `type='flex'`, no `@formGroup formStyle='inline'`, no
+  `form-inline` / `d-flex` class on a form. One field per row.
 
 ### What NOT to do
 - Do not use raw HTML when a macro exists
 - Do not add JavaScript unless requested
 - Do not wrap a `<@manageFeature>` in a `<@box>` (the items are already cards)
 - Do not use `<@table>` for an entity list with CRUD actions → convert to `<@manageFeature>`; keep `@table` for tabular data (`rules/template-back-office.md` § List Layout)
-- Do not put the creation form in a separate column → prefer an `<@offcanvas>` in the `<@pageHeader>`
-- Do not use `<@aButton>` to navigate to a creation or modification page → use `<@offcanvas>` with `useIframe=true` instead
+- Do not put the creation form in a separate column → link to the creation page, or a `<@modal>` for a short form
+- Do not use `<@offcanvas>` → `<@modal>` for content of the page, a plain `<@aButton href>` for another page
 - Do not duplicate `<@messages>` (a single call per message type)
 - Do not wrap a `<@tform>` in a `<@box>` when the box only serves to contain the form → use `boxed=true`
 - NEVER iterate a list (`<#list>`) without first testing whether it is non-empty (`?has_content`) and displaying a `<@empty>` otherwise

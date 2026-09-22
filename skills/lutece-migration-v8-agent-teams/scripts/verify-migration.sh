@@ -811,6 +811,27 @@ COUNT=0; [ -n "$VL01_MATCHES" ] && COUNT=$(echo "$VL01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "VL01" "PASS" "No vendored jQuery or upload widget" 0
 else emit "VL01" "FAIL" "Vendored jQuery or jQuery-era upload widget: port to vanilla JS / plugin-asynchronousupload, delete the copy" "$COUNT" "$VL01_MATCHES"; fi
 
+# TM10 / TM11 / TM12: house rules on templates, read with FreeMarker and HTML comments blanked.
+# TM10: no offcanvas. Content written in the page -> @modal / @cModal; content loaded from another page -> a plain link.
+# TM11: every front-office form is a @cForm, which loads the core's form validation (theme-form-validation); a raw
+#       <form>, a back-office @tform in a skin template, or foValidation=false leaves the form without it.
+# TM12: no inline form laying two visible fields or more side by side (template_rules.py has the exact rules).
+template_rules() {
+    python3 "$(dirname "${BASH_SOURCE[0]}")/template_rules.py" "$1" . || true
+}
+TM10_MATCHES=$(template_rules offcanvas 2>/dev/null) || TM10_MATCHES=""
+COUNT=0; [ -n "$TM10_MATCHES" ] && COUNT=$(echo "$TM10_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM10" "PASS" "No offcanvas" 0
+else emit "TM10" "FAIL" "Offcanvas: content of the page -> @modal / @cModal, another page -> a plain link to it" "$COUNT" "$TM10_MATCHES"; fi
+TM11_MATCHES=$(template_rules fo-forms 2>/dev/null) || TM11_MATCHES=""
+COUNT=0; [ -n "$TM11_MATCHES" ] && COUNT=$(echo "$TM11_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM11" "PASS" "Front-office forms are @cForm with the core form validation" 0
+else emit "TM11" "FAIL" "Front-office form without the core form validation: use @cForm, never foValidation=false" "$COUNT" "$TM11_MATCHES"; fi
+TM12_MATCHES=$(template_rules inline-forms 2>/dev/null) || TM12_MATCHES=""
+COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
+else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
+
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
 check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"

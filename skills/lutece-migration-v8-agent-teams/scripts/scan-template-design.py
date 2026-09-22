@@ -19,7 +19,6 @@ WARN = fix it or justify it in the report.  INFO = judgment call, decide and say
 Back-office (templates/admin)
   TD01 WARN  entity rows with edit/delete actions rendered in a @table          -> @manageFeature
   TD02 WARN  list rendering rows over a model variable, no @empty in the file   -> empty state (INFO in a fragment)
-  TD03 INFO  @aButton navigating to a Create*/Modify* page                      -> @offcanvas useIframe (house rule, core still links)
   TD04 WARN  @checkBox without orientation='switch'
   TD05 INFO  @box whose body is only a @tform / @table / @manageFeature         -> boxed=true, no box
   TD09 WARN  raw HTML tag where a macro exists
@@ -31,7 +30,6 @@ Back-office (templates/admin)
   TD13 INFO  icon-only button (hideTitle=['all']) without title
   TD14 WARN  btn-<color> in class: renders two colour classes (default color='primary') -> color='<color>'
   TD15 INFO  href='javascript:...' on a button                                  -> disabled button
-  TD17 WARN  form opened in an @offcanvas useIframe whose submit/back buttons lack class='form-validation'
 Front-office (templates/skin)
   TD21 WARN  back-office macro in a skin template (resolves only because admin commons are auto-included)
   TD22 WARN  raw HTML tag where a c* macro exists
@@ -58,6 +56,10 @@ Both sides
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
+  TD48 WARN  offcanvas (@offcanvas, @cOffcanvas, class/data-bs-toggle offcanvas): content of the page -> @modal /
+             @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
+  TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
+  TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
   TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
              nor the assembled theme CSS defines: the style or the behaviour is silently lost
   TD46 WARN  a copy of jQuery or of a jQuery plugin shipped by the project (a page loading its own jquery*.js, a file
@@ -76,7 +78,11 @@ import json
 import os
 import re
 import subprocess
+
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import template_rules  # noqa: E402
 
 ADMIN = "webapp/WEB-INF/templates/admin"
 SKIN = "webapp/WEB-INF/templates/skin"
@@ -95,7 +101,6 @@ RAW_FO_TAGS = ("form", "input", "select", "option", "button", "table")
 ROW_MARKERS = ("<@tr", "<tr", "<@manageFeatureItem", "<@li", "<li", "<@card", "<@row", "<@columns", "<@div")
 ICON_ATTRS = ("buttonIcon", "btnIcon", "linkIcon", "tagIcon", "iconName", "actionIcon", "tabIcon", "iconTitle")
 ACTION_ICONS = r"(buttonIcon|btnIcon)='(edit|pencil|trash)'"
-NAV_TO_FORM = r"<@aButton\b[^>]*href='[^']*((Create|Modify)[A-Za-z]*\.jsp|view=(create|modify)[A-Za-z]*)"
 RAW_AMP = r"(href|action)='[^']*\?[^']*&(?!amp;|#)[a-z_]+="
 IFRAME_AMP = r"<@offcanvas\b[^>]*useIframe=true[^>]*targetUrl='[^']*&amp;|<@offcanvas\b[^>]*targetUrl='[^']*&amp;[^>]*useIframe=true"
 CALL = re.compile(r"<@([A-Za-z_][A-Za-z0-9_.]*)((?:'[^']*'|\"[^\"]*\"|[^>'\"])*)/?>", re.S)
@@ -456,6 +461,14 @@ def theme_classes(base):
     return names
 
 
+def check_house_forms(text, findings, kind):
+    """No offcanvas, front-office forms on @cForm with the core validation, no inline form (template_rules.py)."""
+    for line, remote in template_rules.offcanvas(text, kind == "fo"):
+        add(findings, "TD48", "WARN", line, "offcanvas: " + ("it loads another page, link to that page instead (@aButton href, the page keeps its own back link)" if remote else "put this content in a @modal (@cModal in the front office) opened by a button with data-bs-toggle=\"modal\""))
+    add_grouped(findings, "TD49", "WARN", template_rules.fo_forms(text, kind == "fo"), "front-office form without the core form validation: write it as <@cForm> (theme-form-validation loads by default), never foValidation=false")
+    add_grouped(findings, "TD50", "WARN", template_rules.inline_forms(text, kind == "fo"), "inline form: two visible fields or more side by side on one line; one field per row, the standard form layout")
+
+
 def check_legacy_markup(text, findings, know):
     """Bootstrap 3/4 and Font Awesome markup that Bootstrap 5 and the theme ignore."""
     hits = {}
@@ -506,11 +519,6 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         if hits:
             severity = "WARN" if kind in ("list", "page") else "INFO"
             add(findings, "TD02", severity, min(hits.values()), "rows listed from %s without an @empty state in the file%s" % (", ".join(sorted(hits)), "" if severity == "WARN" else " (fragment: decide whether an empty state belongs here)"))
-    for match in re.finditer(NAV_TO_FORM, text, flags=re.S):
-        call = text[match.start():text.find(">", match.start()) + 1]
-        if re.search(r"buttonIcon='(arrow-left|x)'|labelBack|labelCancel|cancel=true", call):
-            continue
-        add(findings, "TD03", "INFO", line_of(text, match.start()), "link button to a create/modify page: house rule is @offcanvas useIframe=true size='half' (delete/confirm stay @aButton)")
     boxes = list(macro_calls(text, "checkBox"))
     switches = [(offset, call) for offset, call in boxes if "orientation='switch'" in call or 'orientation="switch"' in call]
     computed = [call for _, call in boxes if re.search(r"\borientation=(?!['\"])", call)]
@@ -534,10 +542,6 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
     add_grouped(findings, "TD14", "WARN", hits, "btn-<color> in class next to the macro's default color='primary': two colour classes, CSS order decides; use color='<color>'")
     hits = [line_of(text, m.start()) for m in re.finditer(r"<@aButton\b[^>]*href='javascript:", text, flags=re.S)]
     add_grouped(findings, "TD15", "INFO", hits, "href='javascript:...' on a button: render a disabled button (href='#' color='light' class='disabled' params='aria-disabled=\"true\"')")
-    if opened_in_iframe:
-        hits = [line_of(text, offset) for offset, call in macro_calls(text, "button") if "type='submit'" in call and "form-validation" not in call]
-        hits += [line_of(text, offset) for offset, call in macro_calls(text, "aButton") if "form-validation" not in call and re.search(r"\b(cancel=true|labelBack|labelCancel)", call)]
-        add_grouped(findings, "TD17", "WARN", hits, "this form is opened in an @offcanvas useIframe and its submit/back buttons lack class='form-validation': luteceBSOffCanvas.js needs it to retarget them to the top window")
 
 
 def check_skin(text, findings, know):
@@ -634,6 +638,7 @@ def check_common(text, findings, kind, know):
     add_grouped(findings, "TD36", "INFO", hits, "literal words in a label attribute without #i18n{}")
     hits = [line_of(text, m.start()) for m in re.finditer(r"params='[^']*style=", text)]
     add_grouped(findings, "TD38", "INFO", hits, "inline style= in params: the theme owns the CSS")
+    check_house_forms(text, findings, kind)
     if know.css_classes:
         check_legacy_markup(text, findings, know)
     for name, line in conditional_selectors(text):
