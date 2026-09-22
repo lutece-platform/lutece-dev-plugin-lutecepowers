@@ -27,6 +27,7 @@ Reference: `~/.lutece-references/lutece-core/webapp/jsp/admin/templates/ManageTh
 ## Rules
 
 - One JSP per `@Controller` bean. Views and actions are dispatched by `processController()` from the `view=` / `action=` parameters — no separate `DoXxx.jsp` files.
+- **A migration keeps no legacy admin JSP.** A `DoXxx.jsp` (or any admin JSP) calling a bean that is not a `@Controller` is ported to `MVCAdminJspBean`, whatever its size: the core's CSRF filter only covers `@Action` methods, so a legacy action accepts a forged call. `verify-migration.sh` fails on it (JS04). Portlet JspBeans are the one exception (their token: CS01).
 - NEVER call `init()` in the JSP: `processController()` calls `init(request, right)` itself with the `@Controller.right` value. `${bean.init(request, bean.RIGHT_X)}` is also invalid EL (a static constant cannot be read through an instance).
 - `init()` in a JSP is only for non-MVC beans (portlet JspBeans without `@Controller`).
 - No `<jsp:useBean>`, no scriptlets (`<% %>`, `<%= %>`). The bean is resolved by CDI name in EL.

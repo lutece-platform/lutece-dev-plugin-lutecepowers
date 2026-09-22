@@ -776,12 +776,34 @@ fi
 COUNT=0; [ -n "$JS03_MATCHES" ] && COUNT=$(echo "$JS03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS03" "PASS" "EL calls a bean by its CDI name" 0
 else emit "JS03" "FAIL" "EL call by class name resolves only static methods (use the bean name)" "$COUNT" "$JS03_MATCHES"; fi
+
+# JS04: an admin JSP driving a bean that is not a @Controller. v8 dispatches views and actions through
+# processController() on one JSP per controller, and the automatic CSRF filter only covers those actions: a legacy
+# DoXxx.jsp calling bean.doXxx( request ) accepts a forged call unless the bean validates a token itself. Portlet
+# JspBeans are the one legacy path the platform keeps (CS01 covers their token).
+JS04_MATCHES=""
+if [ -d "webapp/jsp/admin" ] && [ -d "src/java" ]; then
+    JS04_MATCHES=$(grep -rlE '\$\{ *[a-z][A-Za-z0-9_]*JspBean\.' webapp/jsp/admin --include="*.jsp" 2>/dev/null | while read -r jsp; do
+        grep -q 'processController' "$jsp" && continue
+        bean=$(grep -oE '\$\{ *[a-z][A-Za-z0-9_]*JspBean\.' "$jsp" | head -1 | sed -E 's/\$\{ *//; s/\.$//')
+        cls=$(printf '%s' "$bean" | sed -E 's/^(.)/\U\1/')
+        src=$(grep -rlE "class $cls\b" src/java --include="*.java" 2>/dev/null | head -1)
+        [ -n "$src" ] || continue
+        grep -qE 'extends +PortletJspBean|@Controller' "$src" && continue
+        echo "$jsp: calls $bean, a JspBean without @Controller: port it to MVCAdminJspBean, one JSP with processController"
+    done) || JS04_MATCHES=""
+fi
+COUNT=0; [ -n "$JS04_MATCHES" ] && COUNT=$(echo "$JS04_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JS04" "PASS" "Admin JSPs dispatch through a @Controller" 0
+else emit "JS04" "FAIL" "Legacy admin JSP on a non-MVC bean: no v8 dispatch, no automatic CSRF (rules/jsp-admin.md)" "$COUNT" "$JS04_MATCHES"; fi
 echo ""
 
 # ─── Templates ───────────────────────────────────────────
 echo "CATEGORY: Templates"
 check_grep "TM01" 'class="panel' "webapp/WEB-INF/templates/admin/" "WARN" "Old Bootstrap panels -> v8 macros"
-check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "WARN" "jQuery -> vanilla JS"
+# TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
+if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
+check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"
 
 # TM03: Old upload macro names
 TM03_MATCHES=""
