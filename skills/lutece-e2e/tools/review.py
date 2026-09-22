@@ -155,6 +155,11 @@ def check():
         print("REVUE VISUELLE NON FAITE : %d groupes à examiner, artifacts/review.md absent "
               "(voir artifacts/review-todo.md)" % len(gs))
         return 7
+    listed = A / "review-todo.md"
+    if listed.exists() and f.stat().st_mtime < listed.stat().st_mtime:
+        print("REVUE VISUELLE PÉRIMÉE : artifacts/review.md date d'avant la liste de ce run (review-todo.md) ; "
+              "les groupes sont renumérotés à chaque run, refaire la revue sur les captures actuelles")
+        return 7
     done = set(re.findall(r"\bG\d{3}\b", f.read_text()))
     missing = [e["id"] for e in gs if e["id"] not in done]
     if missing:
