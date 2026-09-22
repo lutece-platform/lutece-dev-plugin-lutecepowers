@@ -55,7 +55,7 @@ if echo "$FILE" | grep -q '\.java$'; then
     check "SP02" 'org\.springframework' "FAIL" "Spring imports"
     check "SP04" '@Autowired' "FAIL" "@Autowired"
     check "CD04" 'org\.apache\.commons\.fileupload' "FAIL" "commons.fileupload"
-    check "DA01" 'daoUtil\.free( )' "WARN" "daoUtil.free()"
+    check "DA01" 'daoUtil\.free( )' "FAIL" "daoUtil.free()"
     check "LG01" 'AppLogService\.\(info\|error\|debug\|warn\).*+ ' "WARN" "String concat in logging"
 
     # Test-specific checks
@@ -76,7 +76,7 @@ if echo "$FILE" | grep -q '\.java$'; then
 elif echo "$FILE" | grep -qE '\.(html|ftl)$'; then
     # Template checks
     if echo "$FILE" | grep -q 'templates/admin/'; then
-        check "TM01" 'class="panel' "WARN" "Old Bootstrap panels"
+        check "TM01" 'class="panel' "FAIL" "Old Bootstrap panels"
         check "TM06" '<@addRequiredJsFiles[^B]' "FAIL" "@addRequiredJsFiles -> BO"
     fi
     check "TM02" 'jQuery\|\$(' "WARN" "jQuery usage"
@@ -94,7 +94,7 @@ elif echo "$FILE" | grep -qE '\.(html|ftl)$'; then
 
 elif echo "$FILE" | grep -q '\.jsp$'; then
     check "JS01" 'jsp:useBean' "FAIL" "jsp:useBean"
-    check "JS02" '<%[^@-]' "WARN" "JSP scriptlets"
+    check "JS02" '<%[^@-]' "FAIL" "JSP scriptlets"
 
 elif echo "$FILE" | grep -q '\.xml$'; then
     if echo "$FILE" | grep -q 'plugins/'; then

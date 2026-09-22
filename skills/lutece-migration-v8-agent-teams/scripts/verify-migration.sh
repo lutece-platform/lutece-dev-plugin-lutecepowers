@@ -146,7 +146,7 @@ check_pom "PM01" 'org\.springframework' "FAIL" "Spring dependencies in pom.xml"
 check_pom "PM02" 'net\.sf\.ehcache' "FAIL" "EhCache dependencies in pom.xml"
 check_pom "PM03" 'com\.sun\.mail' "FAIL" "javax.mail dependency in pom.xml"
 check_pom "PM04" 'org\.glassfish\.jersey' "FAIL" "Jersey dependencies in pom.xml"
-check_pom "PM05" 'net\.sf\.json-lib' "WARN" "json-lib in pom.xml (use Jackson)"
+check_pom "PM05" 'net\.sf\.json-lib' "FAIL" "json-lib in pom.xml (use Jackson)"
 check_pom "PM07" '<springVersion>' "FAIL" "springVersion property in pom.xml"
 check_pom "PM08" '<jiraProjectName>\|<jiraComponentId>' "WARN" "Jira properties in pom.xml (remove)"
 
@@ -317,7 +317,7 @@ echo ""
 
 # ─── DAO ─────────────────────────────────────────────────
 echo "CATEGORY: DAO"
-check_grep "DA01" 'daoUtil\.free( )' "src/" "WARN" "daoUtil.free() -> try-with-resources"
+check_grep "DA01" 'daoUtil\.free( )' "src/" "FAIL" "daoUtil.free() -> try-with-resources"
 echo ""
 
 # ─── JPA ─────────────────────────────────────────────────
@@ -346,7 +346,7 @@ if [ -d "src/" ]; then
 fi
 COUNT=0; [ -n "$CD01_MATCHES" ] && COUNT=$(echo "$CD01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "CD01" "PASS" "Static _instance/_singleton on CDI-managed classes" 0
-else emit "CD01" "WARN" "Static _instance/_singleton on CDI-managed classes" "$COUNT" "$CD01_MATCHES"; fi
+else emit "CD01" "FAIL" "Static _instance/_singleton on CDI-managed classes" "$COUNT" "$CD01_MATCHES"; fi
 
 check_grep "CD02" 'new CaptchaSecurityService()' "src/" "FAIL" "new CaptchaSecurityService() -> @Inject"
 check_grep "CD03" 'CompletableFuture\.runAsync( ( ) ->[^,]*$\|CompletableFuture\.runAsync( [^,]*$' "src/" "WARN" "CompletableFuture.runAsync without explicit executor -> use a managed ExecutorService or @Asynchronous"
@@ -382,7 +382,7 @@ COUNT=0; [ -n "$MV01_MATCHES" ] && COUNT=$(echo "$MV01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "MV01" "PASS" "new HashMap in JspBean/XPage (use @Inject Models)" 0
 else emit "MV01" "FAIL" "new HashMap in JspBean/XPage (use @Inject Models)" "$COUNT" "$MV01_MATCHES"; fi
 
-check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "WARN" "AbstractPaginatorJspBean -> @Pager IPager"
+check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "FAIL" "AbstractPaginatorJspBean -> @Pager IPager"
 # MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
 # token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
 # must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.
@@ -475,7 +475,7 @@ if [ -d "src/" ]; then
 fi
 COUNT=0; [ -n "$ST03_MATCHES" ] && COUNT=$(echo "$ST03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST03" "PASS" "DAO classes have CDI scope" 0
-else emit "ST03" "WARN" "DAO classes without @ApplicationScoped" "$COUNT" "$ST03_MATCHES"; fi
+else emit "ST03" "FAIL" "DAO classes without @ApplicationScoped" "$COUNT" "$ST03_MATCHES"; fi
 
 # ST04: Service classes without CDI scope
 ST04_MATCHES=""
@@ -490,7 +490,7 @@ if [ -d "src/" ]; then
 fi
 COUNT=0; [ -n "$ST04_MATCHES" ] && COUNT=$(echo "$ST04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST04" "PASS" "Service classes have CDI scope" 0
-else emit "ST04" "WARN" "Service classes without CDI scope" "$COUNT" "$ST04_MATCHES"; fi
+else emit "ST04" "FAIL" "Service classes without CDI scope" "$COUNT" "$ST04_MATCHES"; fi
 
 # ST05: files created by the migration must be able to reach the repository. ST01 only proves the file is on
 # disk; a file that .gitignore excludes never will, and the plugin ships without its CDI descriptor (the Home
@@ -764,7 +764,7 @@ if [ -d "webapp/" ]; then
 fi
 COUNT=0; [ -n "$JS02_MATCHES" ] && COUNT=$(echo "$JS02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS02" "PASS" "No JSP scriptlets" 0
-else emit "JS02" "WARN" "Old JSP scriptlets -> EL expressions" "$COUNT" "$JS02_MATCHES"; fi
+else emit "JS02" "FAIL" "Old JSP scriptlets -> EL expressions" "$COUNT" "$JS02_MATCHES"; fi
 
 # JS03: an EL call written with the class name resolves only static methods (StaticFieldELResolver), so an
 # instance method fails at runtime with MethodNotFoundException while everything compiled. A JspBean called
@@ -800,7 +800,7 @@ echo ""
 
 # ─── Templates ───────────────────────────────────────────
 echo "CATEGORY: Templates"
-check_grep "TM01" 'class="panel' "webapp/WEB-INF/templates/admin/" "WARN" "Old Bootstrap panels -> v8 macros"
+check_grep "TM01" 'class="panel' "webapp/WEB-INF/templates/admin/" "FAIL" "Old Bootstrap panels -> v8 macros"
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
 check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"
@@ -813,7 +813,7 @@ if [ -d "webapp/WEB-INF/templates/" ]; then
 fi
 COUNT=0; [ -n "$TM03_MATCHES" ] && COUNT=$(echo "$TM03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM03" "PASS" "Upload macros use BO variants" 0
-else emit "TM03" "WARN" "Old upload macros -> BO variants" "$COUNT" "$TM03_MATCHES"; fi
+else emit "TM03" "FAIL" "Old upload macros -> BO variants" "$COUNT" "$TM03_MATCHES"; fi
 
 # TM04: Unsafe access to errors/infos/warnings
 TM04_MATCHES=""

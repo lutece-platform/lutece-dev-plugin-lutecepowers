@@ -22,7 +22,7 @@
 | PM02 | FAIL | EhCache dependencies in pom.xml | `net\.sf\.ehcache` | pom.xml |
 | PM03 | FAIL | javax.mail dependency | `com\.sun\.mail` | pom.xml |
 | PM04 | FAIL | Jersey dependencies | `org\.glassfish\.jersey` | pom.xml |
-| PM05 | WARN | json-lib (use Jackson) | `net\.sf\.json-lib` | pom.xml |
+| PM05 | FAIL | json-lib (use Jackson) | `net\.sf\.json-lib` | pom.xml |
 | PM06 | FAIL | Parent version must start with `8.` | (custom check) | pom.xml |
 | PM07 | FAIL | springVersion property | `<springVersion>` | pom.xml |
 | PM08 | WARN | Jira properties (remove) | `<jiraProjectName>\|<jiraComponentId>` | pom.xml |
@@ -95,7 +95,7 @@
 
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
-| DA01 | WARN | daoUtil.free() | `daoUtil\.free( )` | *.java |
+| DA01 | FAIL | daoUtil.free() | `daoUtil\.free( )` | *.java |
 
 ## JPA (JP)
 
@@ -115,7 +115,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
-| CD01 | WARN | Static _instance on CDI classes | (cross-file check) | *.java |
+| CD01 | FAIL | Static _instance on CDI classes | (cross-file check) | *.java |
 | CD02 | FAIL | new CaptchaSecurityService() | `new CaptchaSecurityService()` | *.java |
 | CD03 | WARN | CompletableFuture.runAsync | `CompletableFuture\.runAsync` | *.java |
 | CD04 | FAIL | commons.fileupload | `org\.apache\.commons\.fileupload` | *.java |
@@ -126,7 +126,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | MV01 | FAIL | new HashMap in JspBean/XPage | `new HashMap` in MVCAdminJspBean/MVCApplication files | *.java |
-| MV02 | WARN | AbstractPaginatorJspBean | `AbstractPaginatorJspBean` | *.java |
+| MV02 | FAIL | AbstractPaginatorJspBean | `AbstractPaginatorJspBean` | *.java |
 | MV03 | WARN | CSRF token carried by hand inside an MVC bean, or `securityTokenEnabled = false` | `SecurityTokenService\.MARK_TOKEN` in a file that has `@Controller` / `MVCAdminJspBean` / `MVCApplication` | *.java |
 | MV04 | FAIL | FileItem (not MultipartItem) | `import.*FileItem[^P]` | *.java |
 
@@ -159,8 +159,8 @@ not reported, nor is any pattern outside `/rest/` — a filter on `/jsp/site/*` 
 |----|----------|-------------|---------|-------|
 | ST01 | FAIL | beans.xml exists | (file existence check) | META-INF/beans.xml |
 | ST02 | FAIL | final on a CDI class resolved by its concrete type | (cross-file check) | *.java |
-| ST03 | WARN | DAO without CDI scope | (cross-file check) | *.java |
-| ST04 | WARN | Service without CDI scope | (cross-file check) | *.java |
+| ST03 | FAIL | DAO without CDI scope | (cross-file check) | *.java |
+| ST04 | FAIL | Service without CDI scope | (cross-file check) | *.java |
 | ST05 | FAIL | files created by the migration excluded by .gitignore (they would never be committed) | `git check-ignore` | beans.xml, test microprofile-config |
 | LE01 | FAIL | line endings converted in a changed file (diff widened to the whole file) | carriage returns in HEAD vs the work tree | changed files |
 
@@ -270,16 +270,16 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
 | JS01 | FAIL | jsp:useBean | `jsp:useBean` | *.jsp |
-| JS02 | WARN | JSP scriptlets | `<%[^@-]` | *.jsp |
+| JS02 | FAIL | JSP scriptlets | `<%[^@-]` | *.jsp |
 | JS04 | FAIL | admin JSP driving a bean that is not a `@Controller` (legacy `DoXxx.jsp`, portlets excepted): no v8 dispatch, no automatic CSRF | (cross-file check) | *.jsp, *.java |
 
 ## Templates (TM)
 
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
-| TM01 | WARN | Old Bootstrap panels | `class="panel` | admin/*.html |
+| TM01 | FAIL | Old Bootstrap panels | `class="panel` | admin/*.html |
 | TM02 | FAIL | jQuery in a template with no `library-theme-jquery` in the pom (WARN when declared): nothing loads it, the script dies | `jQuery\|\$(` | templates |
-| TM03 | WARN | Old upload macros | (custom check) | *.html |
+| TM03 | FAIL | Old upload macros | (custom check) | *.html |
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
 | TM06 | FAIL | @addRequiredJsFiles (not BO) | (custom check) | admin/*.html |
