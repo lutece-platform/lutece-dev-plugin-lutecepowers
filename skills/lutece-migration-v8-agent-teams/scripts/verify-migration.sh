@@ -805,7 +805,7 @@ check_grep "TM01" 'class="panel' "webapp/WEB-INF/templates/admin/" "FAIL" "Old B
 # carries known XSS flaws) and v8 has the component the widget stood for (plugin-asynchronousupload).
 VL01_MATCHES=""
 if [ -d "webapp/" ]; then
-    VL01_MATCHES=$(find webapp -path webapp/WEB-INF -prune -o \( -iname 'jquery.js' -o -iname 'jquery.min.js' -o -iname 'jquery-[0-9]*.js' -o -iname '*jquery*file*upload*' -o -iname '*swfupload*' -o -iname '*plupload*' -o -iname '*uploadify*' \) -print 2>/dev/null | grep -v '^webapp/WEB-INF$') || VL01_MATCHES=""
+    VL01_MATCHES=$(find webapp -path webapp/WEB-INF -prune -o \( -iname 'jquery.js' -o -iname 'jquery.min.js' -o -iname 'jquery-[0-9]*.js' -o -iname '*jquery*file*upload*' -o -iname '*swfupload*' -o -iname '*plupload*' -o -iname '*uploadify*' \) -print 2>/dev/null | grep -v '^webapp/WEB-INF$'; grep -rlE '(\$|jQuery)\.fn\.([A-Za-z_$][A-Za-z0-9_$]* *=|extend\()' webapp --include='*.js' 2>/dev/null | grep -v '^webapp/WEB-INF/' | grep -viE 'jquery[-.]?[0-9]|jquery(\.min)?\.js$|file[-.]?upload|swfupload|plupload|uploadify') || VL01_MATCHES=""
 fi
 COUNT=0; [ -n "$VL01_MATCHES" ] && COUNT=$(echo "$VL01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "VL01" "PASS" "No vendored jQuery or upload widget" 0

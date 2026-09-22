@@ -279,7 +279,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 |----|----------|-------------|---------|-------|
 | TM01 | FAIL | Old Bootstrap panels | `class="panel` | admin/*.html |
 | TM02 | FAIL | jQuery in a template with no `library-theme-jquery` in the pom (WARN when declared): nothing loads it, the script dies | `jQuery\|\$(` | templates |
-| VL01 | FAIL | a copy of jQuery or of a jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, uploadify) under `webapp/` | file names | webapp/ |
+| VL01 | FAIL | a copy of jQuery, of a jQuery plugin (a `.js` defining `$.fn.x`) or of a jQuery-era upload widget under `webapp/` | file names, `$.fn.` in *.js | webapp/ |
 | TM03 | FAIL | Old upload macros | (custom check) | *.html |
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |

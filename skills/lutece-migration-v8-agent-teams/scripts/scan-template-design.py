@@ -58,7 +58,8 @@ Both sides
   TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
-  TD46 WARN  a copy of jQuery shipped by the project (a page loading its own jquery*.js, or the file under webapp/)
+  TD46 WARN  a copy of jQuery or of a jQuery plugin shipped by the project (a page loading its own jquery*.js, a file
+             under webapp/ named jquery*.js or defining $.fn.x)
   TD45 WARN  jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, Dropzone, uploadify), in a template or
              vendored under webapp/: the v8 upload component is plugin-asynchronousupload (Uppy, no jQuery)
   TD38 INFO  inline style= in params
@@ -427,6 +428,9 @@ def check_upload_widget(text, findings):
         add(findings, "TD45", "WARN", line_of(text, match.start()), "upload widget '%s': %s" % (match.group(0), UPLOAD_ADVICE))
 
 
+JQUERY_PLUGIN = re.compile(r"(?:\$|jQuery)\.fn\.[A-Za-z_$][\w$]*\s*=|(?:\$|jQuery)\.fn\.extend\(")
+
+
 def vendored_libraries(root):
     """(code, path) of each upload widget library or jQuery copy shipped under webapp/, outside the templates."""
     base = os.path.join(root, "webapp")
@@ -438,6 +442,8 @@ def vendored_libraries(root):
             if re.search(r"(?i)jquery[-.]?file[-.]?upload|swfupload|plupload|dropzone|uploadify|fine-?uploader", name):
                 out.append(("TD45", os.path.relpath(os.path.join(dirpath, name), root)))
             elif re.search(r"(?i)^jquery([-.]\d[\d.]*)?(\.min)?\.js$", name):
+                out.append(("TD46", os.path.relpath(os.path.join(dirpath, name), root)))
+            elif name in files and name.endswith(".js") and JQUERY_PLUGIN.search(read(os.path.join(dirpath, name))):
                 out.append(("TD46", os.path.relpath(os.path.join(dirpath, name), root)))
             else:
                 continue
@@ -728,7 +734,7 @@ def main():
         for rel in files:
             entries.append(scan_file(root, rel, scope, iframe_targets, know, jquery_declared))
     for code, rel in vendored_libraries(root):
-        message = "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component" if code == "TD45" else "jQuery shipped by the project: nothing updates this copy (jQuery before 3.5 carries known XSS flaws); port its callers to vanilla JS and delete it"
+        message = "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component" if code == "TD45" else "jQuery, or a jQuery plugin, shipped by the project: nothing updates this copy (jQuery before 3.5 carries known XSS flaws); port its callers to vanilla JS and delete it"
         entries.append({"path": rel, "kind": "vendored", "findings": [{"code": code, "severity": "WARN", "line": 1, "message": message}]})
     dupes = duplicate_macros(root, admin_files + skin_files)
     for entry in entries:
