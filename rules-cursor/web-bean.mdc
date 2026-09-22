@@ -116,6 +116,18 @@ public String doRemoveTask( HttpServletRequest request )
 }
 ```
 
+**Blind spots of the automatic token** (core 8.0.x, observed on e2e benches), write the controller around them and
+cover each one with a negative e2e scenario:
+- **An `@Action` also runs on GET, unvalidated.** The filter skips GET while `processController` dispatches the action
+  whatever the method, so `ManageX.jsp?action=removeX&id=1` in a link or an `<img>` deletes. Every mutation is a POST
+  form (a link to a confirmation `@View`, never to the action), and the negative scenario proves the GET forgery.
+- **The default view reached without `?view=` issues no token**: an entry point linked from elsewhere
+  (`admin_url`, another plugin) opens the default view bare, and its form then posts no valid token. Redirect the bare
+  default view to `?view=<name>`, or link the entry points with their view.
+- **A multipart form drops the query string**: the admin multipart handler builds the parameters from the body only,
+  so `action=`/`view=` must be hidden fields of the form, not in its `action` URL, and one token exists per view:
+  one form, one action; a secondary button goes through a confirmation view.
+
 Forbidden with `securityTokenEnabled = true`: `SecurityTokenService.MARK_TOKEN` in the model, `getToken()`, `validate()`, `@Inject SecurityTokenService` in the bean. Keep them ONLY in non-MVC beans (no `@Controller`), where `getSecurityTokenService()` (inherited from `AdminFeaturesPageJspBean`) is the accessor.
 
 ## Pagination (list views)
