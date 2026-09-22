@@ -27,6 +27,20 @@ attachments to the report, never as files of the repository.
 Prerequisites: Docker + Compose v2, Maven with the Lutece repositories, JDK 17+ on the host (to run `mvn` and
 `jar`), network access to Maven Central once.
 
+**`run.sh build` installs the artefact under test in `~/.m2`.** That is how the bench proves a fix before it is
+published, but the patched build then shadows the published snapshot for **every other project on the machine**,
+silently and until someone notices. On a plugin it is usually harmless; on `lutece-core` it changes what every
+plugin resolves. After a bench on the core, put the published build back:
+
+```bash
+V=lutece-core-8.0.2-<timestamp>-<build>   # the latest of maven-metadata.xml on the snapshots repository
+curl -sO "<snapshots-repo>/fr/paris/lutece/lutece-core/8.0.2-SNAPSHOT/$V.jar"   # and .pom, and -webapp.zip
+mvn install:install-file -Dfile=$V.jar -DpomFile=$V.pom \
+  -DgroupId=fr.paris.lutece -DartifactId=lutece-core -Dversion=8.0.2-SNAPSHOT -Dpackaging=jar
+```
+
+Check with `md5sum` that the local `lutece-core-8.0.2-SNAPSHOT.jar` matches the downloaded one.
+
 ## Additional resources
 
 Read these only when the case applies — none is needed for a plain bench.

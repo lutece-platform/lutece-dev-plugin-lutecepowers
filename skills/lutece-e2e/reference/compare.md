@@ -93,6 +93,39 @@ A bench keeps `E2E_PLUGINS` to what the artefact really needs.
 the plugin as shipped actually runs, and read `artifacts/v7/logs7/ant-dbinit.log` — the Ant build continues on
 SQL errors.
 
+## Before / after — my working tree against HEAD
+
+`compare` answers "does the v8 artefact behave like the v7 one". A different question comes up as soon as you
+change a shared file: **did my change break a screen that worked?** The bench answers it too, with two runs and
+no guesswork.
+
+```bash
+git worktree add --detach <scratch>/before HEAD      # the state before, as a second checkout
+bash <skill>/scripts/init-e2e.sh <scratch>/before --target core --name <name>-avant
+sed -i 's/^E2E_PORT=.*/E2E_PORT=22180/;s/^E2E_DB_PORT=.*/E2E_DB_PORT=17406/;s/^E2E_MAIL_PORT=.*/E2E_MAIL_PORT=22125/' <scratch>/before/e2e/e2e.conf
+cd <scratch>/before/e2e && ./run.sh build && ./run.sh up && ./run.sh inventory && ./run.sh discover && ./run.sh test tests/test_screens.py
+```
+
+Then compare the two `artifacts/junit-*.xml`, **on the tests present in both runs only**: a crawl follows the
+links the pages render, so a fix that restores a link adds screens and the two runs do not cover the same set.
+Counting "51 failures before, 53 after" out of different totals says nothing.
+
+```python
+import xml.etree.ElementTree as ET, glob, os
+def load(d):
+    return {tc.get("name"): any(c.tag in ("failure","error") for c in tc)
+            for f in glob.glob(os.path.join(d,"junit-*.xml"))
+            for tc in ET.parse(f).getroot().iter("testcase")}
+a, b = load("<before>/e2e/artifacts"), load("<after>/e2e/artifacts")
+common = set(a) & set(b)
+print("régressions:", sorted(n for n in common if not a[n] and b[n]))
+print("corrigés   :", sorted(n for n in common if a[n] and not b[n]))
+```
+
+An empty regression list on a few hundred common tests is the only statement worth making about a change to a
+shared macro or a shared script. Remember that `run.sh build` on the second bench installs **that** version in
+`~/.m2` too: restore the published build when both runs are done (see the skill's prerequisites).
+
 ## An instance already deployed
 
 `./e2e/run.sh external` runs the suites against a site that runs elsewhere — a recette, a preprod — from
