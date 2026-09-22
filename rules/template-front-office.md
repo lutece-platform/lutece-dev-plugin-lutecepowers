@@ -47,6 +47,12 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 - i18n: `#i18n{prefix.key}` — reuse `portal.util.*` keys from `~/.lutece-references/lutece-core` when possible (see `rules/template-back-office.md` for the list of existing keys)
 - Forms: no `_csrftoken` hidden field, the core injects it into every `<form>` when the XPage `@Controller` has `securityTokenEnabled = true` (see `rules/web-bean.md`)
 
+## Forms and dialogs (blocking)
+
+- **Every form is `<@cForm>`** (`verify-migration.sh` TM11, `scan-template-design.py` TD49): it loads the core `theme-form-validation` by default. Never `foValidation=false`, never a raw `<form>`.
+- **No offcanvas** (TM10, TD48): content of the page goes in `<@cModal title id>`; the macro suffixes the id, so `id='search'` is opened by `data-bs-toggle="modal" data-bs-target="#searchModal"`. Another page is reached by a plain link (`@cLink`, `@cBtn href`).
+- **No inline form** (TM12, TD50): no two visible fields side by side (`form-inline`, `d-flex` on a form). One field per row.
+
 ## Model Messages — Null-Safety and Value Types (MANDATORY)
 
 `errors`, `infos`, `warnings` are **NOT pre-initialized** in the model — they only exist after `addError()`/`addInfo()`/`addWarning()` is called (`MVCApplication.addMessage`). Value types differ:

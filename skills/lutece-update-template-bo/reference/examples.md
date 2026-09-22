@@ -3,35 +3,38 @@
 Complete templates to copy from. Each one is a real page shape, not a fragment.
 
 ## Contents
-- Management page with @manageFeature (list + creation offcanvas)
+- Management page with @manageFeature (list + creation modal)
 - Management page with @table (tabular data)
 - Edit form (dedicated page)
 - Page with tabs (internal)
 - Page with tabs (URL navigation)
-- Advanced management page (search offcanvas + bulk actions + empty state)
-- Editor page (create/modify with toolbar, properties offcanvas, rich content)
+- Advanced management page (search modal + bulk actions + empty state)
+- Editor page (create/modify with toolbar, properties modal, rich content)
 - Embedded panel / fragment (tab content, without page structure)
 
-### Management page with @manageFeature (list + creation offcanvas)
+### Management page with @manageFeature (list + creation modal)
 
 ```freemarker
 <@pageContainer>
 	<@pageColumn>
 		<@pageHeader title='#i18n{plugin.manage_items.title}'>
-			<@offcanvas id="offcanvasCreate" title="#i18n{plugin.create_item.title}" btnTitle="#i18n{plugin.create_item.title}" btnIcon="plus" btnColor="primary" position="end">
-				<@tform name='create_item' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
-					<@messages errors=errors />
+			<@button type='button' title='#i18n{plugin.create_item.title}' buttonIcon='plus' color='primary' params='data-bs-toggle="modal" data-bs-target="#createModal"' />
+		</@pageHeader>
+		<@modal id='createModal'>
+			<@modalHeader modalTitle='#i18n{plugin.create_item.title}' />
+			<@modalBody>
+				<@tform name='create_item' id='create_item' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
 					<@formGroup labelFor='name' labelKey='#i18n{plugin.create_item.labelName}' helpKey='#i18n{plugin.create_item.labelName.help}' mandatory=true>
-						<@input type='text' name='name' value='' />
-					</@formGroup>
-					<@formGroup>
-						<@button type='submit' name='action_createItem' buttonIcon='check' title='#i18n{portal.admin.message.buttonValidate}' />
-						<@button type='submit' name='view_manageItems' buttonIcon='times' title='#i18n{portal.admin.message.buttonCancel}' color='light' cancel=true />
+						<@input type='text' name='name' id='name' value='' mandatory=true />
 					</@formGroup>
 				</@tform>
-			</@offcanvas>
-		</@pageHeader>
-		<@messages infos=infos />
+			</@modalBody>
+			<@modalFooter>
+				<@button type='button' title='#i18n{portal.util.labelCancel}' color='light' params='data-bs-dismiss="modal"' />
+				<@button type='submit' formId='create_item' name='action_createItem' buttonIcon='check' title='#i18n{portal.admin.message.buttonValidate}' color='primary' />
+			</@modalFooter>
+		</@modal>
+		<@messages errors=errors infos=infos />
 		<@manageFeature>
 			<#list item_list as item>
 			<@manageFeatureItem>
@@ -39,7 +42,7 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 					<strong>${item.name}</strong>
 				</@manageFeatureItemColumn>
 				<@manageFeatureItemColumn auto=true align='end'>
-					<@offcanvas targetUrl="jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}" targetElement="#edit_item" id="item-edit-${item.id}" btnIcon="edit" btnColor="primary" position="end" title="#i18n{portal.util.labelModify}" />
+					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}' title='#i18n{portal.util.labelModify}' buttonIcon='edit' color='primary' class='me-1' hideTitle=['all'] />
 					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' color='danger' size='' hideTitle=['all'] />
 				</@manageFeatureItemColumn>
 			</@manageFeatureItem>
@@ -169,25 +172,26 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 </@pageContainer>
 ```
 
-### Advanced management page (search offcanvas + bulk actions + empty state)
+### Advanced management page (search modal + bulk actions + empty state)
 
 ```freemarker
 <@pageContainer>
 	<@pageColumn>
-		<@pageHeader title='#i18n{plugin.manage_items.title}' toolsClass='d-flex'>
-			<#if permission_create>
-				<@tform action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
-					<@button type='submit' name='view_createItem' buttonIcon='plus' class='me-1' title='#i18n{plugin.manage_items.buttonAdd}' hideTitle=['xs'] />
-				</@tform>
-			</#if>
+		<@pageHeader title='#i18n{plugin.manage_items.title}'>
 			<#if item_list?has_content && item_list?size gt 1>
-				<@offcanvas id='offcanvasSearch' title='#i18n{plugin.manage_items.search}' btnTitle='#i18n{plugin.manage_items.search}' position='end' btnIcon='search' size='sm'>
-					<@tform id='form-search' action='jsp/admin/plugins/myplugin/ManageItems.jsp?search='>
+				<@button type='button' title='#i18n{plugin.manage_items.search}' buttonIcon='search' class='me-1' hideTitle=['xs'] params='data-bs-toggle="modal" data-bs-target="#searchModal"' />
+			</#if>
+			<#if permission_create>
+				<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' buttonIcon='plus' color='primary' title='#i18n{plugin.manage_items.buttonAdd}' hideTitle=['xs'] />
+			</#if>
+		</@pageHeader>
+		<#if item_list?has_content && item_list?size gt 1>
+			<@modal id='searchModal'>
+				<@modalHeader modalTitle='#i18n{plugin.manage_items.search}' />
+				<@modalBody>
+					<@tform id='form-search' method='get' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
 						<@formGroup labelFor='search_text' labelKey='#i18n{plugin.manage_items.search}'>
-							<@inputGroup>
-								<@input type='text' id='search_text' name='search_text' value='${search_text!\'\'}' />
-								<@button type='submit' buttonIcon='search' hideTitle=['all'] />
-							</@inputGroup>
+							<@input type='text' id='search_text' name='search_text' value='${search_text!\'\'}' />
 						</@formGroup>
 						<@formGroup labelFor='status' labelKey='#i18n{plugin.manage_items.labelStatus}'>
 							<@select id='status' name='status'>
@@ -196,14 +200,14 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 								<@option value="2" label='#i18n{plugin.manage_items.labelInactive}' />
 							</@select>
 						</@formGroup>
-						<@columns>
-							<@button type='submit' buttonIcon='search me-1' title='#i18n{plugin.manage_items.search}' />
-							<@button type='submit' color='danger' buttonIcon='x me-1' name='button_reset' title='#i18n{plugin.manage_items.reset}' />
-						</@columns>
 					</@tform>
-				</@offcanvas>
-			</#if>
-		</@pageHeader>
+				</@modalBody>
+				<@modalFooter>
+					<@button type='submit' formId='form-search' color='light' buttonIcon='x me-1' name='button_reset' title='#i18n{plugin.manage_items.reset}' />
+					<@button type='submit' formId='form-search' color='primary' buttonIcon='search me-1' title='#i18n{plugin.manage_items.search}' />
+				</@modalFooter>
+			</@modal>
+		</#if>
 		<@messages infos=infos />
 		<#if item_list?has_content && item_list?size gt 0>
 			<@tform id='form_bulk_action' method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp' boxed=true>
@@ -268,7 +272,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 </@pageContainer>
 ```
 
-### Editor page (create/modify with toolbar, properties offcanvas, rich content)
+### Editor page (create/modify with toolbar, properties modal, rich content)
 
 ```freemarker
 <@pageContainer>
@@ -282,42 +286,46 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 						<@button class='me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save' name='action_save' hideTitle=['xs','sm', 'md', 'lg'] />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' color='danger' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['xs','sm', 'md', 'lg'] size='' />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=previewItem&id=${item.id}' title='#i18n{plugin.modify_item.labelPreview}' hideTitle=['xs','sm', 'md', 'lg'] color='default' size='' buttonIcon='eye' />
-						<@offcanvas id='item-properties' title='#i18n{plugin.modify_item.labelProperties}' btnTitle='#i18n{plugin.modify_item.labelProperties}' position='end' btnIcon='cog me-2' btnClass='me-1 rounded-end' hideTitle=['xs','sm', 'md', 'lg']>
-							<@box>
-								<@boxHeader title='#i18n{plugin.modify_item.labelTags}'>
-									<@icon style='tags' />
-								</@boxHeader>
-								<@boxBody>
-									<@formGroup labelFor='addTag' labelKey='#i18n{plugin.manage_tags.buttonAdd}' rows=2>
-										<@inputGroup>
-											<@select name='tag_doc' default_value='' items=list_tag size='' />
-											<@inputGroupItem type='btn'>
-												<@button type='button' id='addTag' name='addTag' buttonIcon='bookmark-plus' size='' />
-											</@inputGroupItem>
-										</@inputGroup>
-									</@formGroup>
-									<@listGroup id='tag-list'>
-										...dynamic tags...
-									</@listGroup>
-								</@boxBody>
-							</@box>
-							<@box>
-								<@boxHeader title='#i18n{plugin.modify_item.labelAttachments}' boxTools=true>
-									<@button title="#i18n{plugin.modify_item.labelAddFile}" id='btn-add-files' color='outline-primary' buttonIcon='plus' size='xs' />
-								</@boxHeader>
-								<@boxBody>
-									<@input class='visually-hidden' name='attachment' id='attachment' type='file' />
-									<@div class="resources">
-										<@listGroup id='content-list'>
-											...existing files...
-										</@listGroup>
-									</@div>
-								</@boxBody>
-							</@box>
-						</@offcanvas>
+						<@button type='button' class='me-1' title='#i18n{plugin.modify_item.labelProperties}' buttonIcon='cog me-2' hideTitle=['xs','sm', 'md', 'lg'] params='data-bs-toggle="modal" data-bs-target="#item-properties"' />
 					</@columns>
 				</@row>
 			</@pageHeader>
+			<@modal id='item-properties' size='lg'>
+				<@modalHeader modalTitle='#i18n{plugin.modify_item.labelProperties}' />
+				<@modalBody>
+					<@box>
+						<@boxHeader title='#i18n{plugin.modify_item.labelTags}'>
+							<@icon style='tags' />
+						</@boxHeader>
+						<@boxBody>
+							<@formGroup labelFor='addTag' labelKey='#i18n{plugin.manage_tags.buttonAdd}' rows=2>
+								<@inputGroup>
+									<@select name='tag_doc' default_value='' items=list_tag size='' />
+									<@inputGroupItem type='btn'>
+										<@button type='button' id='addTag' name='addTag' buttonIcon='bookmark-plus' size='' />
+									</@inputGroupItem>
+								</@inputGroup>
+							</@formGroup>
+							<@listGroup id='tag-list'>
+								...dynamic tags...
+							</@listGroup>
+						</@boxBody>
+					</@box>
+					<@box>
+						<@boxHeader title='#i18n{plugin.modify_item.labelAttachments}' boxTools=true>
+							<@button title="#i18n{plugin.modify_item.labelAddFile}" id='btn-add-files' color='outline-primary' buttonIcon='plus' size='xs' />
+						</@boxHeader>
+						<@boxBody>
+							<@input class='visually-hidden' name='attachment' id='attachment' type='file' />
+							<@div class="resources">
+								<@listGroup id='content-list'>
+									...existing files...
+								</@listGroup>
+							</@div>
+						</@boxBody>
+					</@box>
+				</@modalBody>
+			</@modal>
 			<@messages errors=errors />
 			<@formGroup labelFor='title' labelKey='#i18n{plugin.create_item.labelTitle}' hideLabel=['all'] rows=2>
 				<@input name='title' id='title' value='${item.title!?trim}' class='visually-hidden' />

@@ -11,7 +11,7 @@ Before writing or modifying a template, ALWAYS consult:
 - macro definitions (signatures): `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/themes/tabler/{components,elements,forms,layout,utilities}/**/*.ftl`
 - template examples: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/admin/<feature>/*.html` (e.g. `rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and `~/.lutece-references/lutece-form-plugin-forms/webapp/WEB-INF/templates/admin/plugins/forms/*.html`
 
-Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@alert` takes `color` (not `type`); `@aButton`/`@button` take `buttonIcon` + `title` (not `iconClass`/`labelKey`); `@formGroup`/`@input` take `mandatory` (not `required`); `@select` takes `items` (a `ReferenceList`) + `default_value`; `@radioButton`/`@checkBox` take `labelKey` (not `label`); `@offcanvas` takes `position` (not `placement`); `@input` takes `placeHolder` (not `placeholder`); there is no `@input type='richtext'` (use `type='textarea' richtext=true`).
+Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@alert` takes `color` (not `type`); `@aButton`/`@button` take `buttonIcon` + `title` (not `iconClass`/`labelKey`); `@formGroup`/`@input` take `mandatory` (not `required`); `@select` takes `items` (a `ReferenceList`) + `default_value`; `@radioButton`/`@checkBox` take `labelKey` (not `label`); `@input` takes `placeHolder` (not `placeholder`); there is no `@input type='richtext'` (use `type='textarea' richtext=true`).
 
 ## Back-office macro bugs to work around (report upstream, do not copy the workaround into the FO)
 
@@ -33,6 +33,12 @@ Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`.
 - **Tabular data** (several data columns per row, reports, grids, child-entity tables): `@table` with `<tr>/<th>/<td>`. Forms uses it in 9 templates. Never replace an existing well-formed `@table` "systematically": switch to `@manageFeature` only when the rows are entities with edit/delete actions.
 - **Empty state**: test the list before iterating and render `@empty` otherwise.
 - **Pagination**: `@paginationAdmin paginator=paginator combo=1` after the list (server-side, `IPager`). `@paginationAjax` (JSON endpoint + `@ResponseBody`, see `/lutece-patterns` §5) is an option for large datasets; no core or forms template uses it today.
+
+## Navigation, dialogs and forms (blocking)
+
+- **No offcanvas** (`verify-migration.sh` TM10, `scan-template-design.py` TD48). Content written in the page (search, a short creation form, editor properties) goes in `@modal` > `@modalHeader modalTitle` / `@modalBody` / `@modalFooter`, opened by `<@button type='button' params='data-bs-toggle="modal" data-bs-target="#id"' />`. Another page (create, modify, properties screen) is a plain link `<@aButton href>` (`<@link class='dropdown-item' href>` in a dropdown) to a full page with its own back link.
+- **Required fields carry `mandatory=true`**: the BO `@tform` loads no validation module (the `@cForm` rule, TM11 / TD49, is front office only).
+- **No inline form** (TM12, TD50): no `@tform type='inline'` / `'flex'`, no `form-inline` / `d-flex` on a form, no two `formStyle='inline'` fields in a form. One field per row. A hidden form with a single submit button (Import, Export) may keep `type='inline'`.
 
 ## Messages — `@messages`
 

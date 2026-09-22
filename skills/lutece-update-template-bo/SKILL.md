@@ -111,7 +111,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 
 ### @tform - Forms
 - `type='horizontal'` for standard forms (label on the left, input on the right)
-- `type='inline'` for inline forms (action buttons)
+- `type='inline'` only for a hidden form holding a single submit button (Import, Export actions)
 - `boxed=true` when the form replaces a `<@box>` wrapper (see convention above)
 - Use `<@formGroup>` to group label + input with `labelKey`, `helpKey`, `mandatory`
 

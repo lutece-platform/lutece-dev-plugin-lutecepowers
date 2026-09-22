@@ -445,7 +445,7 @@ LEGACY_CLASS = re.compile(r"^(panel(-[a-z]+)?|well(-(sm|lg))?|glyphicon(-[a-z-]+
                           r"sr-only(-focusable)?|badge-(primary|secondary|success|danger|warning|info|light|dark|pill)|[mp][lr]-(\d|auto|sm-\d|md-\d|lg-\d)|"
                           r"float-(left|right)|text-(left|right)|no-gutters|media(-body)?|jumbotron|card-deck|card-columns|dropdown-menu-(left|right)|"
                           r"font-weight-[a-z]+|font-italic|embed-responsive(-[a-z0-9]+)?|close)$")
-LEGACY_DATA = re.compile(r"\sdata-(toggle|target|dismiss|ride|slide|slide-to|parent|spy|placement|content|original-title)\s*=")
+LEGACY_DATA = re.compile(r"\sdata-(toggle|target|dismiss|ride|slide|slide-to|parent|spy|placement|content|original-title|backdrop|keyboard|interval|offset)\s*=")
 CLASS_ATTR = re.compile(r"""\bclass\s*=\s*(["'])(.*?)\1""", re.S)
 
 

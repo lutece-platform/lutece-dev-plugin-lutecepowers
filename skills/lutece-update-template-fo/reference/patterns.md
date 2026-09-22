@@ -153,9 +153,9 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 
 ### cForm - Validation and encoding
 - Signature (`forms/layout/cForm.ftl`): `class id params name method='post' role action enctype foValidation=true`
-- `foValidation=true` (default) loads `theme-form-validation.js` and `theme-form-observer.js` and exposes `window.__formValidationConfig`; set `foValidation=false` only for a form validated elsewhere
+- `foValidation=true` (default) loads `theme-form-validation.js` and `theme-form-observer.js` and exposes `window.__formValidationConfig`; never set `foValidation=false` (blocking: `verify-migration.sh` TM11)
 - Uploads: `enctype='multipart/form-data'` is a parameter, no need for `params`
-- The BO `class='form-validation'` on buttons is an offcanvas-iframe mechanism of the admin theme: it has no meaning in a skin template
+- Do not copy the BO `class='form-validation'` on buttons: it belongs to the admin theme and has no meaning in a skin template
 
 ### cInput - errorMsg and helpMsg
 - **`errorMsg`**: error message displayed under the field — automatically adds the `is-invalid` class and `aria-invalid`. Pass an empty string if no error.
