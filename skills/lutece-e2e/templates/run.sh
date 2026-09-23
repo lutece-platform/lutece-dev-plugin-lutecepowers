@@ -425,9 +425,10 @@ cmd_deploy() {
     (cd "$E2E_SRC" && ${MVN:-mvn} -q -o install -DskipTests)
     jar=$(ls "$E2E_SRC"/target/*.jar 2>/dev/null | grep -vE -- '-(sources|javadoc|tests)\.jar$' | head -1)
     [ -n "$jar" ] || { echo "no jar under $E2E_SRC/target"; exit 1; }
-    # Liberty expands lutece.war again at start: the restarted server must find the new jar (and the webapp files
-    # copied above) in the war itself, a copy into the expanded directory would be overwritten.
-    python3 tools/patch-war.py harness/site/target/lutece.war "$jar" "$E2E_SRC/webapp" artifacts/.deploy.war >/dev/null || exit 1
+    # Liberty expands lutece.war again at start: the restarted server must find the new jar, the webapp files
+    # copied above and the bundles of src/java (WEB-INF/classes, not in the jar) in the war itself, a copy into the
+    # expanded directory would be overwritten.
+    python3 tools/patch-war.py harness/site/target/lutece.war "$jar" "$E2E_SRC/webapp" artifacts/.deploy.war "$E2E_SRC/src/java" >/dev/null || exit 1
     docker cp -q artifacts/.deploy.war "$APP:/opt/wlp/usr/servers/defaultServer/apps/lutece.war"
     rm -f artifacts/.deploy.war
     docker restart "$APP" >/dev/null
