@@ -60,6 +60,8 @@ Both sides
              @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
   TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
   TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
+  TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
+             interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
              which the assembled admin CSS does not define: an unstyled button -> color='light'
   TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
@@ -619,6 +621,8 @@ def check_common(text, findings, kind, know):
             continue
         for arg in sorted(names - params):
             unknown_args.setdefault((name, arg), line)
+    hits = [line_of(text, m.start()) for m in CALL.finditer(text) if re.search(r"""(['"])[^'"]*<#[a-z]""", m.group(2) or "")]
+    add_grouped(findings, "TD52", "WARN", hits, "FreeMarker directive inside a quoted macro argument: the string literal prints it verbatim; build the value with <#assign> before the call")
     for name, line in sorted(unknown_macro.items(), key=lambda kv: kv[1]):
         if know.source.startswith("assembled"):
             add(findings, "TD30", "WARN", line, "@%s is defined nowhere in the assembled webapp, which carries the core, every declared dependency and this project: FreeMarker fails at render" % name)
