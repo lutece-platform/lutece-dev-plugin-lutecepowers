@@ -62,6 +62,12 @@ public class I18nKeys
                             System.out.println( where + key + " -- no key of that bundle starts with this prefix" );
                         }
                     }
+                    else if ( !bundles.hasBundle( key ) && bundles.ownerOfRelativeKey( key ) != null )
+                    {
+                        missing++;
+                        String owner = bundles.ownerOfRelativeKey( key );
+                        System.out.println( where + key + " -- no bundle answers it; the bundle '" + owner + "' holds it as written: the prefix is missing, write " + owner + "." + key );
+                    }
                     else if ( !bundles.hasBundle( key ) )
                     {
                         foreign++;

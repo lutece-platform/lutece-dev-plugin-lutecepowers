@@ -166,6 +166,28 @@ class Bundles
         return null;
     }
 
+    /** The prefix of the loaded bundle that holds this key as it is written, when the call forgot that prefix; else null. */
+    String ownerOfRelativeKey( String key )
+    {
+        for ( Map.Entry<String, Properties> bundle : byName.entrySet( ) )
+        {
+            if ( bundle.getValue( ).containsKey( key ) ) return prefixOf( bundle.getKey( ).replaceFirst( "#.*$", "" ) );
+        }
+        return null;
+    }
+
+    /** The i18n prefix a template writes for a bundle: plugin, module.plugin.module or portal.element. */
+    static String prefixOf( String bundle )
+    {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile( "fr\\.paris\\.lutece\\.plugins\\.(\\w+)\\.modules\\.(\\w+)\\.resources\\.\\w+_messages" ).matcher( bundle );
+        if ( m.matches( ) ) return "module." + m.group( 1 ) + "." + m.group( 2 );
+        m = java.util.regex.Pattern.compile( "fr\\.paris\\.lutece\\.plugins\\.(\\w+)\\.resources\\.\\w+_messages" ).matcher( bundle );
+        if ( m.matches( ) ) return m.group( 1 );
+        m = java.util.regex.Pattern.compile( "fr\\.paris\\.lutece\\.portal\\.resources\\.(\\w+)_messages" ).matcher( bundle );
+        if ( m.matches( ) ) return "portal." + m.group( 1 );
+        return bundle;
+    }
+
     /** Whether a bundle of that name was loaded: in Java, where a key is guessed from an argument, this tells a key from a URL. */
     boolean hasBundle( String key )
     {
