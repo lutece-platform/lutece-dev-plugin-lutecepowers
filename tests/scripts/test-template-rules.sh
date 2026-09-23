@@ -52,6 +52,15 @@ printf "<@tform action='x'><@box><@boxBody>a</@boxBody><@boxFooter><@button type
 expect "TD58: submit in one box footer of a two-box form" 1 "$(td TD58)"
 printf "<@tform action='x'><@box><@boxBody>a</@boxBody></@box><@box><@boxBody>b</@boxBody></@box><@row><@button type='submit' title='ok' /></@row></@tform>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD58: actions below the boxes" 0 "$(td TD58)"
+X="$W/webapp/WEB-INF/templates/admin/plugins/x"
+printf "<@tform action='x'><@input type='textarea' name='c' /></@tform>\n<#include \"/admin/util/editor/editor.html\" />\n<@initEditor />\n" > "$X/a.html"
+expect "TD59: editor without rich textarea" 1 "$(td TD59)"
+printf "<@tform action='x'><@input type='textarea' name='c' richtext=true /></@tform>\n<@initEditor />\n" > "$X/a.html"
+expect "TD59: rich textarea" 0 "$(td TD59)"
+printf "<#macro richBox><@input type='textarea' name='c' richtext=true /></#macro>\n" > "$X/commons.html"
+printf "<#include \"commons.html\" />\n<@richBox />\n<@initEditor type='comment' />\n" > "$X/a.html"
+expect "TD59: rich textarea from a local macro" 0 "$(td TD59)"
+rm -f "$X/commons.html"
 
 mkdir -p "$W/webapp/WEB-INF/plugins" "$W/webapp/themes/admin/x/css"
 echo "<plug-in><admin-css-stylesheets><admin-css-stylesheet>themes/admin/x/css/x.css</admin-css-stylesheet></admin-css-stylesheets></plug-in>" > "$W/webapp/WEB-INF/plugins/x.xml"
@@ -104,5 +113,5 @@ printf 'name=X\nlabel=Second\nmissing.portlet=P\nmissing.right=R\n' > "$J/src/ja
 expect "I18N02: descriptor and right keys declared" 1 "$(vm I18N02 PASS)"
 rm -rf "$J/webapp/WEB-INF/plugins" "$J/src/sql"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
 exit $fail

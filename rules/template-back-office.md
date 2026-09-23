@@ -41,6 +41,13 @@ Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`.
 - **Required fields carry `mandatory=true`**: the BO `@tform` loads no validation module (the `@cForm` rule, TM11 / TD49, is front office only).
 - **No inline form** (TM12, TD50): never three fields or more side by side: no `@tform type='inline'` / `'flex'`, `form-inline` / `d-flex` on a form holding three fields, no two `formStyle='inline'` fields in a form, no `@row` with three `@columns` or more that each carry a text field (X/Y/width/height in a row). Two columns are fine (fields and an image, first and last name); a grid of checkboxes or switches is allowed. A hidden form with a single submit button (Import, Export) may keep `type='inline'`.
 
+## Rich text editor
+
+- A rich field is `<@input type='textarea' name='x' richtext=true />` (the macro adds the class `richtext`), then, once per page, `<#include "/admin/util/editor/editor.html" />` and `<@initEditor />`, which targets `.richtext` (core `admin/system/modify_properties.html`). The front office is the same with `/util/editor/editor.html`.
+- **No editor without a rich field** (TD59): `@initEditor` on a page with no `.richtext` loads TinyMCE for nothing and the core init throws on the empty selection.
+- **The JspBean puts `webapp_url`** (`AppPathService.getBaseUrl( request )`) in the model of every page with an editor, as the core's own JspBeans do: the editor passes it as `document_base_url`, and without it TinyMCE resolves its content stylesheets against its own folder (four 404 per page).
+- A rich field in a Bootstrap modal needs TinyMCE's documented `focusin` guard, otherwise the modal steals the focus of the editor's dialogs.
+
 ## Messages — `@messages`
 
 Render model messages with the core macro, once per page, right after `@pageHeader`:

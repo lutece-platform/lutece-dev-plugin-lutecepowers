@@ -69,6 +69,8 @@ Both sides
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
+  TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
+             rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
   TD57 WARN  a stylesheet the plugin descriptor loads on every page (admin-css-stylesheet, css-stylesheet) targets a bare
              element or a generic id (#id_form, #title, #scroll): it restyles the other plugins' screens
   TD56 WARN  cancel/back @aButton/@button (title labelCancel/labelBack, Annuler, Retour) without color='light': the macro
@@ -250,6 +252,22 @@ def collect_macros(directory):
     return found
 
 
+def rich_templates(directory):
+    """(names of the macros whose body renders a rich textarea, base names of the files holding one) under a directory."""
+    macros, files = set(), set()
+    for path in glob.glob(os.path.join(directory, "**", "*.*"), recursive=True):
+        if not path.endswith((".ftl", ".html")):
+            continue
+        text = read(path)
+        if "richtext" not in text:
+            continue
+        files.add(os.path.basename(path))
+        for match in re.finditer(r"<#macro\s+([\w.]+)(.*?)</#macro>", text, flags=re.S):
+            if "richtext" in match.group(2):
+                macros.add(match.group(1))
+    return macros, files
+
+
 def icon_aliases(path):
     """Legacy icon names a theme's icon macro translates to Tabler (the <#case 'name'> branches of its switch)."""
     return set(re.findall(r"<#case\s+'([a-z0-9-]+)'", read(path))) if os.path.isfile(path) else set()
@@ -312,6 +330,7 @@ class Knowledge:
                     continue
                 self.plugins.update(collect_macros(repo))
         self.local = collect_macros(os.path.join(root, "webapp/WEB-INF/templates"))
+        self.rich_macros, self.rich_files = rich_templates(os.path.join(root, "webapp/WEB-INF/templates"))
         self.uncloned = uncloned_dependencies(root)
         self.icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", read(TABLER_CSS))) if os.path.isfile(TABLER_CSS) else set()
         self.bo_icons = self.icons | icon_aliases(os.path.join(BO_MACRO_DIR, "components/icon/icon.ftl"))
@@ -669,6 +688,10 @@ def check_skin(text, findings, know):
 
 def check_common(text, findings, kind, know):
     """Rules shared by back-office and front-office templates."""
+    if "<@initEditor" in text and "richtext" not in text \
+            and not any(re.search(r"<@%s\b" % re.escape(m), text) for m in know.rich_macros) \
+            and not any(re.search(r"<#include\s+['\"][^'\"]*%s['\"]" % re.escape(f), text) for f in know.rich_files):
+        add(findings, "TD59", "WARN", line_of(text, text.index("<@initEditor")), "@initEditor on a template with no rich textarea (no richtext=true / class richtext, no macro or include rendering one): TinyMCE loads for nothing and the core init fails on an empty selection -> drop the editor include and @initEditor, or mark the textarea richtext=true")
     unknown_macro = {}
     unknown_args = {}
     for match in CALL.finditer(text):
