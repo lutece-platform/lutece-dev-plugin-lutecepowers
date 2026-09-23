@@ -125,6 +125,16 @@ cover each one with a negative e2e scenario:
 - **The default view reached without `?view=` issues no token**: an entry point linked from elsewhere
   (`admin_url`, another plugin) opens the default view bare, and its form then posts no valid token. Redirect the bare
   default view to `?view=<name>`, or link the entry points with their view.
+- **Registration is lazy**: a controller's actions are registered for validation on its first `processController`
+  call after the server starts (`MVCAdminJspBean`); until then the filter does not know the path and a POST
+  **without** token is executed. A negative scenario must hit a controller nobody opened since boot, not only a warm
+  one.
+- **One token per rendered view**: `@View.securityTokenAction` names a single action. A screen with several mutations
+  (move, copy, enable per row) routes them through one dispatching action posted with an operation field, or through
+  confirmation views, each carrying its own token.
+- **The token is injected into every `<form>`, GET ones included** (pagination selects, search forms): it then lands
+  in URLs and access logs. Keep search and pagination forms out of pages that issue a mutation token, or accept and
+  say so.
 - **A multipart form drops the query string**: the admin multipart handler builds the parameters from the body only,
   so `action=`/`view=` must be hidden fields of the form, not in its `action` URL, and one token exists per view:
   one form, one action; a secondary button goes through a confirmation view.
