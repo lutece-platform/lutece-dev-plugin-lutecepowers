@@ -82,22 +82,6 @@ LOG_ENTRY = re.compile(r"^\[\d")
 """Start of a Liberty log entry: anything else is a continuation line of the entry above (stack frames)."""
 
 
-def _allow_patterns():
-    """Regexes of server-log exceptions that are expected for this bench (CSRF-refusal tests, rights tests, known core
-    noise): harness/server-errors-allow.txt, one per line. Everything else is an unexpected server error."""
-    f = lutece.E2E / "harness" / "server-errors-allow.txt"
-    pats = []
-    if f.exists():
-        for ln in f.read_text().splitlines():
-            ln = ln.strip()
-            if ln and not ln.startswith("#"):
-                try:
-                    pats.append(re.compile(ln))
-                except re.error:
-                    pass
-    return pats
-
-
 def server_errors():
     """Server-side errors of the run in messages.log, counted and split into expected (allowlist) and unexpected.
     Unexpected exceptions gate the run (a real 500, an IllegalStateException, a plugin NPE that the browser hid)."""
@@ -129,7 +113,7 @@ def server_errors():
         joined = "\n".join(block)
         if marks and any(m in joined for m in marks):
             mine[key] = mine.get(key, 0) + 1
-    allow = _allow_patterns()
+    allow = lutece.server_errors_allowed() + list(lutece.CORE_LOG_NOISE)
     scoped = mine if marks else counts
     unexpected = {k: n for k, n in scoped.items() if not any(p.search(k) for p in allow)}
     top = sorted(counts.items(), key=lambda kv: -kv[1])[:20]

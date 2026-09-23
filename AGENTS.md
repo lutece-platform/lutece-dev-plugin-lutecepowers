@@ -31,6 +31,7 @@ bash tests/scripts/test-template-rules.sh
 bash tests/scripts/test-checkup.sh
 bash tests/scripts/test-bundles.sh
 bash tests/scripts/test-fix-i18n-bundles.sh
+bash tests/scripts/test-server-log-oracle.sh
 claude plugin validate .
 ```
 

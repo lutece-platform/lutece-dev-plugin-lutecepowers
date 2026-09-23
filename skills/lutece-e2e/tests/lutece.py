@@ -526,6 +526,76 @@ CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
 ))
 
 
+SERVER_LOG = ARTIFACTS / "logs" / "messages.log"
+"""The Liberty log of the bench's server, mounted from its /logs."""
+
+SERVER_ENTRY = re.compile(r"^\[\d+/\d+/\d+, [\d:]+ \w+\] \w+ \S+\s+([A-Z]) ")
+"""Header line of a Liberty log entry; the group is its level (E is an error)."""
+
+# The core's own errors, logged on every bench of every artefact by the released 8.0.2 core, that no artefact can
+# fix: the cache of a service asked before its creation (AbstractCacheableService, the admin preferences behind
+# the dashboard). Reported upstream; kept here so benches do not each rediscover it as a defect of their artefact.
+CORE_LOG_NOISE = tuple(re.compile(p) for p in (
+    r'"this\._cache" is null',
+    r"BaseUserPreferencesCacheService",
+))
+
+
+def server_log_mark():
+    """Current size of the server log, the point from which server_errors reads."""
+    try:
+        return SERVER_LOG.stat().st_size
+    except OSError:
+        return 0
+
+
+def server_errors_allowed():
+    """Regexes of server-log errors expected on this bench: harness/server-errors-allow.txt, one per line, `#` for
+    the comment that gives the reason."""
+    f = E2E / "harness" / "server-errors-allow.txt"
+    pats = []
+    for ln in (f.read_text().splitlines() if f.exists() else []):
+        ln = ln.strip()
+        if ln and not ln.startswith("#"):
+            try:
+                pats.append(re.compile(ln))
+            except re.error:
+                pass
+    return pats
+
+
+def server_errors(mark, allow=()):
+    """Error entries (level E) the server logged since the mark, each as its header line and its first exception
+    line. The log may have rotated since the mark: it is then read from its start. Entries matching the core noise,
+    harness/server-errors-allow.txt or the given patterns are left out.
+
+    Scenarios run one after the other, so an error logged while one runs comes from what it did, whatever package
+    its stack names: a response written twice by a JSP leaves only container frames, which a package filter misses."""
+    try:
+        with open(SERVER_LOG, "rb") as f:
+            f.seek(mark if f.seek(0, 2) >= mark else 0)
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    entries, cur = [], None
+    for line in text.splitlines():
+        m = SERVER_ENTRY.match(line)
+        if m:
+            cur = [m.group(1), line]
+            entries.append(cur)
+        elif cur is not None:
+            cur.append(line)
+    patterns = list(CORE_LOG_NOISE) + server_errors_allowed() + [re.compile(p) for p in allow]
+    out = []
+    for level, *lines in entries:
+        body = "\n".join(lines)
+        if level != "E" or any(p.search(body) or p.search(re.sub(r"\d+", "N", body)) for p in patterns):
+            continue
+        cause = next((l.strip() for l in lines[1:] if re.search(r"(Exception|Error)\b", l)), "")
+        out.append((lines[0].split("] ", 1)[-1].strip() + (" | " + cause if cause else ""))[:400])
+    return out
+
+
 FAILED_RESOURCE_ECHO = re.compile(r"Failed to load resource", re.I)
 """The console line the browser writes for a failed sub-request: it names no url, so it is judged with the requests."""
 

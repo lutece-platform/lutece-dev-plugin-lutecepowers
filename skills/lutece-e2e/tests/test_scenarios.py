@@ -77,7 +77,7 @@ Step vocabulary (one key per step):
 File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
 scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
 fragments, and the mechanical oracle rule applies to the expanded steps.
-Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
+Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), server_log_allow (regexes of server log errors the scenario provokes on purpose, reason in a comment: any other error the server logs during the scenario fails it), steps.
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
 Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for numeric keys), {{base}} and anything set by set/sql_set/dom_set.
@@ -637,11 +637,21 @@ def test_scenario(bo, browser, request, record, sc):
     # oracle are credited when the next one passes, the ones after the last oracle never are.
     if sc.get("locale"):
         bo.set_extra_http_headers({"Accept-Language": sc["locale"]})
+    mark = lutece.server_log_mark()
     try:
         _play(bo, sc, vars_, record)
     finally:
         if sc.get("locale"):
             bo.set_extra_http_headers({})
+    # A scenario whose screens all look right can still leave the server failing behind them (a download whose
+    # response is written twice, an exception caught and logged): the log of the server is an oracle too.
+    if version == "v8":
+        errors = lutece.server_errors(mark, sc.get("server_log_allow") or ())
+        if errors:
+            record["server_errors"] = errors
+            raise AssertionError("the server logged %d error(s) during the scenario, first: %s. Fix the cause, or "
+                                 "declare it in `server_log_allow` of the scenario, or in harness/server-errors-allow.txt, with the reason"
+                                 % (len(errors), errors[0]))
 
 
 def _play(bo, sc, vars_, record):

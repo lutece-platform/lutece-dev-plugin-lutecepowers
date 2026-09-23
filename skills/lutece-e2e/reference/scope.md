@@ -137,6 +137,13 @@ caught, while the core's own noise (LTPA, dashboard servlet…) never reddens a 
 genuinely expected — a refusal the bench's own negative scenarios provoke — goes in
 `harness/server-errors-allow.txt` with the scenario that provokes it. Anything left makes the run exit 5.
 
+**Each scenario is also judged on the server log it leaves.** Scenarios run one after the other, so an error entry
+logged while one runs comes from what it did, whatever its stack names: a download written through a JSP that
+still flushes its writer (`SRVE0199E: OutputStream already obtained`) leaves only container frames, which the
+package fingerprint misses, and the file still reaches the browser. Such an entry fails the scenario. The core
+errors every 8.0.2 bench logs are left out (`CORE_LOG_NOISE` in tests/lutece.py, reported upstream), then the
+patterns of `harness/server-errors-allow.txt`, then the scenario's own `server_log_allow`.
+
 **k6 authenticates for real**: it reads the CSRF token from the login page and logs in **every iteration** (k6
 resets the cookie jar between iterations, so a session never survives one). Without this the load test measures
 authentication-failure pages and its checks pass falsely.
