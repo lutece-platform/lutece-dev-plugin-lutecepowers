@@ -40,6 +40,15 @@ def main():
             if r["status"] != "passed" and r.get("bare"):
                 bare_hits.setdefault(v, set()).add(r["id"])
 
+    for r in rows:
+        if r["status"] == "passed" and r["suite"] == "scenarios":
+            for c in r.get("rest_calls", []):
+                if c.get("asserted"):
+                    path = c["path"].split("?")[0]
+                    path = path[path.index("jsp/"):] if "jsp/" in path else path
+                    proven_hits.setdefault(path, set()).add(r["id"])
+                    hits.setdefault(path, set()).add(r["id"])
+
     def key(u):
         base = u.split("?")[0]
         q = urllib.parse.parse_qs(u.split("?", 1)[1]) if "?" in u else {}
