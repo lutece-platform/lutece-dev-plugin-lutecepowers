@@ -140,6 +140,14 @@ cover each one with a negative e2e scenario:
 
 Forbidden with `securityTokenEnabled = true`: `SecurityTokenService.MARK_TOKEN` in the model, `getToken()`, `validate()`, `@Inject SecurityTokenService` in the bean. Keep them ONLY in non-MVC beans (no `@Controller`), where `getSecurityTokenService()` (inherited from `AdminFeaturesPageJspBean`) is the accessor.
 
+## Errors from a view
+
+`addError( … )` then `redirectView( … )` carries the message only from an `@Action` (the redirect goes through the
+alert-message handler). From a `@View` the message is lost: the next page shows no error. A view that cannot render
+(unknown or non-numeric id) answers an `AdminMessage` of type STOP (`redirect( request,
+AdminMessageService.getMessageUrl( request, key, AdminMessage.TYPE_STOP ) )`); an action that refuses its input
+uses `addError` + `redirectView` back to the form.
+
 ## Pagination (list views)
 
 Use `@Inject @Pager IPager` for CDI-managed pagination (recommended). The `@Pager` qualifier configures paginator name, list bookmark, default items per page, and base URL. Call `_pager.withListItem(list).populateModels(request, model, getLocale())`. For AJAX tables, add a `@ResponseBody` endpoint and use the `paginationAjax` macro. See `/lutece-patterns` skill §5 for full details.
