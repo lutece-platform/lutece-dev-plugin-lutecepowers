@@ -157,7 +157,8 @@ def fo_pages(root):
 
 
 def jsp_inventory(root):
-    """Every admin JSP classified as screen or action, with the bean method it calls."""
+    """Every admin JSP, and every front-office JSP a plugin ships under jsp/site/plugins (downloads, callbacks),
+    classified as screen or action, with the bean method it calls."""
     screens, actions = [], []
     for jsp in sorted(root.rglob("jsp/admin/**/*.jsp")):
         if in_build(jsp, root):
@@ -174,6 +175,17 @@ def jsp_inventory(root):
                  "method": method, "right": right.group(1) if right else None, "surface": "bo",
                  "needs_params": bean_params(root, bean, method)}
         is_action = name.startswith("Do") or verb in ("do", "process") or (REDIRECT.search(text) and verb != "get")
+        (actions if is_action else screens).append(entry)
+    for jsp in sorted(root.rglob("jsp/site/plugins/**/*.jsp")):
+        if in_build(jsp, root) or INCLUDE_JSP.search(jsp.name):
+            continue
+        rel = str(jsp).split("jsp/site/", 1)[1]
+        text = jsp.read_text(errors="replace")
+        call = BEAN_CALL.search(text)
+        bean, verb, method = (call.group(1), call.group(2), call.group(2) + call.group(3)) if call else (None, None, None)
+        entry = {"id": "site." + rel[:-4].replace("/", "."), "url": "jsp/site/" + rel, "kind": "jsp", "bean": bean,
+                 "method": method, "right": None, "surface": "fo", "needs_params": bean_params(root, bean, method)}
+        is_action = jsp.name.startswith("Do") or verb in ("do", "process")
         (actions if is_action else screens).append(entry)
     return screens, actions
 

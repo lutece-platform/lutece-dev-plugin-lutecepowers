@@ -50,7 +50,7 @@ def url(path):
 def observe(page):
     """Attaches the observability collectors to a page: console errors and warnings, uncaught exceptions,
     failed or 4xx/5xx requests, and server timing of navigations. Read them in page.obs."""
-    obs = {"console": [], "errors": [], "requests": [], "nav": []}
+    obs = {"console": [], "errors": [], "requests": [], "nav": [], "subs": []}
     page.obs = obs
 
     def on_console(msg):
@@ -61,6 +61,8 @@ def observe(page):
         if resp.status >= 400:
             obs["requests"].append({"status": resp.status, "url": resp.url[:200]})
         req = resp.request
+        if not req.is_navigation_request() and "/jsp/" in resp.url and resp.status < 400 and len(obs["subs"]) < 200:
+            obs["subs"].append(resp.url[:200])
         if req.is_navigation_request() and req.frame == page.main_frame:
             t = req.timing
             mvc = ""

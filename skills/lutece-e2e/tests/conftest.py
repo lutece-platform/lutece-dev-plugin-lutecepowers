@@ -154,6 +154,7 @@ def pytest_runtest_makereport(item, call):
            "console": obs.get("console", [])[:20], "js_errors": obs.get("errors", [])[:20],
            "bad_requests": obs.get("requests", [])[:20], "nav": obs.get("nav", [])[-5:],
            "visited": sorted({lutece.normalize(n["url"]).split("?")[0] + ("?" + q if q else "")
-                              for n in obs.get("nav", []) for q in [_mvc_query(n["url"]) or n.get("mvc", "")] if n["status"] < 400}), **rec}
+                              for n in obs.get("nav", []) for q in [_mvc_query(n["url"]) or n.get("mvc", "")] if n["status"] < 400}
+                             | {lutece.normalize(u).split("?")[0] for u in obs.get("subs", [])}), **rec}
     with open(RESULTS / ("%s.jsonl" % os.environ.get("PYTEST_XDIST_WORKER", "main")), "a") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
