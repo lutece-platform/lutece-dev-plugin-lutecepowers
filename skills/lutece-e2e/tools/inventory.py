@@ -286,6 +286,8 @@ def resolve_path(expr, consts, depth=0):
         if len(term) > 1 and term[0] == '"' and term[-1] == '"':
             out.append(term[1:-1])
             continue
+        if term in ("StringUtils.EMPTY", "EMPTY"):
+            continue
         value = consts.get(term, consts.get(term.split(".")[-1]))
         if value is None:
             return None
