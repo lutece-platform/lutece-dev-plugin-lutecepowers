@@ -11,7 +11,10 @@ services:
     volumes:
       - ./db/my.cnf:/etc/mysql/conf.d/e2e.cnf:ro
       - ./db/00-grants.sql:/docker-entrypoint-initdb.d/00-grants.sql:ro
-      - dbdata:/var/lib/mysql
+    # The database lives in memory: every run starts from an empty schema anyway, and a disk-backed volume made
+    # Liquibase's thousands of statements wait on fsync.
+    tmpfs:
+      - /var/lib/mysql
     ports:
       - "${E2E_DB_PORT:-13306}:3306"
     healthcheck:
@@ -19,14 +22,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
-      start_period: 10s
+      start_period: 60s
+      start_interval: 1s
     networks: [e2e]
 
   # Service name matters: `app` is a Chromium HSTS-preloaded TLD, the browser would force https on http://app:9090.
   lutece:
     build: { context: ., dockerfile: Dockerfile.app }
     image: ${E2E_NAME:-lutece-e2e}-server:local
-    # Runs as the host user so the logs, access log and JFR dump under artifacts/ are readable on the host.
+    # Runs as the host user so the logs and access log under artifacts/ are readable on the host.
     user: "${E2E_UID:-1000}:0"
     environment:
       portal.serverName: db
@@ -36,6 +40,8 @@ services:
       portal.password: lutece
       context.root: ${E2E_CONTEXT:-lutece}
       LIQUIBASE_ENABLED_AT_STARTUP: "true"
+      # Extra JVM options (Liberty's server script appends JVM_ARGS): run.sh adds the flight recorder with E2E_JFR=1.
+      JVM_ARGS: "${E2E_JVM_ARGS:-}"
       # run.sh compare: one start in migration mode records the installed versions before the upgrades run.
       LIQUIBASE_MIGRATION_MODE: "${LIQUIBASE_MIGRATION_MODE:-false}"
       # MicroProfile Config: environment overrides mail.server / mail.server.port of config.properties
@@ -59,7 +65,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 90
-      start_period: 40s
+      # Probed every second while it starts, so a run goes on as soon as the site answers, not up to 5 s later.
+      start_period: 300s
+      start_interval: 1s
     networks: [e2e]
 
   # The artefact BEFORE its migration, on Tomcat 9 / Java 11 (profile v7, `run.sh compare`): same database as
@@ -92,7 +100,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 90
-      start_period: 40s
+      # Probed every second while it starts, so a run goes on as soon as the site answers, not up to 5 s later.
+      start_period: 300s
+      start_interval: 1s
     networks: [e2e]
 
   # SMTP sink: every mail the application sends lands here; scenarios assert on it (step `mail`), the UI is on E2E_MAIL_PORT.
@@ -261,9 +271,6 @@ services:
     volumes:
       - ..:/e2e
     working_dir: /e2e
-
-volumes:
-  dbdata:
 
 networks:
   e2e:

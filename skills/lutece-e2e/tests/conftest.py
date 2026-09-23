@@ -16,7 +16,7 @@ STATE = lutece.ARTIFACTS / "state"
 
 
 def pytest_addoption(parser):
-    parser.addoption("--suite", default="screens", help="suite label written in results")
+    parser.addoption("--suite", default=None, help="suite label written in results (default: from the test file name)")
 
 
 def pytest_configure(config):
@@ -148,7 +148,7 @@ def pytest_runtest_makereport(item, call):
         except Exception:  # noqa: BLE001
             rec["text_hash"] = None
     row = {"id": item.nodeid.split("::", 1)[1] if "::" in item.nodeid else item.nodeid, "t_start": round(t_start, 3), "t_end": round(t_end, 3),
-           "file": item.nodeid.split("::", 1)[0], "suite": item.config.getoption("--suite"),
+           "file": item.nodeid.split("::", 1)[0], "suite": item.config.getoption("--suite") or item.nodeid.split("::", 1)[0].rsplit("/", 1)[-1][5:-3],
            "status": rep.outcome, "duration_ms": round(rep.duration * 1000),
            "reason": _reason(rep) if not rep.skipped else (str(rep.longrepr[2]) if isinstance(rep.longrepr, tuple) else str(rep.longrepr))[:200],
            "console": obs.get("console", [])[:20], "js_errors": obs.get("errors", [])[:20],

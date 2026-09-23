@@ -14,6 +14,7 @@ it was only found in an --extra tree (the core and the other plugins of the asse
 Output: JSON on stdout (features, screens, actions, stats). Stdlib only.
 """
 import argparse
+import contextlib
 import json
 import pathlib
 import re
@@ -553,12 +554,62 @@ def bean_templates(root):
     return out
 
 
+def print_markdown(inv, surface):
+    """The compact markdown summary of an inventory, printed on stdout."""
+    u = surface["testable_urls"]
+    print("# Surface de `%s`\n" % pathlib.Path(inv["root"]).name)
+    print("Ce que la cible expose (comptages calibrés : un écran back-office est un template `admin/` nommé depuis")
+    print("le Java, pas un fichier JSP — les JSP sont des points d'entrée et sur-comptent les écrans).\n")
+    print("| Écrans | n | | Actions | n |\n|---|---|---|---|---|")
+    print("| back-office | %d | | back-office (MVC) | %d |" % (surface["screens_bo"], surface["actions_bo"]))
+    print("| front-office | %d | | front-office (MVC) | %d |" % (surface["screens_fo"], surface["actions_fo"]))
+    print("| points d'entrée JSP admin | %d | | **URLs testables** | **%d écrans / %d actions** |"
+          % (surface["jsp_admin_entrypoints"], u["screens"], u["actions"]))
+    rest_tgt = [x for x in inv["rest"] if x["origin"] == "target"]
+    if rest_tgt:
+        print("\n## Points REST\n")
+        print("Une ressource JAX-RS n'est pas un écran : un navigateur ne la juge pas. Elle se teste avec l'étape")
+        print("`http` d'un scénario, et `sign` quand le plugin la protège.\n")
+        print("| Verbe | URL | Liaison d'authentification |\n|---|---|---|")
+        for e in rest_tgt:
+            print("| %s | `%s` | %s |" % (e["verb"], e["url"], ", ".join(e["name_bindings"]) or "**aucune**"))
+        if surface["rest_unbound"]:
+            print("\n**%d classe(s) sans liaison d'authentification** : %s. Leurs points sont servis sans contrôle,"
+                  % (len(surface["rest_unbound"]), ", ".join(surface["rest_unbound"])))
+            print("et rien dans la construction ne le signale. C'est à vérifier, pas à supposer : soit le plugin")
+            print("n'a jamais rien protégé, soit sa protection est tombée à la migration.")
+    print("\n| Socle déclaré | n |\n|---|---|")
+    for k, label in (("admin_features", "entrées de menu admin"), ("applications", "applications front"),
+                     ("rbac_resources", "ressources RBAC"), ("dashboards", "dashboards"),
+                     ("portlets", "portlets"), ("daemons", "daemons"), ("servlets", "servlets"),
+                     ("filters", "filtres"), ("page_includes", "page includes"),
+                     ("macro_files", "fichiers de macros"), ("javascript_files", "fichiers JS"),
+                     ("stylesheets", "feuilles de style")):
+        if surface.get(k):
+            print("| %s | %d |" % (label, surface[k]))
+    print("\n| Code | n |\n|---|---|")
+    print("| contrôleurs MVC back-office | %d |" % surface["controllers_bo"])
+    print("| contrôleurs MVC front-office | %d |" % surface["controllers_fo"])
+    print("| XPages CDI (@Named …xpage…) | %d |" % surface["cdi_xpages"])
+    print("| templates admin | %d dont %d nommés depuis le Java |"
+          % (surface["admin_templates"], surface["admin_templates_named_from_java"]))
+    unnamed = surface["admin_templates_unnamed"]
+    if unnamed:
+        print("\n%d template(s) admin qu'aucun Java ne nomme (macros, includes, ou écran mort) : %s"
+              % (len(unnamed), ", ".join("`%s`" % x for x in unnamed[:15])))
+    if inv["features"]:
+        print("\n| Fonctionnalité (droit) | Écran d'entrée | Groupe |\n|---|---|---|")
+        for f in inv["features"]:
+            print("| %s | %s | %s |" % (f["right"], f["url"] or "-", f["group"] or "-"))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", nargs="?", default=".", help="source tree (core, plugin, module or site)")
     ap.add_argument("--extra", action="append", default=[], help="additional tree to scan: the exploded webapp of the "
                     "assembled site (plugins pulled from Maven, without local sources) or a plugin source checkout")
     ap.add_argument("--markdown", action="store_true", help="print a compact markdown table instead of JSON")
+    ap.add_argument("--markdown-out", help="also write the markdown table to this file, in the same pass as the JSON")
     args = ap.parse_args()
     root = pathlib.Path(args.root).resolve()
     roots = [root] + [pathlib.Path(x).resolve() for x in args.extra if pathlib.Path(x).exists()]
@@ -637,52 +688,11 @@ def main():
                      "fo_actions": sum(1 for a in actions if a.get("surface") == "fo"),
                      "rest": len(rest)}}
     if args.markdown:
-        u = surface["testable_urls"]
-        print("# Surface de `%s`\n" % pathlib.Path(inv["root"]).name)
-        print("Ce que la cible expose (comptages calibrés : un écran back-office est un template `admin/` nommé depuis")
-        print("le Java, pas un fichier JSP — les JSP sont des points d'entrée et sur-comptent les écrans).\n")
-        print("| Écrans | n | | Actions | n |\n|---|---|---|---|---|")
-        print("| back-office | %d | | back-office (MVC) | %d |" % (surface["screens_bo"], surface["actions_bo"]))
-        print("| front-office | %d | | front-office (MVC) | %d |" % (surface["screens_fo"], surface["actions_fo"]))
-        print("| points d'entrée JSP admin | %d | | **URLs testables** | **%d écrans / %d actions** |"
-              % (surface["jsp_admin_entrypoints"], u["screens"], u["actions"]))
-        rest_tgt = [x for x in inv["rest"] if x["origin"] == "target"]
-        if rest_tgt:
-            print("\n## Points REST\n")
-            print("Une ressource JAX-RS n'est pas un écran : un navigateur ne la juge pas. Elle se teste avec l'étape")
-            print("`http` d'un scénario, et `sign` quand le plugin la protège.\n")
-            print("| Verbe | URL | Liaison d'authentification |\n|---|---|---|")
-            for e in rest_tgt:
-                print("| %s | `%s` | %s |" % (e["verb"], e["url"], ", ".join(e["name_bindings"]) or "**aucune**"))
-            if surface["rest_unbound"]:
-                print("\n**%d classe(s) sans liaison d'authentification** : %s. Leurs points sont servis sans contrôle,"
-                      % (len(surface["rest_unbound"]), ", ".join(surface["rest_unbound"])))
-                print("et rien dans la construction ne le signale. C'est à vérifier, pas à supposer : soit le plugin")
-                print("n'a jamais rien protégé, soit sa protection est tombée à la migration.")
-        print("\n| Socle déclaré | n |\n|---|---|")
-        for k, label in (("admin_features", "entrées de menu admin"), ("applications", "applications front"),
-                         ("rbac_resources", "ressources RBAC"), ("dashboards", "dashboards"),
-                         ("portlets", "portlets"), ("daemons", "daemons"), ("servlets", "servlets"),
-                         ("filters", "filtres"), ("page_includes", "page includes"),
-                         ("macro_files", "fichiers de macros"), ("javascript_files", "fichiers JS"),
-                         ("stylesheets", "feuilles de style")):
-            if surface.get(k):
-                print("| %s | %d |" % (label, surface[k]))
-        print("\n| Code | n |\n|---|---|")
-        print("| contrôleurs MVC back-office | %d |" % surface["controllers_bo"])
-        print("| contrôleurs MVC front-office | %d |" % surface["controllers_fo"])
-        print("| XPages CDI (@Named …xpage…) | %d |" % surface["cdi_xpages"])
-        print("| templates admin | %d dont %d nommés depuis le Java |"
-              % (surface["admin_templates"], surface["admin_templates_named_from_java"]))
-        unnamed = surface["admin_templates_unnamed"]
-        if unnamed:
-            print("\n%d template(s) admin qu'aucun Java ne nomme (macros, includes, ou écran mort) : %s"
-                  % (len(unnamed), ", ".join("`%s`" % x for x in unnamed[:15])))
-        if inv["features"]:
-            print("\n| Fonctionnalité (droit) | Écran d'entrée | Groupe |\n|---|---|---|")
-            for f in inv["features"]:
-                print("| %s | %s | %s |" % (f["right"], f["url"] or "-", f["group"] or "-"))
+        print_markdown(inv, surface)
         return
+    if args.markdown_out:
+        with open(args.markdown_out, "w", encoding="utf-8") as out, contextlib.redirect_stdout(out):
+            print_markdown(inv, surface)
     json.dump(inv, sys.stdout, indent=1, ensure_ascii=False)
     print()
 

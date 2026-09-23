@@ -6,11 +6,13 @@
 #   ./run.sh up           start db + app, wait for health, seed (idempotent)
 #   ./run.sh inventory    static inventory (artifacts/inventory.json) + EARS requirements
 #   ./run.sh discover     dynamic crawl of the running back office (artifacts/discovered.json)
-#   ./run.sh test [args]  screens + scenarios + forms, in the Playwright runner container (pytest args pass through)
+#   ./run.sh test         every suite (screens, fo, scenarios, forms) against the running stack
+#   ./run.sh test <args>  one pytest call, e.g. `test tests/test_scenarios.py -k my_scenario` (seconds)
 #   ./run.sh compare      the artefact in v7 (Tomcat) then in v8 on the same database, the suites both times, before/after report
 #   ./run.sh external     the suites against an instance already deployed (E2E_BASE_URL, optional E2E_DB_*): no build, no seed, no fuzzer
-#   ./run.sh perf         server timings, DB digests, JFR hot methods (artifacts/perf.json); E2E_PERF=1 adds the k6 load
+#   ./run.sh perf         server timings, DB digests (artifacts/perf.json); E2E_PERF=1 adds the k6 load, E2E_JFR=1 the JFR hot methods
 #   ./run.sh report       artifacts/summary.md + report.html from the run artifacts
+#   ./run.sh deploy       hot copy into the running app (KEEP=1): webapp/ at once, the jar + a restart when Java changed
 #   ./run.sh down         stop everything and drop the database volume
 #   ./run.sh logs|status|sh   compose shortcuts
 #   ./run.sh py <script> [args]  a Python script in the test runner, with the bench's own environment (a hand-made
@@ -34,7 +36,22 @@ set -a; . ./e2e.conf; set +a
 # command (E2E_MVN7, gen-site7.sh) unless the bench set one.
 if [ "${E2E_MVN_OFFLINE:-0}" = 1 ]; then export MVN="${MVN:-mvn} -o"; export E2E_MVN7="${E2E_MVN7:-mvn}"; fi
 eval "$_e2e_env"
-export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-small} E2E_WORKERS=${E2E_WORKERS:-4}
+# Browsers per suite: the cores left to this bench once the other benches running on the machine have theirs,
+# at most 4. A fixed 4 per bench put 36 Chromium on 12 cores with nine benches up, and every timeout became a red.
+auto_workers() {
+  local cores others
+  cores=$(nproc 2>/dev/null || echo 4)
+  others=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c -- '-e2e-lutece-1$' || true)
+  [ "$(docker ps --format '{{.Names}}' 2>/dev/null | grep -cx -- "${E2E_NAME}-lutece-1" || true)" -gt 0 ] || others=$((others + 1))
+  local n=$(( cores / (others > 0 ? others : 1) / 2 ))
+  [ "$n" -gt 4 ] && n=4
+  [ "$n" -lt 1 ] && n=1
+  echo "$n"
+}
+# E2E_JFR=1 records the application with the flight recorder (hot methods in the report). Off by default: the
+# profiling costs CPU for the whole run and its views take a minute to compute.
+[ "${E2E_JFR:-}" = 1 ] && export E2E_JVM_ARGS="${E2E_JVM_ARGS:-} -XX:StartFlightRecording=filename=/logs/lutece.jfr,dumponexit=true,settings=profile -XX:FlightRecorderOptions=stackdepth=128"
+export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-small} E2E_WORKERS=${E2E_WORKERS:-$(auto_workers)}
 APP="${E2E_NAME}-lutece-1"
 # E2E_FAKES=1 starts the stand-ins of the external systems (harness/fakes, SKILL.md § Fakes),
 # E2E_SEARCH=1 the search engines (solr, elastic).
@@ -56,12 +73,32 @@ health() { docker inspect -f '{{.State.Health.Status}}' "$APP" 2>/dev/null || ec
 # pytest returns 5 when a suite collects no tests (a plugin with no front office, no forms): not a failure.
 pyrun() { runner "$@"; local c=$?; [ "$c" = 5 ] && return 0 || return $c; }
 
+# One test runner container per run, reused by every python call through docker exec: a `compose run` per call
+# (a dozen per run) paid a container creation and a Python start each time. It shares the application's network
+# namespace, so it is recreated when the application container was recreated or restarted, or when a variable
+# baked into its environment changed.
+RUNNER_C="${E2E_NAME}-runner"
+runner_up() {
+  local key; key="$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' "${E2E_NAME}-${E2E_APP:-lutece}-1" 2>/dev/null) ${E2E_SCOPE:-} ${E2E_VERSION:-} ${E2E_APP:-} ${E2E_APP_PORT:-} ${E2E_CONTEXT:-}"
+  if [ "$(docker inspect -f '{{.State.Running}}' "$RUNNER_C" 2>/dev/null)" = true ] && [ "$(cat artifacts/.runner-key 2>/dev/null)" = "$key" ]; then
+    return 0
+  fi
+  docker rm -f "$RUNNER_C" >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" run -d --name "$RUNNER_C" tests sleep infinity >/dev/null
+  until docker exec "$RUNNER_C" sh -c 'H=$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$H ]' 2>/dev/null; do
+    [ "$(docker inspect -f '{{.State.Running}}' "$RUNNER_C" 2>/dev/null)" = true ] || { docker logs "$RUNNER_C"; return 1; }
+    sleep 1
+  done
+  mkdir -p artifacts; echo "$key" > artifacts/.runner-key
+}
+
 runner() {
   if [ "${RUNNER:-}" = local ]; then
     [ -x .venv/bin/python ] || { python3 -m venv .venv && .venv/bin/pip install -q -r tools/requirements.txt; }
     E2E_BASE="http://localhost:${E2E_PORT}/${E2E_CONTEXT}" E2E_DB_PORT=${E2E_DB_PORT:-13306} .venv/bin/python "$@"
   else
-    "${COMPOSE[@]}" run --rm -T tests python "$@"
+    runner_up
+    docker exec -i "$RUNNER_C" python "$@"
   fi
 }
 
@@ -108,7 +145,7 @@ cmd_up() {
   fi
   "${COMPOSE[@]}" up -d db lutece ${E2E_FAKES:+fakes oauth2} ${E2E_SEARCH:+solr elastic}
   step "waiting for the application"
-  until [ "$(health)" != starting ]; do sleep 3; done
+  until [ "$(health)" != starting ]; do sleep 1; done
   if [ "$(health)" != healthy ]; then
     echo "application unhealthy, last log lines:"; docker logs --tail 40 "$APP"
     # Never leave a dead stack holding the ports: the next bench on this slot would fail to bind for no reason of its own.
@@ -124,7 +161,7 @@ cmd_up() {
   if [ -n "${E2E_RESTART_AFTER_SEED:-}" ]; then
     step "restart the application on the seeded database"
     "${COMPOSE[@]}" restart lutece >/dev/null
-    until [ "$(health)" != starting ]; do sleep 3; done
+    until [ "$(health)" != starting ]; do sleep 1; done
     [ "$(health)" = healthy ] || { echo "application unhealthy after the post-seed restart:"; docker logs --tail 40 "$APP"; exit 1; }
   fi
 }
@@ -132,8 +169,7 @@ cmd_up() {
 cmd_inventory() {
   step "inventory"
   local exploded; exploded=$(find harness/site/target -maxdepth 1 -type d -name "e2e-site-*" 2>/dev/null | head -1)
-  python3 tools/inventory.py "$E2E_SRC" ${exploded:+--extra "$exploded"} > artifacts/inventory.json
-  python3 tools/inventory.py "$E2E_SRC" ${exploded:+--extra "$exploded"} --markdown > artifacts/inventory.md
+  python3 tools/inventory.py "$E2E_SRC" ${exploded:+--extra "$exploded"} --markdown-out artifacts/inventory.md > artifacts/inventory.json
   python3 tools/ears.py artifacts/inventory.json scenarios > artifacts/requirements.ears.md
   python3 -c "import json;print(json.load(open('artifacts/inventory.json'))['stats'])"
 }
@@ -278,10 +314,11 @@ needs_build() {
   [ -f harness/site/target/lutece.war ] || return 0
   [ -n "$(docker images -q "${E2E_NAME}-server:local")" ] || return 0
   [ -n "$(find "$E2E_SRC/src" "$E2E_SRC/webapp" -type f -newer harness/site/target/lutece.war 2>/dev/null | head -1)" ] && return 0
-  # e2e.conf and the harness decide what goes INTO the war (plugins assembled, plugins enabled, liquibase version).
+  # e2e.conf, the harness and gen-site.sh decide what goes INTO the war (plugins assembled, plugins enabled, liquibase
+  # version); the other tools (inventory, review, report) do not, and a toolkit refresh must not rebuild for them.
   # Without them here, editing the conf changes nothing, the old war keeps running and the symptom is a screen
   # answering "this page does not exist" with no explanation. Cost a full afternoon once.
-  [ -n "$(find e2e.conf harness tools -type f -newer harness/site/target/lutece.war 2>/dev/null | grep -v '^harness/site/target/' | head -1)" ] && return 0
+  [ -n "$(find e2e.conf harness tools/gen-site.sh tools/liquibase-visibility.sh -type f -newer harness/site/target/lutece.war 2>/dev/null | grep -v '^harness/site/target/' | head -1)" ] && return 0
   # A Lutece artefact rebuilt in the local repository since this war was assembled — a dependency fixed locally,
   # a sibling plugin reinstalled — is not in the war yet. Without this the bench silently keeps testing the old
   # jar and the fix looks like it changed nothing. Scoped to fr/paris/lutece, so it costs milliseconds.
@@ -328,10 +365,13 @@ cmd_perf() {
     step "perf: k6 load on the entry screens"
     "${COMPOSE[@]}" run --rm k6 run --quiet --summary-export=/e2e/artifacts/k6-summary.json /e2e/tools/load.js || true
   fi
-  step "perf: JFR dump, access log, DB digests"
-  local pid; pid=$(docker exec "$APP" sh -c 'jcmd -l | awk "/ws-server.jar/{print \$1}"')
-  docker exec "$APP" sh -c "jcmd $pid JFR.dump filename=/logs/lutece-run.jfr" | tail -1
-  docker exec "$APP" sh -c 'for v in hot-methods allocation-by-class gc-pauses contention-by-site; do echo "## $v"; jfr view $v /logs/lutece-run.jfr; done' > artifacts/jfr.txt 2>&1 || true
+  step "perf: access log, DB digests"
+  rm -f artifacts/jfr.txt
+  if [ "${E2E_JFR:-}" = 1 ]; then
+    local pid; pid=$(docker exec "$APP" sh -c 'jcmd -l | awk "/ws-server.jar/{print \$1}"')
+    docker exec "$APP" sh -c "jcmd $pid JFR.dump filename=/logs/lutece-run.jfr" | tail -1
+    docker exec "$APP" sh -c 'for v in hot-methods allocation-by-class gc-pauses contention-by-site; do echo "## $v"; jfr view $v /logs/lutece-run.jfr; done' > artifacts/jfr.txt 2>&1 || true
+  fi
   runner tools/metrics.py perf
 }
 
@@ -366,12 +406,34 @@ wait_healthy() {
   until [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null || echo missing)" != starting ]; do
     [ "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = true ] || break
     docker logs "$c" 2>&1 | grep -qE "$fatal" && break
-    sleep 3
+    sleep 1
   done
   # The whole log is kept beside the last lines: when the site does not come up, the cause (a Liquibase
   # changeset that stopped, a bean that failed to start) is hundreds of lines above the tail and would otherwise
   # be gone with the container.
   [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] || { mkdir -p artifacts/logs; docker logs "$c" > "artifacts/logs/unhealthy-$c.log" 2>&1; echo "$c unhealthy (full log: artifacts/logs/unhealthy-$c.log)"; grep -m1 -oE "Migration failed for changeset [^ ]+" "artifacts/logs/unhealthy-$c.log" | sed 's/^/>> LIQUIBASE STOPPED: /'; grep -m1 -oE "Reason: .{0,200}" "artifacts/logs/unhealthy-$c.log" | sed 's/^/>>   /'; echo "last log lines:"; docker logs --tail 60 "$c"; return 1; }
+}
+# Hot deploy into the running application, the loop to iterate on a fix in seconds: the artefact's webapp/
+# (templates, CSS, JS, JSP) is copied into the expanded war and served at once; when its Java or its resources
+# changed since the last deploy, the jar is rebuilt offline without tests, copied into WEB-INF/lib and the
+# application restarted. No war assembly, no image, no new stack. A full run stays the proof before hand-over.
+cmd_deploy() {
+  step "deploy: hot copy of $E2E_TARGET into the running application"
+  [ "$(health)" = healthy ] || { echo "no healthy application: start one with KEEP=1 ./run.sh (or ./run.sh up)"; exit 1; }
+  local war=/opt/wlp/usr/servers/defaultServer/apps/expanded/lutece.war stamp=artifacts/.deployed ref jar
+  [ -d "$E2E_SRC/webapp" ] && docker cp -q "$E2E_SRC/webapp/." "$APP:$war/"
+  ref=$stamp; [ -f "$ref" ] || ref=harness/site/target/lutece.war
+  if [ -n "$(find "$E2E_SRC/src" "$E2E_SRC/pom.xml" -type f -newer "$ref" 2>/dev/null | grep -v '/src/test/' | head -1)" ]; then
+    (cd "$E2E_SRC" && ${MVN:-mvn} -q -o install -DskipTests)
+    jar=$(ls "$E2E_SRC"/target/*.jar 2>/dev/null | grep -vE -- '-(sources|javadoc|tests)\.jar$' | head -1)
+    [ -n "$jar" ] || { echo "no jar under $E2E_SRC/target"; exit 1; }
+    docker cp -q "$jar" "$APP:$war/WEB-INF/lib/"
+    docker restart "$APP" >/dev/null
+    wait_healthy "$APP" || exit 1
+    echo "deploy: $(basename "$jar") replaced, application restarted"
+  fi
+  mkdir -p artifacts; touch "$stamp"
+  echo "deploy: webapp copied; replay with ./run.sh test -k <scenario>"
 }
 snapshot() {
   mkdir -p "artifacts/$1"
@@ -506,6 +568,8 @@ WARN
 
 cmd_down() {
   step "down"
+  docker rm -f "$RUNNER_C" >/dev/null 2>&1 || true
+  rm -f artifacts/.runner-key
   "${COMPOSE[@]}" down -v --remove-orphans
 }
 
@@ -514,12 +578,13 @@ case "${1:-all}" in
   up)        cmd_up ;;
   inventory) cmd_inventory ;;
   discover)  cmd_discover ;;
-  test)      shift; cmd_test "$@" ;;
+  test)      shift; if [ $# -gt 0 ]; then runner -m pytest -q --tb=short "$@"; else cmd_test; fi ;;
   perf)      cmd_perf ;;
   report)    cmd_report ;;
   review)    python3 tools/review.py "${2:-check}" ;;
   compare)   cmd_compare ;;
   external)  cmd_external ;;
+  deploy)    cmd_deploy ;;
   down)      cmd_down ;;
   logs)      shift; docker logs "${@:---tail 100}" "$APP" ;;
   py)        shift; runner "$@" ;;
