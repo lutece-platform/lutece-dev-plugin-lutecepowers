@@ -68,6 +68,7 @@ Both sides
              its header gives: nothing updates it, compare it with the latest upstream release
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
+  TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
   TD57 WARN  a stylesheet the plugin descriptor loads on every page (admin-css-stylesheet, css-stylesheet) targets a bare
              element or a generic id (#id_form, #title, #scroll): it restyles the other plugins' screens
   TD56 WARN  cancel/back @aButton/@button (title labelCancel/labelBack, Annuler, Retour) without color='light': the macro
@@ -593,6 +594,14 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
                 if re.search(r"""\bcolor\s*=\s*['"](btn-)?(default|secondary)['"]""", call) or (name == "button" and re.search(r"\bcancel\s*=\s*true", call) and not re.search(r"\bcolor\s*=", call))]
         add_grouped(findings, "TD51", "WARN", sorted(hits), "button colour 'default'/'secondary' (or cancel=true): the macro renders btn-default, which the admin CSS does not define, so the button has no style; use color='light'")
+    hits = []
+    for form in re.finditer(r"<@tform\b.*?</@tform>", text, flags=re.S):
+        body = form.group(0)
+        if len(re.findall(r"<@box\b", body)) >= 2:
+            for foot in re.finditer(r"<@boxFooter\b.*?</@boxFooter>", body, flags=re.S):
+                if re.search(r"""<@button\b[^>]*\btype\s*=\s*['"]submit""", foot.group(0)):
+                    hits.append(line_of(text, form.start() + foot.start()))
+    add_grouped(findings, "TD58", "WARN", hits, "submit button in the footer of one box while the form spans several boxes: it reads as validating that box only; put the actions in a row below the boxes")
     hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
             if re.search(r"""\btitle\s*=\s*['"][^'"]*(labelCancel|labelBack|[Cc]ancel\}|[Bb]ack\}|Annuler|Retour)""", call)
             and not re.search(r"""\btype\s*=\s*['"]submit""", call)
