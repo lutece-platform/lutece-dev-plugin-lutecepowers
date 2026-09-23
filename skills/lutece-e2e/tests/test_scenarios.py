@@ -62,7 +62,8 @@ Step vocabulary (one key per step):
   upload: {selector: ..., file: ...}   set a file input (path relative to e2e/)
   select: {selector: ..., label: text | option_contains: text}   pick an option by its label, or the first whose label
                                    or value contains the text (fill takes the option value)
-  download: <form selector>        submit a form that answers with a file; records its name and size
+  download: <form or link selector> submit the form, or click the link or button, that answers with a file; records
+                                   its name and size
   login: {user: ..., password: ...}    log out then sign in as another admin (use with isolated: true)
   login_fo: {user: ..., password: ..., provider: mylutece-database}
                                    sign a front-office user in through mylutece (use with anonymous: true); the
@@ -509,9 +510,13 @@ def run_step(page, step, vars_, record):
     elif key == "upload":
         page.locator(arg["selector"]).first.set_input_files(str(lutece.E2E / arg["file"]))
     elif key == "download":
+        assert page.locator(arg).count(), "download: nothing matches %s on %s" % (arg, lutece.normalize(page.url))
         with page.expect_download(timeout=30000) as dl:
-            page.evaluate("""(sel) => { const f = document.querySelector(sel);
-                const b = f.querySelector('button[type=submit], input[type=submit]'); if (b) b.click(); else f.submit(); }""", arg)
+            if page.locator(arg).first.evaluate("e => e.tagName") == "FORM":
+                page.evaluate("""(sel) => { const f = document.querySelector(sel);
+                    const b = f.querySelector('button[type=submit], input[type=submit]'); if (b) b.click(); else f.submit(); }""", arg)
+            else:
+                page.locator(arg).first.click()
         d = dl.value
         path = lutece.ARTIFACTS / "downloads" / (vars_["rand"] + "_" + d.suggested_filename)
         path.parent.mkdir(parents=True, exist_ok=True)
