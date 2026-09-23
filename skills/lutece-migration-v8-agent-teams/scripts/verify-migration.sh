@@ -943,6 +943,38 @@ fi
 COUNT=0; [ -n "$I18N07_MATCHES" ] && COUNT=$(echo "$I18N07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N07" "PASS" "No common spelling error in French values" 0
 else emit "I18N07" "WARN" "French value with a spelling error (Êtes-vous, sûr) or a leftover class name" "$COUNT" "$I18N07_MATCHES"; fi
+
+# I18N08: a key of the default bundle that no Java, template, JSP, XML or SQL file names (as <prefix>.<key> or as a
+# quoted "<key>"): generator leftovers the translators keep paying for. model.entity.* and validation.* are read at
+# runtime by the core (validation, site properties) and stay; a key built by concatenation is kept by hand.
+I18N08_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N08_MATCHES=$(python3 - <<'PY'
+import glob, os, re
+text = []
+for pattern in ("src/**/*.java", "webapp/**/*.html", "webapp/**/*.ftl", "webapp/**/*.jsp", "webapp/**/*.xml", "webapp/**/*.js", "src/sql/**/*.sql", "src/**/*.xml"):
+    for f in glob.glob(pattern, recursive=True):
+        if "/target/" not in f and os.path.isfile(f):
+            text.append(open(f, encoding="utf-8", errors="replace").read())
+text = "\n".join(text)
+stems = set(re.findall(r"#i18n\{([\w.-]+\.)\$\{", text)) | set(re.findall(r'"([\w.-]+\.)"\s*\+', text))
+for bundle in sorted(glob.glob("src/java/**/resources/*_messages.properties", recursive=True)):
+    prefix = os.path.basename(bundle)[:-len("_messages.properties")]
+    for n, line in enumerate(open(bundle, encoding="latin-1"), 1):
+        if "=" not in line or line.lstrip().startswith(("#", "!")):
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key.startswith(("model.entity.", "validation.", "plugin.", "adminFeature.", "site_property.")) or not key:
+            continue
+        full = prefix + "." + key
+        if full not in text and '"' + key + '"' not in text and not any(key.startswith(st.split(prefix + ".", 1)[1] if prefix + "." in st else st) for st in stems):
+            print("%s:%d: %s" % (bundle, n, key))
+PY
+) || I18N08_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N08_MATCHES" ] && COUNT=$(echo "$I18N08_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N08" "PASS" "Every bundle key is used" 0
+else emit "I18N08" "WARN" "Bundle key no file names: remove it in every language, unless built at runtime" "$COUNT" "$I18N08_MATCHES"; fi
 echo ""
 
 # WB06: an <admin-feature> whose <feature-group> is not the group its install SQL gives it. Reinstalling the plugin from
