@@ -73,6 +73,10 @@ printf "<@pageContainer>x</@pageContainer>\n<script>\nvar t = '\${form.title}';\
 expect "TD63: title in a JS string without js_string" 1 "$(td TD63)"
 printf "<@pageContainer>x</@pageContainer>\n<script>\nvar t = '\${form.title?js_string}';\nvar h = '\${form.title?html}';\nvar c = '\${context}';\n</script>\n<script src=\"js/x.js\"></script>\n" > "$X/a.html"
 expect "TD63: escaped values, ids and non-text names" 0 "$(td TD63)"
+printf "<@tform id='q'><@input type='hidden' name='startDate' value='' /></@tform>\n<@tform id='a'><@input type='date' name='startDate' id='startDate' value='' /></@tform>\n" > "$X/a.html"
+expect "TD64: hidden field defaulting to the id of a date picker" 1 "$(td TD64)"
+printf "<@tform id='q'><@input type='hidden' name='startDate' id='quick_startDate' value='' /><@input type='hidden' name='id_form' value='1' /></@tform>\n<@tform id='a'><@input type='date' name='startDate' id='startDate' value='' /><@input type='hidden' name='id_form' value='1' /></@tform>\n" > "$X/a.html"
+expect "TD64: distinct ids, repeated hidden fields" 0 "$(td TD64)"
 mkdir -p "$W/src/sql/plugins/x/plugin"
 printf "INSERT INTO genatt_entry_type (id_type,title,is_group,class_name,icon_name,plugin) VALUES (131,'Regroupement, bloc',1,'x.entryTypeGroup','indent','x');\n" > "$W/src/sql/plugins/x/plugin/init_db_x.sql"
 expect "TD62: entry type icon unknown to the theme" 1 "$(td TD62)"
@@ -162,5 +166,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, JS04, JS07, fix-button-colours"
 exit $fail

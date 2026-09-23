@@ -72,6 +72,8 @@ Both sides
   TD61 WARN  script or stylesheet (js/, css/, themes/, images/) the assembled webapp does not carry: a 404 on load
   TD63 WARN  text value (title, name, label, description, comment, message...) interpolated into a JS string literal
              without ?js_string: an apostrophe ends the string, the script dies, and the value is injected
+  TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
+             with another control of the template: the picker binds every match, a ghost input appears
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
   TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
              rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
@@ -160,6 +162,24 @@ def block_depth(text, index):
 
 
 JS_TEXT_FIELD = re.compile(r"^(?!id[A-Z_])(?:(?:title|name|label|description|comment|message|text|address|subject)|[a-z0-9]+(?:Title|Name|Label|Description|Comment|Message|Text|Address|Subject))$")
+
+
+PICKER_TYPES = re.compile(r"\btype='(date|time|datetime|daterange|datetimerange)'")
+
+
+def picker_id_clashes(text):
+    """(id, line) of each date/time @input whose id, explicit or defaulted from its name, another @input or @select
+    of the template also carries: flatpickr('#id') binds every match."""
+    seen = {}
+    for m in re.finditer(r"<@(input|select)\b([^>]*)>", text):
+        attrs = m.group(2)
+        if re.search(r"\btype='(radio|checkbox)'", attrs) or re.search(r"\b(id|name)='[^']*[$#]", attrs):
+            continue
+        ident = re.search(r"\bid='([^']+)'", attrs) or re.search(r"\bname='([^']+)'", attrs)
+        if ident:
+            seen.setdefault(ident.group(1), []).append((line_of(text, m.start()), bool(PICKER_TYPES.search(attrs))))
+    return sorted(((ident, min(line for line, picker in hits if picker)) for ident, hits in seen.items()
+                   if len(hits) > 1 and any(picker for _, picker in hits)), key=lambda kv: kv[1])
 
 
 def unescaped_js_strings(text):
@@ -781,6 +801,8 @@ def check_common(text, findings, kind, know):
     check_house_forms(text, findings, kind)
     if know.css_classes:
         check_legacy_markup(text, findings, know, kind)
+    for ident, line in picker_id_clashes(text):
+        add(findings, "TD64", "WARN", line, "date/time field '%s' shares its id with another control of the template (@input and @select default the id to the name): the picker binds both and a ghost input appears -> give each control its own id" % ident)
     for expr, line in unescaped_js_strings(text):
         add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
