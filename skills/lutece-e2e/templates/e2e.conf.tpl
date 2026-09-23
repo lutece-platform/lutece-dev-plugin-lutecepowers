@@ -71,3 +71,6 @@ E2E_PORT7=@@PORT7@@
 E2E_VOLUME=none
 # pytest workers.
 E2E_WORKERS=4
+# Security keys the bench is allowed to switch off in harness/site/webapp/WEB-INF/conf/override (comma-separated), each
+# with its reason in a comment above: any other disabled security key fails the run (code 4), its refusals untested.
+E2E_ALLOW_SECURITY_OFF=

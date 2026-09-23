@@ -186,6 +186,24 @@ if bad:
 PY
 }
 
+# A bench override that switches the artefact's own security off turns every test of that security into a test of
+# nothing: the refusals are never proven. Any such key under the site's conf/override fails the run (code 4) unless
+# e2e.conf names it in E2E_ALLOW_SECURITY_OFF, which the summary then prints as a declared weakening.
+security_overrides() {
+  local allowed=",${E2E_ALLOW_SECURITY_OFF:-},"
+  local bad=""
+  while IFS= read -r line; do
+    local key=${line%%=*}; key=${key##*:}; key=$(echo "$key" | tr -d ' ')
+    case "$allowed" in *",$key,"*) continue;; esac
+    bad="$bad$line"$'\n'
+  done < <(grep -rHiE '^[[:space:]]*[a-z0-9_.-]*(secur|auth|signature|sign\.|csrf|token|captcha)[a-z0-9_.-]*[[:space:]]*=[[:space:]]*(false|0|off|no|none)[[:space:]]*$' harness/site/webapp/WEB-INF/conf/override 2>/dev/null || true)
+  if [ -n "$bad" ]; then
+    printf 'SECURITY SWITCHED OFF BY THE BENCH (conf/override), its refusals are never tested:\n%s' "$bad"
+    echo "remove the override, or name the key in E2E_ALLOW_SECURITY_OFF in e2e.conf with the reason in a comment"
+    return 1
+  fi
+}
+
 cmd_test() {
   step "tests: screens + scenarios + forms ($E2E_WORKERS workers)"
   fingerprint || true
@@ -511,6 +529,7 @@ case "${1:-all}" in
     cmd_perf
     cmd_report
     check_server_errors || { [ "$rc" -eq 0 ] && rc=5; }
+    security_overrides || { [ "$rc" -eq 0 ] && rc=4; }
     # The bench is not delivered until a human-or-agent eye has judged the rendering of every screen family:
     # the assertions prove behaviour, not that the screens follow the design system and hold together visually.
     # A green run that never played the artefact's own actions proves nothing about them: every action of the target
