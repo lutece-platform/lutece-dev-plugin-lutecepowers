@@ -42,6 +42,13 @@ expect "TD55: empty state without subtitle, no create action" 1 "$(td TD55)"
 printf "<@pageContainer><@aButton href='jsp/admin/plugins/x/ManageX.jsp?view=createX' buttonIcon='plus' title='a' /><@empty /></@pageContainer>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD55: page with a create action" 0 "$(td TD55)"
 
+mkdir -p "$W/webapp/WEB-INF/plugins" "$W/webapp/themes/admin/x/css"
+echo "<plug-in><admin-css-stylesheets><admin-css-stylesheet>themes/admin/x/css/x.css</admin-css-stylesheet></admin-css-stylesheets></plug-in>" > "$W/webapp/WEB-INF/plugins/x.xml"
+printf "#id_form { max-width: 32rem; }\n" > "$W/webapp/themes/admin/x/css/x.css"
+expect "TD57: generic id in a stylesheet loaded on every page" 1 "$(td TD57)"
+printf ".x-plugin #id_form { max-width: 32rem; }\n#x-chart-list { margin: 0; }\n" > "$W/webapp/themes/admin/x/css/x.css"
+expect "TD57: rules scoped to the plugin" 0 "$(td TD57)"
+
 vm() { (cd "$J" && bash "$S/verify-migration.sh" . 2>/dev/null | grep "\[$1\]" | grep -c "$2"); }
 printf 'class XDAO {\n    public void f( Plugin plugin )\n    {\n        DAOUtil daoUtil = new DAOUtil( SQL, plugin );\n        daoUtil.executeUpdate( );\n    }\n}\n' > "$J/src/java/x/business/XDAO.java"
 expect "DA02: DAOUtil outside try-with-resources" 1 "$(vm DA02 FAIL)"
@@ -52,5 +59,5 @@ expect "I18N07: French spelling error" 1 "$(vm I18N07 WARN)"
 printf 'message.confirm=\\u00cates-vous s\\u00fbr de vouloir supprimer ce graphique ?\n' > "$J/src/java/x/resources/x_messages_fr.properties"
 expect "I18N07: correct French" 1 "$(vm I18N07 PASS)"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, DA02, I18N07"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, DA02, I18N07"
 exit $fail

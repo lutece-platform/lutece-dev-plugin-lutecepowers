@@ -68,6 +68,8 @@ Both sides
              its header gives: nothing updates it, compare it with the latest upstream release
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
+  TD57 WARN  a stylesheet the plugin descriptor loads on every page (admin-css-stylesheet, css-stylesheet) targets a bare
+             element or a generic id (#id_form, #title, #scroll): it restyles the other plugins' screens
   TD56 WARN  cancel/back @aButton/@button (title labelCancel/labelBack, Annuler, Retour) without color='light': the macro
              defaults to primary, so it looks like the main action
   TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
@@ -535,6 +537,26 @@ def vendored_bundles(root):
     return sorted(out)
 
 
+def global_css_leaks(root):
+    """(path, line, selector) of rules in a stylesheet the plugin descriptor loads on every page (admin-css-stylesheet,
+    css-stylesheet) that target a bare element or a generic id (#id_form, #title, #scroll): they restyle other screens."""
+    out = []
+    for xml in glob.glob(os.path.join(root, "webapp/WEB-INF/plugins/*.xml")):
+        for css in re.findall(r"<(?:admin-)?css-stylesheet>\s*([^<\s]+)\s*</", read(xml)):
+            path = os.path.join(root, "webapp", css)
+            if not os.path.isfile(path):
+                continue
+            text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), read(path), flags=re.S)
+            for m in re.finditer(r"([^{}@;]+)\{", text):
+                for sel in m.group(1).split(","):
+                    first = sel.strip().split()[0] if sel.strip() else ""
+                    bare = re.fullmatch(r"(html|body|input|select|textarea|button|table|thead|tbody|tr|td|th|form|label|a|img|ul|ol|li|h[1-6]|p)([:\[].*)?", first)
+                    loose_id = re.fullmatch(r"#(id_[\w-]+|id|title|name|description|code|label|value|content|search|page|scroll|main|form|table|list|header|footer|menu|sidebar)([:\[.].*)?", first)
+                    if bare or loose_id:
+                        out.append((os.path.relpath(path, root), text.count("\n", 0, m.start()) + 1, sel.strip()))
+    return out
+
+
 def check_admin(text, findings, kind, opened_in_iframe, know):
     """Back-office rules on a screen template (not an e-mail body)."""
     modals = [(m.start(), m.end()) for m in re.finditer(r"<@modal(Body)?\b.*?</@modal(Body)?>", text, flags=re.S)]
@@ -839,6 +861,8 @@ def main():
     for code, rel in vendored_libraries(root):
         message = "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component" if code == "TD45" else "jQuery, or a jQuery plugin, shipped by the project: nothing updates this copy (jQuery before 3.5 carries known XSS flaws); port its callers to vanilla JS and delete it"
         entries.append({"path": rel, "kind": "vendored", "findings": [{"code": code, "severity": "WARN", "line": 1, "message": message}]})
+    for rel, line, sel in global_css_leaks(root):
+        entries.append({"path": rel, "kind": "css", "findings": [{"code": "TD57", "severity": "WARN", "line": line, "message": "selector %s in a stylesheet the plugin descriptor loads on every page: it restyles the other plugins' screens; scope it under a class of the plugin" % sel}]})
     dupes = duplicate_macros(root, admin_files + skin_files)
     for entry in entries:
         if entry["path"] in dupes:
