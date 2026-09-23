@@ -1068,6 +1068,16 @@ COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
 else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
 
+# TM13: a back-office form field named `page`: SecurityTokenHandler reads the page parameter and takes its XPage branch,
+# so every post of that form skips the CSRF check. Name it id_page.
+TM13_MATCHES=""
+if [ -d "webapp/WEB-INF/templates/admin" ]; then
+    TM13_MATCHES=$(grep -rnE "name *= *['\"]page['\"]" webapp/WEB-INF/templates/admin --include="*.html" 2>/dev/null) || TM13_MATCHES=""
+fi
+COUNT=0; [ -n "$TM13_MATCHES" ] && COUNT=$(echo "$TM13_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM13" "PASS" "No back-office field named page" 0
+else emit "TM13" "FAIL" "Back-office field named page: the CSRF check is skipped on every post of that form (use id_page)" "$COUNT" "$TM13_MATCHES"; fi
+
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
 check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"
