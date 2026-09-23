@@ -560,7 +560,7 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         hits = [line_of(text, offset) for offset, call in switches if not re.search(r"\bvalue=", call)]
         add_grouped(findings, "TD42", "WARN", hits, "@checkBox orientation='switch' without value: the switch branch writes value=\"\" whatever the caller passed, so the box submits an empty string where a checkbox submits 'on' -- give it value='1' or read the parameter with != null, never isNotEmpty")
     for match in re.finditer(r"<@boxBody\b[^>]*>\s*<@(tform|table|manageFeature)\b", text, flags=re.S):
-        add(findings, "TD05", "INFO", line_of(text, match.start()), "@box holding only a @%s: drop the box (tform boxed=true; manageFeature items are cards)" % match.group(1))
+        add(findings, "TD05", "INFO", line_of(text, match.start()), "@box holding only a @%s: drop the box (tform boxed=true; manageFeature items are cards) unless the box carries a title: boxed=true renders no header, keep @box + @boxHeader then" % match.group(1))
     if know.css_admin and "btn-default" not in know.css_admin:
         hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
                 if re.search(r"""\bcolor\s*=\s*['"](btn-)?(default|secondary)['"]""", call) or (name == "button" and re.search(r"\bcancel\s*=\s*true", call) and not re.search(r"\bcolor\s*=", call))]

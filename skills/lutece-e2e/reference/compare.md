@@ -134,3 +134,9 @@ the forms fuzzer stays off: it posts every form it finds. The scenarios still cr
 there, so run it on an instance meant to receive them. The inventory still comes from the sources, so the
 coverage is measured the same way.
 
+## compare invalidates the visual review
+
+`run.sh compare` rewrites `artifacts/` with its two legs: the captures of the previous normal run are gone and
+`review-todo.md` no longer lists them. Run `compare` first, then the normal run whose captures the review judges.
+A v7-leg failure caused by the v7 bench itself (a table the old dependency lacks, an SQL error of the v7 stack) is not
+a v8 fix: read `compare.md`'s "corrigé" lines against the v7 log before claiming one.

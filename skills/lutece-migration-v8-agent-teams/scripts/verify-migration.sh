@@ -1263,7 +1263,7 @@ if [ ! -d "src/test/" ]; then
         emit "TS09" "PASS" "Test results (no Java, no tests)" 0
     fi
 elif [ ! -d "target/surefire-reports" ]; then
-    emit "TS09" "FAIL" "Test results NOT EVALUATED: no target/surefire-reports. Run mvn lutece:exploded antrun:run -Dlutece-test-hsql test (plain mvn test has no webapp config nor database: every CDI test fails to start); BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true" 1
+    emit "TS09" "FAIL" "Test results NOT EVALUATED: no target/surefire-reports (an e2e run.sh build or a mvn clean wipes them: run the tests after the bench). Run mvn lutece:exploded antrun:run -Dlutece-test-hsql test (plain mvn test has no webapp config nor database: every CDI test fails to start); BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true" 1
 else
     TS09_TALLY=$(grep -h "Tests run" target/surefire-reports/*.txt 2>/dev/null | awk -F'[:,]' '{t+=$2; f+=$4; e+=$6} END {printf "%d %d %d", t, f, e}')
     TS09_RUN=$(echo "$TS09_TALLY" | cut -d' ' -f1)
