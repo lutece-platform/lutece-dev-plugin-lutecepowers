@@ -548,7 +548,8 @@ else emit "ST05" "FAIL" "Files created by the migration are excluded by .gitigno
 
 # LE01: a converted line ending rewrites every line of the file and hides the migration in the diff. A file counts
 # as converted when HEAD and the work tree disagree on carriage returns, whatever else changed in it: the files
-# that also carry real changes are the ones where the review matters most.
+# that also carry real changes are the ones where the review matters most. A file left with no line break at all
+# (a one-line JSP that streams a download, whose trailing newline would be written after the file) is not converted.
 # Line-ending style of stdin: CRLF, LF, CR (old Mac, a file most tools read as one line) or mixed -- leaving either is a repair --,
 # mixed, or none.
 line_endings() {
@@ -564,7 +565,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         [ -f "$f" ] || continue
         head_le=$(git show "HEAD:$f" 2>/dev/null | head -c 20000 | line_endings)
         work_le=$(head -c 20000 "$f" | line_endings)
-        [ "$head_le" = "$work_le" ] || [ "$head_le" = "CR" ] || [ "$head_le" = "mixed" ] || [ "$head_le" = "none" ] || echo "$f: $head_le in HEAD, $work_le now"
+        [ "$head_le" = "$work_le" ] || [ "$head_le" = "CR" ] || [ "$head_le" = "mixed" ] || [ "$head_le" = "none" ] || [ "$work_le" = "none" ] || echo "$f: $head_le in HEAD, $work_le now"
     done)
 fi
 COUNT=0; [ -n "$LE01_MATCHES" ] && COUNT=$(echo "$LE01_MATCHES" | wc -l)
