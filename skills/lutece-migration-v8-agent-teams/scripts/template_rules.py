@@ -11,8 +11,10 @@ ignored. Shared by verify-migration.sh (TM10, TM11, TM12) and scan-template-desi
 - fo-forms      every front-office form is a @cForm, which loads the core's theme-form-validation; a raw <form>, a
                 back-office @tform in a skin template, or foValidation=false leaves the form without it. A standalone
                 page (an <html> root, outside the site frameset) is not checked.
-- inline-forms  no form laying two visible fields or more side by side on one line: @tform type inline/flex,
-                form-inline / d-flex / d-inline-flex on the form, or two @formGroup formStyle='inline' or more.
+- inline-forms  no form laying three visible fields or more side by side on one line: @tform type inline/flex,
+                form-inline / d-flex / d-inline-flex on the form, two @formGroup formStyle='inline' or more, or a
+                @row with three columns or more that each carry a text-like field. Two columns (fields and an image,
+                first and last name) are fine; a grid of checkboxes or switches is allowed.
 """
 import os
 import re
@@ -23,6 +25,7 @@ FIELD = re.compile(r"<@(input|select|checkBox|radioButton|cInput|cSelect|cCheckb
 NOT_A_FIELD = re.compile(r"""\btype\s*=\s*['"](hidden|submit|button|reset)['"]""")
 FORM = re.compile(r"<(@tform|@cForm|form)\b([^>]*)>(.*?)</\1\s*>", re.S)
 INLINE_OPEN = re.compile(r"""\btype\s*=\s*['"](inline|flex)['"]|\bclass\s*=\s*['"][^'"]*\b(form-inline|d-flex|d-inline-flex)\b""")
+SIDE_BY_SIDE = 3
 ROW = re.compile(r"""<@(?:row|cRow)\b[^>]*>(.*?)</@(?:row|cRow)\s*>|<div\b[^>]*\bclass=['"][^'"]*\brow\b[^'"]*['"][^>]*>(.*?)</div>""", re.S)
 CHOICE = re.compile(r"""<@(checkBox|radioButton|cCheckbox|cRadio|cFormCheck)\b[^>]*>|<input\b[^>]*\btype\s*=\s*['"](checkbox|radio)['"][^>]*>""", re.S)
 CELL = re.compile(r"""<@(?:columns|cCol)\b|<div\b[^>]*\bclass=['"][^'"]*\bcol(?:-[a-z0-9-]+)?\b""")
@@ -61,21 +64,21 @@ def fo_forms(text, skin):
 
 
 def grid_fields(body):
-    """True when a row of the form holds two columns or more that each carry a text-like field."""
+    """True when a row of the form holds SIDE_BY_SIDE columns or more that each carry a text-like field."""
     for row in ROW.finditer(body):
         cells = CELL.split(row.group(1) or row.group(2) or "")[1:]
-        if sum(1 for cell in cells if visible_fields(CHOICE.sub("", cell)) >= 1) >= 2:
+        if sum(1 for cell in cells if visible_fields(CHOICE.sub("", cell)) >= 1) >= SIDE_BY_SIDE:
             return True
     return False
 
 
 def inline_forms(text, skin):
-    """Lines of the forms that put two visible fields or more on one line."""
+    """Lines of the forms that put SIDE_BY_SIDE visible fields or more on one line."""
     out = []
     for m in FORM.finditer(text):
         body = m.group(3)
         inline = (INLINE_OPEN.search(m.group(2)) and "flex-column" not in m.group(2)) or len(re.findall(r"""formStyle\s*=\s*['"]inline['"]""", body)) >= 2
-        if (inline and visible_fields(body) >= 2) or grid_fields(body):
+        if (inline and visible_fields(body) >= SIDE_BY_SIDE) or grid_fields(body):
             out.append(line_of(text, m.start()))
     return out
 

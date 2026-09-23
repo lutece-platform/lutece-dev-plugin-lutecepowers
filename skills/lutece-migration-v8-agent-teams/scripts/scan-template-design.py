@@ -59,7 +59,7 @@ Both sides
   TD48 WARN  offcanvas (@offcanvas, @cOffcanvas, class/data-bs-toggle offcanvas): content of the page -> @modal /
              @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
   TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
-  TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
+  TD50 WARN  inline form (three fields or more side by side): type inline/flex, form-inline, d-flex, a row of 3+ field columns
   TD54 WARN  @select default_value=… with nested <@option>/<option>: the macro applies default_value to items= only, so
              the nested options ignore it and the first one is always selected -> mark the option selected
   TD55 INFO  @empty without subtitle on a page with no create action: it prints "Add a first element", wrong on a
@@ -483,7 +483,7 @@ def check_house_forms(text, findings, kind):
     for line, remote in template_rules.offcanvas(text, kind == "fo"):
         add(findings, "TD48", "WARN", line, "offcanvas: " + ("it loads another page, link to that page instead (@aButton href, the page keeps its own back link)" if remote else "put this content in a @modal (@cModal in the front office) opened by a button with data-bs-toggle=\"modal\""))
     add_grouped(findings, "TD49", "WARN", template_rules.fo_forms(text, kind == "fo"), "front-office form without the core form validation: write it as <@cForm> (theme-form-validation loads by default), never foValidation=false")
-    add_grouped(findings, "TD50", "WARN", template_rules.inline_forms(text, kind == "fo"), "inline form: two visible fields or more side by side on one line; one field per row, the standard form layout")
+    add_grouped(findings, "TD50", "WARN", template_rules.inline_forms(text, kind == "fo"), "inline form: three visible fields or more side by side on one line; one field per row (two columns are fine)")
 
 
 def check_legacy_markup(text, findings, know, kind):

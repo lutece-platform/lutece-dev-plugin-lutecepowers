@@ -1119,7 +1119,7 @@ else emit "VL01" "FAIL" "Vendored jQuery or jQuery-era upload widget: port to va
 # TM10: no offcanvas. Content written in the page -> @modal / @cModal; content loaded from another page -> a plain link.
 # TM11: every front-office form is a @cForm, which loads the core's form validation (theme-form-validation); a raw
 #       <form>, a back-office @tform in a skin template, or foValidation=false leaves the form without it.
-# TM12: no inline form laying two visible fields or more side by side (template_rules.py has the exact rules).
+# TM12: no inline form laying three visible fields or more side by side (template_rules.py has the exact rules).
 template_rules() {
     python3 "$(dirname "${BASH_SOURCE[0]}")/template_rules.py" "$1" . || true
 }

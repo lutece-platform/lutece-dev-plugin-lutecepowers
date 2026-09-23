@@ -296,7 +296,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | VL01 | FAIL | a copy of jQuery, of a jQuery plugin (a `.js` defining `$.fn.x`) or of a jQuery-era upload widget under `webapp/` | file names, `$.fn.` in *.js | webapp/ |
 | TM10 | FAIL | offcanvas (`@offcanvas`, `@cOffcanvas`, offcanvas markup): the content of the page goes in a `@modal` / `@cModal`, another page is reached by a plain link | `template_rules.py offcanvas` | admin, skin |
 | TM11 | FAIL | front-office form that is not a `@cForm` (raw `<form>`, `@tform`) or `foValidation=false`: no core form validation | `template_rules.py fo-forms` | skin |
-| TM12 | FAIL | inline form: two visible fields or more side by side (`@tform type` inline/flex, `form-inline`/`d-flex` on the form, `formStyle='inline'`) | `template_rules.py inline-forms` | admin, skin |
+| TM12 | FAIL | inline form: three visible fields or more side by side (`@tform type` inline/flex, `form-inline`/`d-flex` on the form, `formStyle='inline'`, a row of three field columns); two columns are fine | `template_rules.py inline-forms` | admin, skin |
 | TM13 | FAIL | back-office form field named `page`: the core takes its XPage branch and skips the CSRF check on every post | `name='page'` | admin/*.html |
 | TM03 | FAIL | Old upload macros | (custom check) | *.html |
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
