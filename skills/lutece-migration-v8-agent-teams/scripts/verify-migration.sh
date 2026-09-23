@@ -919,6 +919,31 @@ COUNT=0; [ -n "$JS05_MATCHES" ] && COUNT=$(echo "$JS05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS05" "PASS" "Admin JSPs are entry points, the markup lives in templates" 0
 else emit "JS05" "FAIL" "Admin JSP writing its own HTML: move it to a template rendered by the bean" "$COUNT" "$JS05_MATCHES"; fi
 
+# JS06: a JSP that streams a file (download, export) and leaves template text. The bean writes the bytes through
+# getOutputStream(); at the end of the page the JSP flushes its own text through getWriter() and the container throws
+# "OutputStream already obtained" on every download. Only directives, JSP comments and the EL call may remain: a
+# newline between them is template text too, and trimDirectiveWhitespaces="true" does not remove it on Liberty
+# (observed on the blobstore bench: 47 exceptions with the newline, 0 once it sat inside a JSP comment).
+JS06_MATCHES=""
+if [ -d "webapp/jsp" ]; then
+    JS06_MATCHES=$(python3 - <<'PY'
+import glob, re
+for f in sorted(glob.glob("webapp/jsp/**/*.jsp", recursive=True)):
+    text = open(f, encoding="utf-8", errors="replace").read()
+    if not re.search(r"\.\s*(do)?(download|export|getFile|getBlob)\w*\s*\(", text, re.I):
+        continue
+    rest = re.sub(r"<%--.*?--%>|<%@.*?%>|\$\{.*?\}", "", text, flags=re.S)
+    if rest.strip():
+        print("%s: streams a file and leaves template text (%r)" % (f, rest.strip()[:40]))
+    elif rest:
+        print("%s: streams a file and leaves %d whitespace character(s) outside its directives: glue them (<%%@ … %%><%%-- newline --%%>${ … }, no final newline); trimDirectiveWhitespaces does not remove them on Liberty" % (f, len(rest)))
+PY
+) || JS06_MATCHES=""
+fi
+COUNT=0; [ -n "$JS06_MATCHES" ] && COUNT=$(echo "$JS06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JS06" "PASS" "Download JSPs write nothing after the stream" 0
+else emit "JS06" "FAIL" "Download JSP leaving template text: 'OutputStream already obtained' on every download" "$COUNT" "$JS06_MATCHES"; fi
+
 # JS04: an admin JSP driving a bean that is not a @Controller. v8 dispatches views and actions through
 # processController() on one JSP per controller, and the automatic CSRF filter only covers those actions: a legacy
 # DoXxx.jsp calling bean.doXxx( request ) accepts a forged call unless the bean validates a token itself. Portlet
