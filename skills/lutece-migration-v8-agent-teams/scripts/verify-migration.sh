@@ -318,6 +318,26 @@ echo ""
 # ─── DAO ─────────────────────────────────────────────────
 echo "CATEGORY: DAO"
 check_grep "DA01" 'daoUtil\.free( )' "src/" "FAIL" "daoUtil.free() -> try-with-resources"
+
+# DA02: a DAOUtil opened outside a try-with-resources: an exception between the constructor and free() leaks the
+# connection (rules/dao-patterns.md: always try ( DAOUtil daoUtil = new DAOUtil( … ) ) ).
+DA02_MATCHES=""
+if [ -d "src/" ]; then
+    DA02_MATCHES=$(grep -rn "new DAOUtil(" src/ --include="*.java" 2>/dev/null | grep -v "try *(" ) || DA02_MATCHES=""
+fi
+COUNT=0; [ -n "$DA02_MATCHES" ] && COUNT=$(echo "$DA02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "DA02" "PASS" "Every DAOUtil lives in a try-with-resources" 0
+else emit "DA02" "FAIL" "DAOUtil outside try-with-resources: the connection leaks on an exception" "$COUNT" "$DA02_MATCHES"; fi
+
+# SQ05: a value glued into a SQL literal in a DAO ("… LIKE '%" + str + "%'", "col = '" + value + "'"): an injection
+# point, and a quote in the value breaks the query. Bind it with daoUtil.setString.
+SQ05_MATCHES=""
+if [ -d "src/" ]; then
+    SQ05_MATCHES=$(grep -rnE "'[%_]*\"[[:space:]]*\+[[:space:]]*[A-Za-z_]" src/ --include="*DAO.java" 2>/dev/null) || SQ05_MATCHES=""
+fi
+COUNT=0; [ -n "$SQ05_MATCHES" ] && COUNT=$(echo "$SQ05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ05" "PASS" "No value concatenated into a SQL literal" 0
+else emit "SQ05" "FAIL" "Value concatenated into a SQL literal: bind it (setString), it is an injection point" "$COUNT" "$SQ05_MATCHES"; fi
 echo ""
 
 # ─── JPA ─────────────────────────────────────────────────
