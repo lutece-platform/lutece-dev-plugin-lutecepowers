@@ -69,6 +69,13 @@ def test_form(bo, anon, record, pair):
                         % (action.split("/")[-1], screen, record["screen_kind"], lutece.page_text(bo)[:120]))
         assert False, "form %s not found on %s (page now at %s, kind %s: %s)" % (
             action, screen, lutece.normalize(bo.url), record["screen_kind"], lutece.page_text(bo)[:120])
+    # A form that only lives in a closed dialog (a modal, an offcanvas) is opened and filled by the page's script
+    # from what the user clicked: submitted as is, its visible-only fill leaves the required fields empty and the
+    # browser refuses them ("not focusable"). The scenarios drive it through its opener.
+    if bo.eval_on_selector_all(form, """fs => fs.every(f => f.getClientRects().length === 0
+            && f.closest('.modal, .offcanvas, dialog'))"""):
+        pytest.skip("form %s only lives in a closed dialog of %s, opened and filled by the page script: its scenario drives it"
+                    % (action.split("/")[-1], screen))
     # Several forms of a screen can share the same action url and differ only by the MVC action they name, so a
     # `deny` entry has to be matched against that name too — otherwise the fuzzer posts the export, the import or
     # the reindex it was told to leave alone.
