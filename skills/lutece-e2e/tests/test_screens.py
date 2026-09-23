@@ -22,7 +22,8 @@ per bench in scenarios/screens.yaml, key `fragment`, and read through lutece.is_
 
 def _screens():
     """Concrete urls to open: discovered screens first (they carry real ids), then inventory screens
-    without parameters that discovery did not reach. Login and session-less screens are separate tests."""
+    without parameters that discovery did not reach, the default view of a controller opened as its bare JSP (a
+    popup no menu links to is reached that way). Login and session-less screens are separate tests."""
     seen, out = set(), []
     in_scope = lutece.scope()
     disc = lutece.load_json("artifacts/discovered.json", {"screens": []})
@@ -33,6 +34,8 @@ def _screens():
     inv = lutece.load_json("artifacts/inventory.json", {"screens": []})
     for s in inv["screens"]:
         u = s["url"]
+        if s.get("kind") == "mvc" and s.get("default"):
+            u = u.split("?")[0]
         if u not in seen and "?" not in u and not re.search(r"AdminLogin|AdminForgot|AdminResetPassword|AdminFormContact", u) and in_scope(u):
             seen.add(u); out.append(u)
     return out
