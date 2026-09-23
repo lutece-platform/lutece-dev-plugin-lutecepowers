@@ -158,7 +158,17 @@ fi
 ( cd "$FINAL" && jar -cf ../lutece.war . )
 echo ">> $(du -h "$SITE/target/lutece.war" | cut -f1) $SITE/target/lutece.war"
 # What run.sh compare needs to hand the v7 database to the v8 site: the component names and versions the v7 site
-# ran with, in the form plugin-liquibase records them (core.plugins.status.<name>.version).
-{ echo "core=$CORE"; echo "$AUTO_PLUGIN=$V"
-  for p in "${EXTRA[@]}"; do [ -n "$p" ] || continue; IFS=':' read -r XG XA XV XT <<< "$p"; echo "$(echo "$XA" | sed 's/^\(plugin\|module\|library\)-//')=$XV"; done
+# ran with, in the form plugin-liquibase records them (core.plugins.status.<name>.version) — every plugin the site
+# assembled, the transitive ones included: a dependency left out keeps the version the v8 start recorded, and its
+# own v7→v8 upgrades never run on the taken-over base. The names and versions are those of the plugin descriptors.
+{ echo "core=$CORE"
+  python3 - "$FINAL/WEB-INF/plugins" <<'PYVER'
+import glob, os, re, sys
+for f in sorted(glob.glob(os.path.join(sys.argv[1], "*.xml"))):
+    t = open(f, encoding="utf-8", errors="replace").read()
+    t = re.sub(r"<!--.*?-->", "", t, flags=re.S)
+    n, v = re.search(r"<name>\s*([^<]+?)\s*</name>", t), re.search(r"<version>\s*([^<]+?)\s*</version>", t)
+    if n and v and n.group(1) != "core":
+        print("%s=%s" % (n.group(1), v.group(1)))
+PYVER
 } > "$SITE/target/versions.properties"

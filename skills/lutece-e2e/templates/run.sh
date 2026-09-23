@@ -553,6 +553,12 @@ WARN
   docker exec "$db" mariadb -ulutece -plutece lutece -N -e "SELECT CONCAT(EXECTYPE,' ',FILENAME) FROM DATABASECHANGELOG ORDER BY ORDEREXECUTED" > artifacts/liquibase-changesets.txt 2>/dev/null || true
   echo ">> Liquibase ran $(wc -l < artifacts/liquibase-changesets.txt) changeset(s) on the v7 database (artifacts/liquibase-changesets.txt)"
   "${COMPOSE[@]}" run --rm --no-deps dbinit >/dev/null 2>&1 || true
+  # The seed also sets what only exists once the v8 core has migrated the base (its security headers, the CSP a
+  # map needs): replayed here, it only reaches the application after the same restart a fresh bench gets.
+  if [ -n "${E2E_RESTART_AFTER_SEED:-}" ]; then
+    "${COMPOSE[@]}" restart lutece >/dev/null && wait_healthy "$APP" || exit 1
+    echo ">> restarted on the seeded, migrated database"
+  fi
   step "compare 5/6: suites on v8"
   local rc8=0
   cmd_discover || true
