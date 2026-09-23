@@ -60,6 +60,8 @@ Both sides
              @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
   TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
   TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
+  TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
+             which the assembled admin CSS does not define: an unstyled button -> color='light'
   TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
              nor the assembled theme CSS defines: the style or the behaviour is silently lost
   TD46 WARN  a copy of jQuery or of a jQuery plugin shipped by the project (a page loading its own jquery*.js, a file
@@ -302,7 +304,10 @@ class Knowledge:
         self.bo_icons = self.icons | icon_aliases(os.path.join(BO_MACRO_DIR, "components/icon/icon.ftl"))
         self.fo_icons = self.icons | icon_aliases(os.path.join(FO_MACRO_DIR, "components/icons/cIcon.ftl"))
         self.bo_only = set(self.bo) - set(self.fo) - set(self.local)
-        self.css_classes = theme_classes(CORE) if self.source.startswith("assembled") else set()
+        assembled = self.source.startswith("assembled")
+        self.css_admin = theme_classes(CORE, ("/themes/skin/", "/css/skin/")) if assembled else set()
+        self.css_skin = theme_classes(CORE, ("/themes/admin/", "/css/admin/")) if assembled else set()
+        self.css_classes = self.css_admin | self.css_skin
         self.switch_writes_empty_value = switch_always_writes_value(os.path.join(BO_MACRO_DIR, "forms/checkbox/checkBox.ftl")) if self.available else False
 
     def known(self, name):
@@ -449,11 +454,13 @@ LEGACY_DATA = re.compile(r"\sdata-(toggle|target|dismiss|ride|slide|slide-to|par
 CLASS_ATTR = re.compile(r"""\bclass\s*=\s*(["'])(.*?)\1""", re.S)
 
 
-def theme_classes(base):
-    """Class names every CSS file of the assembled webapp defines: a legacy name the theme still styles is not lost."""
+def theme_classes(base, skip):
+    """Class names the CSS files of the assembled webapp define, outside the directories named in skip: a legacy name
+    the theme still styles is not lost. The back office reads the admin and shared CSS, the front office the skin and
+    shared CSS."""
     names = set()
     for dirpath, _, files in os.walk(base):
-        if "/WEB-INF/" in dirpath + "/":
+        if "/WEB-INF/" in dirpath + "/" or any(part in dirpath + "/" for part in skip):
             continue
         for name in files:
             if name.endswith(".css"):
@@ -469,12 +476,12 @@ def check_house_forms(text, findings, kind):
     add_grouped(findings, "TD50", "WARN", template_rules.inline_forms(text, kind == "fo"), "inline form: two visible fields or more side by side on one line; one field per row, the standard form layout")
 
 
-def check_legacy_markup(text, findings, know):
+def check_legacy_markup(text, findings, know, kind):
     """Bootstrap 3/4 and Font Awesome markup that Bootstrap 5 and the theme ignore."""
     hits = {}
     for match in CLASS_ATTR.finditer(text):
         for token in re.split(r"\s+", re.sub(r"\$\{[^}]*\}|<#[^>]*>|</#[^>]*>", " ", match.group(2))):
-            if token and LEGACY_CLASS.match(token) and token not in know.css_classes:
+            if token and LEGACY_CLASS.match(token) and token not in (know.css_skin if kind == "fo" else know.css_admin):
                 hits.setdefault(token, line_of(text, match.start()))
     for match in LEGACY_DATA.finditer(text):
         hits.setdefault("data-" + match.group(1), line_of(text, match.start()))
@@ -530,6 +537,10 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         add_grouped(findings, "TD42", "WARN", hits, "@checkBox orientation='switch' without value: the switch branch writes value=\"\" whatever the caller passed, so the box submits an empty string where a checkbox submits 'on' -- give it value='1' or read the parameter with != null, never isNotEmpty")
     for match in re.finditer(r"<@boxBody\b[^>]*>\s*<@(tform|table|manageFeature)\b", text, flags=re.S):
         add(findings, "TD05", "INFO", line_of(text, match.start()), "@box holding only a @%s: drop the box (tform boxed=true; manageFeature items are cards)" % match.group(1))
+    if know.css_admin and "btn-default" not in know.css_admin:
+        hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
+                if re.search(r"""\bcolor\s*=\s*['"](btn-)?(default|secondary)['"]""", call) or (name == "button" and re.search(r"\bcancel\s*=\s*true", call) and not re.search(r"\bcolor\s*=", call))]
+        add_grouped(findings, "TD51", "WARN", sorted(hits), "button colour 'default'/'secondary' (or cancel=true): the macro renders btn-default, which the admin CSS does not define, so the button has no style; use color='light'")
     no_script = strip_scripts(text)
     for tag in RAW_BO_TAGS:
         hits = [line_of(text, m.start()) for m in re.finditer(r"<%s\b" % tag, no_script)]
@@ -640,7 +651,7 @@ def check_common(text, findings, kind, know):
     add_grouped(findings, "TD38", "INFO", hits, "inline style= in params: the theme owns the CSS")
     check_house_forms(text, findings, kind)
     if know.css_classes:
-        check_legacy_markup(text, findings, know)
+        check_legacy_markup(text, findings, know, kind)
     for name, line in conditional_selectors(text):
         add(findings, "TD43", "WARN", line, "the script looks up '%s' unconditionally while the template only emits it inside a condition: the lookup returns null and the whole script block dies there" % name)
     if know.source.startswith("assembled"):
