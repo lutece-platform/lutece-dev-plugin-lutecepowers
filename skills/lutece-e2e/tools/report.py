@@ -230,7 +230,7 @@ def summary(rows, perf, disc, inv):
         L += ["", "## Ignorés (%d) — exclusion déclarée par le banc, ou donnée consommée par un autre test" % len(skipped), ""]
         L += ["- `%s` — %s" % (r["id"], skip_reason(r.get("reason"))[:160]) for r in skipped[:20]]
 
-    noisy = [r for r in rows if r.get("console") or r.get("js_errors") or r.get("bad_requests")]
+    noisy = [r for r in rows if r.get("suite") != "harness" and (r.get("console") or r.get("js_errors") or r.get("bad_requests"))]
     L += ["", "## Console navigateur (%d écrans non propres)" % len(noisy), ""]
     counts = {}
     for r in noisy:
