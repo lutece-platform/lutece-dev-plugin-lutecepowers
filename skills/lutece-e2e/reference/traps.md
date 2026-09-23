@@ -206,3 +206,10 @@ Two traps this step exposes, each worth reporting on its own:
   stylesheet test for `kind == "fragment"`. The eye still has to ask whether the markup uses the design system
   once embedded.
 
+
+## A full-page capture resizes the page under a responsive widget
+
+Every `goto`, `submit` and `click` of a scenario is photographed full page, and Chromium does it by resizing the
+viewport: resize events fire in the middle of the scenario. A widget that follows its container (an image cropper,
+a chart, a map) rescales on them, sometimes to zero, and the next step fails with nothing pointing at the
+screenshot. A scenario driving such a widget declares `viewport_shots: true`.

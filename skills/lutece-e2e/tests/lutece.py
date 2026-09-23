@@ -284,13 +284,15 @@ def normalize(u):
     return urllib.parse.urlunsplit(("", "", p.path, urllib.parse.urlencode(q), ""))
 
 
-def shot(page, name, kind="png"):
-    """Screenshot into artifacts/shots/<name>.<kind>, full page, returns the relative path."""
+def shot(page, name, kind="png", full_page=True):
+    """Screenshot into artifacts/shots/<name>.<kind>, full page unless told otherwise, returns the relative path.
+    A full-page capture makes Chromium resize the viewport, which fires resize events a responsive widget reacts to;
+    a scenario driving such a widget captures the viewport only (viewport_shots)."""
     d = ARTIFACTS / "shots"
     d.mkdir(parents=True, exist_ok=True)
     path = d / ("%s.%s" % (name, kind))
     try:
-        page.screenshot(path=str(path), full_page=True, type="jpeg" if kind == "jpg" else kind, **({"quality": 70} if kind in ("jpg", "webp") else {}))
+        page.screenshot(path=str(path), full_page=full_page, type="jpeg" if kind == "jpg" else kind, **({"quality": 70} if kind in ("jpg", "webp") else {}))
     except Exception as e:  # noqa: BLE001 - a screenshot never fails a test
         return "screenshot failed: %s" % str(e)[:80]
     return str(path.relative_to(ARTIFACTS))

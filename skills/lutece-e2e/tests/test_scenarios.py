@@ -69,7 +69,7 @@ Step vocabulary (one key per step):
                                    step fails when the login form is still there afterwards
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
-Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
+Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
 Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for numeric keys), {{base}} and anything set by set/sql_set/dom_set.
@@ -583,9 +583,9 @@ def test_scenario(bo, browser, request, record, sc):
                 record.setdefault("proven", []).extend(pending)
                 pending = []
             if list(step)[0] in ("goto", "submit", "submit_novalidate", "confirm", "click"):
-                record.setdefault("screenshots", []).append(lutece.shot(bo, "%s_%d" % (sc["id"], i), "jpg"))
+                record.setdefault("screenshots", []).append(lutece.shot(bo, "%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots")))
         except AssertionError as e:
-            record["screenshot"] = lutece.shot(bo, "fail_%s_%d" % (sc["id"], i), "jpg")
+            record["screenshot"] = lutece.shot(bo, "fail_%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots"))
             record["failed_step"] = i
             record["failed_step_kind"] = list(step)[0]
             raise AssertionError("step %d %s: %s" % (i, list(step)[0], e)) from None
@@ -593,6 +593,6 @@ def test_scenario(bo, browser, request, record, sc):
     record["kind"] = final
     navigated = any(list(st)[0] in ("goto", "submit", "submit_novalidate", "confirm", "confirm_if", "click", "click_if", "login", "login_fo") for st in sc["steps"])
     if navigated and final in ("blank", "error-page", "truncated") and sc.get("ends_on") != final:
-        record["screenshot"] = lutece.shot(bo, "fail_%s_end" % sc["id"], "jpg")
+        record["screenshot"] = lutece.shot(bo, "fail_%s_end" % sc["id"], "jpg", full_page=not sc.get("viewport_shots"))
         raise AssertionError("the scenario ends on a %s page: its last screen shows nothing a user can read. Fix the flow, "
                              "or declare `ends_on: %s` with a description saying why that is the screen's normal answer" % (final, final))
