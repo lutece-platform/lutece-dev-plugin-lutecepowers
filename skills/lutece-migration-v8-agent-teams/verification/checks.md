@@ -132,6 +132,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | MV03 | WARN | CSRF token carried by hand inside an MVC bean, or `securityTokenEnabled = false` | `SecurityTokenService\.MARK_TOKEN` in a file that has `@Controller` / `MVCAdminJspBean` / `MVCApplication` | *.java |
 | MV04 | FAIL | FileItem (not MultipartItem) | `import.*FileItem[^P]` | *.java |
 | MV05 | WARN | `@View` calling an `@Action` method of its bean: the write runs on a GET, which the token filter never checks | body of each `@View` method naming an `@Action` method of the same file | *.java |
+| MV06 | WARN | `addError` then a redirect from an admin `@View`: the message is lost on the next page | body of each `@View` of an `MVCAdminJspBean`: `addError(` followed by `redirect(`/`redirectView(` | *.java |
 
 ## Web / Config (WB)
 

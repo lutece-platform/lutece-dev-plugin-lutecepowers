@@ -423,16 +423,17 @@ check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "FAIL" "AbstractPaginatorJsp
 # MV05: a @View that calls a do* @Action method of its bean runs that action on a GET, which the token filter never
 # checks (it only reads the action named in the request): a link followed by a crawler, a prefetch or an <img> then
 # writes. The view asks for a confirmation whose form posts the action instead (AdminMessage TYPE_CONFIRMATION).
-MV05_MATCHES=""
+# MV06: addError( ... ) then a redirect from a @View of an admin bean: the message only travels from an @Action, the
+# next page shows no error (web-bean.md, "Errors from a view"). The view answers an AdminMessage TYPE_STOP instead.
+MV05_MATCHES=""; MV06_MATCHES=""
 if [ -d "src/java" ]; then
-    MV05_MATCHES=$({ grep -rlE '@View' src/java --include="*.java" 2>/dev/null || true; } | python3 -c '
+    MV_VIEWS=$({ grep -rlE '@View' src/java --include="*.java" 2>/dev/null || true; } | python3 -c '
 import re, sys
 SIG = r"(?:\s*@\w+(?:\([^)]*\))?)*\s*(?:public|protected|private)\s+[\w<>\[\], ]+\s+(\w+)\s*\("
 for path in sys.stdin.read().split():
     text = open(path, encoding="utf-8", errors="replace").read()
     actions = {a for a in re.findall(r"@Action\s*\([^)]*\)" + SIG, text) if a.startswith("do")}
-    if not actions:
-        continue
+    admin = "MVCAdminJspBean" in text
     for m in re.finditer(r"@View\s*\([^)]*\)" + SIG, text):
         start = text.find("{", m.end())
         depth, i = 0, start
@@ -441,14 +442,26 @@ for path in sys.stdin.read().split():
             if depth == 0:
                 break
             i += 1
-        for call in re.finditer(r"\b(%s)\s*\(" % "|".join(map(re.escape, sorted(actions))), text[start:i]):
-            line = text.count("\n", 0, start + call.start()) + 1
-            print("%s:%d: @View %s calls @Action %s: the action runs on a GET, unchecked by the token filter" % (path, line, m.group(1), call.group(1)))
+        body = text[start:i]
+        if actions:
+            for call in re.finditer(r"\b(%s)\s*\(" % "|".join(map(re.escape, sorted(actions))), body):
+                line = text.count("\n", 0, start + call.start()) + 1
+                print("MV05\t%s:%d: @View %s calls @Action %s: the action runs on a GET, unchecked by the token filter" % (path, line, m.group(1), call.group(1)))
+        if admin:
+            for err in re.finditer(r"\baddError\s*\(", body):
+                if re.search(r"\bredirect(View)?\s*\(", body[err.end():]):
+                    line = text.count("\n", 0, start + err.start()) + 1
+                    print("MV06\t%s:%d: @View %s adds an error then redirects: the message is lost, answer an AdminMessage TYPE_STOP" % (path, line, m.group(1)))
 ')
+    MV05_MATCHES=$(echo "$MV_VIEWS" | grep "^MV05" | cut -f2-)
+    MV06_MATCHES=$(echo "$MV_VIEWS" | grep "^MV06" | cut -f2-)
 fi
 COUNT=0; [ -n "$MV05_MATCHES" ] && COUNT=$(echo "$MV05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "MV05" "PASS" "No @View runs an @Action of its bean" 0
 else emit "MV05" "WARN" "@View calling an @Action: the write runs on a GET without token (confirm, then post the action)" "$COUNT" "$MV05_MATCHES"; fi
+COUNT=0; [ -n "$MV06_MATCHES" ] && COUNT=$(echo "$MV06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "MV06" "PASS" "No admin @View loses an error on a redirect" 0
+else emit "MV06" "WARN" "addError then redirect from an admin @View: the next page shows no error (answer an AdminMessage TYPE_STOP)" "$COUNT" "$MV06_MATCHES"; fi
 # MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
 # token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
 # must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.
