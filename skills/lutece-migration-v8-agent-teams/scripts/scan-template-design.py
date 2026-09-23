@@ -90,6 +90,7 @@ Both sides
 SQL
   TD08 WARN  core_admin_right icon_url pointing to an image in an init/create script: adminHeader.ftl renders <i class="${iconUrl}">
              (upgrade scripts are skipped: an old one is superseded by a later one)
+  TD62 WARN  genatt_entry_type icon_name neither a Tabler name nor an alias of the icon macro: an empty glyph
 Not findings: ?c on ids (Lutece sets number_format 0.######), <@cTpl> before or after <#macro> (macros are hoisted).
 """
 import glob
@@ -803,8 +804,22 @@ def dead_assets(text, webapps):
     return sorted(out.items(), key=lambda kv: kv[1])
 
 
-def check_sql(text, findings):
-    """SQL rules: the admin feature icon is a CSS class, adminHeader.ftl renders <i class="${iconUrl}">."""
+def sql_values(row):
+    """The values of one SQL row tuple, quotes removed, commas inside quoted strings kept."""
+    return [v.strip().strip("'") for v in re.findall(r"\s*('(?:[^']|'')*'|[^,]+)\s*(?:,|$)", row)]
+
+
+def check_sql(text, findings, know):
+    """SQL rules: the admin feature icon is a CSS class, adminHeader.ftl renders <i class="${iconUrl}">; an entry
+    type icon (genatt_entry_type.icon_name) is a name of the theme's icon macro."""
+    for match in re.finditer(r"INSERT INTO genatt_entry_type\s*\(([^)]*)\)\s*VALUES(.*?);", text, flags=re.S | re.I):
+        cols = [c.strip().lower() for c in match.group(1).split(",")]
+        if "icon_name" not in cols or not know.icons:
+            continue
+        for row in re.finditer(r"\(((?:[^()']|'(?:[^']|'')*')*)\)", match.group(2)):
+            values = sql_values(row.group(1))
+            if len(values) == len(cols) and values[cols.index("icon_name")] not in know.bo_icons:
+                add(findings, "TD62", "WARN", line_of(text, match.start(2) + row.start()), "entry type icon '%s' is neither a Tabler name nor an alias of the theme's icon macro: its button shows an empty glyph (fix existing sites with an upgrade script too)" % values[cols.index("icon_name")])
     for match in re.finditer(r"INSERT INTO core_admin_right.*?;", text, flags=re.S | re.I):
         for icon in re.finditer(r"'(images/[^']*)'", match.group(0)):
             add(findings, "TD08", "WARN", line_of(text, match.start() + icon.start()), "core_admin_right icon_url '%s' is an image path: adminHeader.ftl renders it as a CSS class, use 'ti ti-<name>'" % icon.group(1))
@@ -828,7 +843,7 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
         check_jquery(text, findings, jquery_declared)
         check_upload_widget(text, findings)
     elif kind == "sql":
-        check_sql(text, findings)
+        check_sql(text, findings, know)
     elif kind == "standalone":
         check_jquery(text, findings, jquery_declared)
         check_upload_widget(text, findings)
