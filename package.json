@@ -1,6 +1,6 @@
 {
   "name": "lutecepowers",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Lutece 8 development toolkit for coding agents (OpenCode plugin entry point)",
   "type": "module",
   "main": ".opencode/plugins/lutecepowers.js",
