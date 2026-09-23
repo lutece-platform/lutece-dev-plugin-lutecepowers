@@ -576,6 +576,7 @@ def test_scenario(bo, browser, request, record, sc):
     pending = []
     for i, step in enumerate(sc["steps"]):
         lutece.reset_obs(bo)
+        step_started = time.time()
         try:
             run_step(bo, step, vars_, record)
             pending += [lutece.nav_key(n["url"], n.get("mvc", "")) for n in bo.obs.get("nav", []) if n["status"] < 400]
@@ -588,6 +589,7 @@ def test_scenario(bo, browser, request, record, sc):
             record["screenshot"] = lutece.shot(bo, "fail_%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots"))
             record["failed_step"] = i
             record["failed_step_kind"] = list(step)[0]
+            record["failed_step_window"] = [step_started, time.time()]
             raise AssertionError("step %d %s: %s" % (i, list(step)[0], e)) from None
     final = lutece.classify(bo)
     record["kind"] = final

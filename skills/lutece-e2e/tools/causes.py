@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Server-side cause of each failed test: the exception lines logged in artifacts/logs/messages.log during the
-test's time window (workers run in parallel, so a cause is a candidate, not a proof; the JSP name, when
+failed step's time window (the whole test's for a suite that does not record its steps) (workers run in parallel, so a cause is a candidate, not a proof; the JSP name, when
 present in the block, confirms it). Prints one line per failed test and writes artifacts/causes.json."""
 import datetime
 import json
@@ -49,6 +49,8 @@ def main():
             if bean:
                 marks.add(bean + "." + method if method else bean)
         t0, t1 = r.get("t_start", 0) - 1, r.get("t_end", 0) + 1
+        if r.get("failed_step_window"):
+            t0, t1 = r["failed_step_window"][0] - 1, r["failed_step_window"][1] + 1
         causes = []
         for t, b in blocks:
             if t0 <= t <= t1:
