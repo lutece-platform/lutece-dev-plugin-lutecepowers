@@ -26,8 +26,18 @@ BEAN_CALL = re.compile(r"(\w+JspBean)\s*\.\s*(get|do|view|process)(\w+)\s*\(")
 INIT_RIGHT = re.compile(r"\.init\s*\(\s*pageContext\.request\s*,\s*(?:\w+\.)?(\w+)\s*\)")
 REDIRECT = re.compile(r"sendRedirect|response\.setHeader|\.do\w+\s*\(")
 CONTROLLER = re.compile(r"@Controller\s*\(([^)]*)\)", re.S)
-VIEW = re.compile(r"@View\s*\(\s*(?:value\s*=\s*)?(\w+|\"[^\"]+\")([^)]*)\)")
-ACTION = re.compile(r"@Action\s*\(\s*(?:value\s*=\s*)?(\w+|\"[^\"]+\")")
+VIEW = re.compile(r"@View\s*\(([^)]*)\)")
+ACTION = re.compile(r"@Action\s*\(([^)]*)\)")
+
+
+def annotation_name(args):
+    """Name of an @View / @Action: its `value = X` attribute wherever it stands (`@View( defaultView = true,
+    value = VIEW_X )`), else its single positional argument."""
+    m = re.search(r"\bvalue\s*=\s*(\w+|\"[^\"]+\")", args)
+    if m:
+        return m.group(1)
+    m = re.match(r"\s*(\w+|\"[^\"]+\")\s*(?:,|$)", args)
+    return m.group(1) if m and "=" not in m.group(0) else ""
 CONST = re.compile(r"String\s+(\w+)\s*=\s*\"([^\"]+)\"")
 FORM_ACTION = re.compile(r"<(?:form|@tform)\b[^>]*?action\s*=\s*['\"]([^'\"]*)['\"]", re.I | re.S)
 HREF_ADMIN = re.compile(r"(?:href|action)\s*=\s*['\"]([^'\"]*jsp/admin/[^'\"#]*)", re.I)
@@ -428,13 +438,19 @@ def mvc_inventory(root):
             if not base:
                 continue
         for m in VIEW.finditer(text):
-            v = consts.get(m.group(1), m.group(1).strip('"'))
-            default = "defaultView" in m.group(2) and "true" in m.group(2)
+            name = annotation_name(m.group(1))
+            if not name:
+                continue
+            v = consts.get(name, name.strip('"'))
+            default = bool(re.search(r"\bdefaultView\s*=\s*true\b", m.group(1)))
             screens.append({"id": "%s.view.%s" % (bean, v), "url": "%s%sview=%s" % (base, sep, v), "kind": kind,
                             "bean": bean, "method": v, "right": attrs.get("right"), "default": default,
                             "surface": surface})
         for m in ACTION.finditer(text):
-            a = consts.get(m.group(1), m.group(1).strip('"'))
+            name = annotation_name(m.group(1))
+            if not name:
+                continue
+            a = consts.get(name, name.strip('"'))
             actions.append({"id": "%s.action.%s" % (bean, a), "url": "%s%saction=%s" % (base, sep, a), "kind": kind,
                             "bean": bean, "method": a, "right": attrs.get("right"),
                             "token": attrs.get("securityTokenEnabled") == "true", "surface": surface})
