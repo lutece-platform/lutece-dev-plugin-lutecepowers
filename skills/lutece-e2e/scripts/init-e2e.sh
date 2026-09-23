@@ -81,6 +81,7 @@ cp -a "$SKILL/tools/." "$E2E/tools/"
 cp -a "$SKILL/tests/." "$E2E/tests/"
 cp "$SKILL/templates/run.sh" "$E2E/run.sh"; chmod +x "$E2E/run.sh" "$E2E/tools/gen-site.sh"
 cp "$SKILL/reference/DESIGN.md" "$E2E/DESIGN.md"
+echo "$SKILL" > "$E2E/.toolkit"
 [ -f "$E2E/README.md" ] || sed "s/@@NAME@@/$ARTIFACT/g" "$SKILL/templates/README.md.tpl" > "$E2E/README.md"
 # The bench is a local tool, never committed with the plugin: ignore the whole folder at the project root
 # (idempotent; a .gitignore that does not end with a newline would glue the entry to its last line).

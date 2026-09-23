@@ -41,6 +41,14 @@ APP="${E2E_NAME}-lutece-1"
 COMPOSE=(docker compose -f harness/docker-compose.yml ${E2E_FAKES:+--profile fakes} ${E2E_SEARCH:+--profile search})
 START=$SECONDS
 
+# A bench refreshed long ago keeps old tools: warn when they differ from the skill that initialised it.
+if [ -f "$E2E/.toolkit" ] && [ -d "$(cat "$E2E/.toolkit")/tools" ]; then
+  _tk=$(cat "$E2E/.toolkit")
+  if ! diff -rq --exclude __pycache__ "$_tk/tools" "$E2E/tools" >/dev/null 2>&1 || ! diff -rq --exclude __pycache__ "$_tk/tests" "$E2E/tests" >/dev/null 2>&1 || ! diff -q "$_tk/templates/run.sh" "$E2E/run.sh" >/dev/null 2>&1; then
+    printf '\033[1mbench out of date: its tools differ from %s — run init-e2e.sh on the project to refresh them\033[0m\n' "$_tk" >&2
+  fi
+fi
+
 step() { printf '\n\033[1m== %s\033[0m (%ds)\n' "$*" "$((SECONDS - START))"; }
 health() { docker inspect -f '{{.State.Health.Status}}' "$APP" 2>/dev/null || echo missing; }
 
