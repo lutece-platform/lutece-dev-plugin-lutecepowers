@@ -921,6 +921,28 @@ fi
 COUNT=0; [ -n "$I18N06_MATCHES" ] && COUNT=$(echo "$I18N06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N06" "PASS" "Every bundle line is key=value" 0
 else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value" "$COUNT" "$I18N06_MATCHES"; fi
+
+# I18N07: French value with a common spelling error (Etes vous, sur de vouloir) or a Java class name left from a
+# generator (supprimer ce PollFormQuestion): the user reads it as is.
+I18N07_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N07_MATCHES=$(python3 - <<'PY'
+import glob, re
+BAD = re.compile(r"\b[EÉ]tes[ -]vous\b(?<!Êtes-vous)|\bsur de vouloir\b|\b(ce|cette|le|la|un|une)\s+[A-Z][a-z]+[A-Z]\w*")
+for f in sorted(glob.glob("src/java/**/*_messages_fr.properties", recursive=True)):
+    for n, line in enumerate(open(f, encoding="latin-1"), 1):
+        if "=" not in line or line.lstrip().startswith(("#", "!")):
+            continue
+        value = line.split("=", 1)[1].rstrip("\r\n")
+        value = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), value)
+        if BAD.search(value):
+            print("%s:%d: %s" % (f, n, line.strip()[:100]))
+PY
+) || I18N07_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N07_MATCHES" ] && COUNT=$(echo "$I18N07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N07" "PASS" "No common spelling error in French values" 0
+else emit "I18N07" "WARN" "French value with a spelling error (Êtes-vous, sûr) or a leftover class name" "$COUNT" "$I18N07_MATCHES"; fi
 echo ""
 
 # WB06: an <admin-feature> whose <feature-group> is not the group its install SQL gives it. Reinstalling the plugin from
