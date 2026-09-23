@@ -1131,7 +1131,13 @@ else emit "TM13" "FAIL" "Back-office field named page: the CSRF check is skipped
 
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi
-check_grep "TM02" 'jQuery\|\$(' "webapp/WEB-INF/templates/" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload"
+# The plugin's own scripts count too (webapp/js, webapp/themes), not only templates; a vendored library is VL01's.
+TM02_MATCHES=$( { grep -rn 'jQuery\|\$(' webapp/WEB-INF/templates/ --include="*.html" --include="*.ftl" --include="*.js" 2>/dev/null;
+    find webapp -path webapp/WEB-INF -prune -o -name "*.js" ! -name "*.min.js" ! -path "*/lib/*" ! -path "*/vendor/*" -print 2>/dev/null \
+        | grep -viE 'jquery|fileupload|swfupload|plupload|uploadify|swagger-ui|bundle' | xargs -r grep -Hn 'jQuery(\|\$(' 2>/dev/null; } | head -200) || TM02_MATCHES=""
+COUNT=0; [ -n "$TM02_MATCHES" ] && COUNT=$(echo "$TM02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM02" "PASS" "No jQuery in the templates and scripts of the plugin" 0
+else emit "TM02" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload" "$COUNT" "$TM02_MATCHES"; fi
 
 # TM03: Old upload macro names
 TM03_MATCHES=""
