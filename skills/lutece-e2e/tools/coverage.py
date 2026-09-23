@@ -102,7 +102,16 @@ def main():
             st["n_" + name] = sum(1 for x in v if x["status"] == name)
         return st
 
-    out["stats"] = {k: count(v) for k, v in out.items()}
+    rest_calls = [c for r in rows if r["status"] == "passed" and r["suite"] == "scenarios" for c in r.get("rest_calls", []) if c.get("asserted")]
+    out["rest"] = []
+    for e in inv.get("rest", []):
+        pattern = re.compile("^(?:[^/]+/)*?" + re.sub(r"\\\{[^/]*?\\\}", "[^/]+", re.escape(e["url"])) + "$")
+        hits = sorted({c["path"] for c in rest_calls if c["verb"] == e["verb"] and pattern.match(c["path"])})
+        rule = next((x for x in excl if x["pattern"] in e["url"]), None)
+        out["rest"].append({"id": e["id"], "url": e["url"], "verb": e["verb"], "origin": e.get("origin", "target"),
+                            "status": "proven" if hits else ("unreachable" if rule else "todo"), "calls": hits[:5],
+                            "excluded": rule["reason"] if rule and not hits else None})
+    out["stats"] = {k: count(v) for k, v in out.items() if k in ("screens", "actions")}
     tgt = lambda x: x["origin"] == "target"
     out["stats_target"] = {k: count([x for x in v if tgt(x) and x.get("surface", "bo") == "bo"]) for k, v in out.items() if k in ("screens", "actions")}
     out["stats_fo"] = {k: count([x for x in v if tgt(x) and x.get("surface") == "fo"]) for k, v in out.items() if k in ("screens", "actions")}
@@ -134,11 +143,15 @@ def main():
 
 
 def gate(out):
-    """Elements of the artefact the bench claims nothing about: an action no green scenario proved, a screen no test reached."""
+    """Elements of the artefact the bench claims nothing about: an action no green scenario proved, a screen no test
+    reached, a REST write (POST, PUT, DELETE, PATCH) no passing http step asserted on."""
     ok = {"actions": ("proven", "defect", "blocked", "unreachable"),
           "screens": ("proven", "defect", "robustness", "reached", "blocked", "unreachable")}
-    return ["%s %s (%s)" % (kind[:-1], x["url"], x["status"]) for kind in ("actions", "screens")
+    gaps = ["%s %s (%s)" % (kind[:-1], x["url"], x["status"]) for kind in ("actions", "screens")
             for x in out[kind] if x["origin"] == "target" and x["status"] not in ok[kind]]
+    gaps += ["REST %s %s (no passing http step asserted on it)" % (x["verb"], x["url"]) for x in out.get("rest", [])
+             if x["origin"] == "target" and x["verb"] not in ("GET", "HEAD", "OPTIONS") and x["status"] == "todo"]
+    return gaps
 
 
 if __name__ == "__main__":

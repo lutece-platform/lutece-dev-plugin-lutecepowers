@@ -347,6 +347,8 @@ def run_step(page, step, vars_, record):
                 # it. Whitespace is stripped, because a plain-text answer often carries a trailing newline.
                 if arg.get("capture"):
                     vars_[arg["capture"]] = body.strip()
+                record.setdefault("rest_calls", []).append({"verb": method, "path": urllib.parse.urlsplit(arg["url"]).path.lstrip("/"),
+                                                            "asserted": bool(arg.get("expect_status") or arg.get("contains") or arg.get("not_contains") or arg.get("location_contains"))})
                 break
             except AssertionError:
                 if time.time() >= deadline:
