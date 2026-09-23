@@ -512,14 +512,22 @@ else emit "ST05" "FAIL" "Files created by the migration are excluded by .gitigno
 # LE01: a converted line ending rewrites every line of the file and hides the migration in the diff. A file counts
 # as converted when HEAD and the work tree disagree on carriage returns, whatever else changed in it: the files
 # that also carry real changes are the ones where the review matters most.
+# Line-ending style of stdin: CRLF, LF, CR (old Mac, a file most tools read as one line) or mixed -- leaving either is a repair --,
+# mixed, or none.
+line_endings() {
+    python3 -c 'import sys
+d = sys.stdin.buffer.read()
+crlf = d.count(b"\r\n"); cr = d.count(b"\r") - crlf; lf = d.count(b"\n") - crlf
+kinds = [k for k, n in (("CRLF", crlf), ("CR", cr), ("LF", lf)) if n]
+print(kinds[0] if len(kinds) == 1 else ("mixed" if kinds else "none"))'
+}
 LE01_MATCHES=""
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     LE01_MATCHES=$(git diff HEAD --name-only --diff-filter=M 2>/dev/null | while read -r f; do
         [ -f "$f" ] || continue
-        head_cr=$(git show "HEAD:$f" 2>/dev/null | head -c 20000 | grep -c $'\r' || true)
-        work_cr=$(head -c 20000 "$f" | grep -c $'\r' || true)
-        if [ "$head_cr" -gt 0 ] && [ "$work_cr" -eq 0 ]; then echo "$f: CRLF in HEAD, LF now"
-        elif [ "$head_cr" -eq 0 ] && [ "$work_cr" -gt 0 ]; then echo "$f: LF in HEAD, CRLF now"; fi
+        head_le=$(git show "HEAD:$f" 2>/dev/null | head -c 20000 | line_endings)
+        work_le=$(head -c 20000 "$f" | line_endings)
+        [ "$head_le" = "$work_le" ] || [ "$head_le" = "CR" ] || [ "$head_le" = "mixed" ] || [ "$head_le" = "none" ] || echo "$f: $head_le in HEAD, $work_le now"
     done)
 fi
 COUNT=0; [ -n "$LE01_MATCHES" ] && COUNT=$(echo "$LE01_MATCHES" | wc -l)
