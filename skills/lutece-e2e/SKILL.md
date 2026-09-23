@@ -198,6 +198,8 @@ Rules:
   scenario exists, what defect it pins, what a reader should know before the steps. Write it as a `>-` block — a
   bare scalar containing `: ` is not valid YAML and silently invalidates the whole file.
 - Never assert on wording that comes from i18n when a `sql:` check is possible.
+- A list rendered by `@manageFeature` is cards, not a table: its oracle is `.row-cards li` (rows) and `.empty` (no
+  row), never `table tbody tr`, which silently counts zero after a list migration.
 - Confirmation screens: `expect_message: confirmation` then `confirm:`; refusals: `expect_message: error`.
 - Keep `{{rand}}` in every created key so scenarios are re-runnable and parallel-safe.
 

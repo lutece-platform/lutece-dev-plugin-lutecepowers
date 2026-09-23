@@ -70,7 +70,7 @@ Step vocabulary (one key per step):
                                    step fails when the login form is still there afterwards
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
-Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
+Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
 Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for numeric keys), {{base}} and anything set by set/sql_set/dom_set.
@@ -583,6 +583,17 @@ def test_scenario(bo, browser, request, record, sc):
     # the same parcours side by side, and a green scenario without a picture proves nothing to a reader.
     # Coverage counts as proven only the pages an oracle stood behind: the navigations made since the last
     # oracle are credited when the next one passes, the ones after the last oracle never are.
+    if sc.get("locale"):
+        bo.set_extra_http_headers({"Accept-Language": sc["locale"]})
+    try:
+        _play(bo, sc, vars_, record)
+    finally:
+        if sc.get("locale"):
+            bo.set_extra_http_headers({})
+
+
+def _play(bo, sc, vars_, record):
+    """Runs the steps of a scenario, credits the proven pages and checks how it ends."""
     pending = []
     for i, step in enumerate(sc["steps"]):
         lutece.reset_obs(bo)

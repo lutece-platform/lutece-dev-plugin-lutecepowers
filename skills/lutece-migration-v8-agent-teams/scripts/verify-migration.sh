@@ -776,7 +776,7 @@ if [ -d "src/java" ]; then
     PLUGIN=$(basename "${BUNDLE:-}" 2>/dev/null | sed 's/_messages.properties//')
     if [ -n "$PLUGIN" ] && [ -n "$BUNDLE" ]; then
         DECLARED=$(mktemp); ASKED=$(mktemp)
-        find src/java -name "*_messages*.properties" -exec sed -nE 's/^([A-Za-z0-9_.-]+) *=.*/\1/p' {} \; | sort -u > "$DECLARED"
+        find src/java -name "*_messages*.properties" -exec env LC_ALL=C sed -nE 's/^([A-Za-z0-9_.-]+) *=.*/\1/p' {} \; | LC_ALL=C sort -u > "$DECLARED"
         grep -arhoE "#i18n\{$PLUGIN\.[A-Za-z0-9_.-]+\}" webapp src 2>/dev/null | sed -E "s/^#i18n\{$PLUGIN\.//; s/\}$//" >> "$ASKED"
         grep -arhoE "(MESSAGE|INFO|ERROR|WARNING|TITLE|PROPERTY_PAGE_TITLE)_[A-Z0-9_]+ *= *\"$PLUGIN\.[A-Za-z0-9_.-]+\"" src/java --include="*.java" 2>/dev/null \
             | grep -oE "\"$PLUGIN\.[A-Za-z0-9_.-]+\"" | tr -d '"' | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
