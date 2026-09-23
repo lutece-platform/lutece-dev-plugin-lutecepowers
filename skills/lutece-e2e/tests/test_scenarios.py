@@ -587,6 +587,7 @@ def test_scenario(bo, browser, request, record, sc):
         except AssertionError as e:
             record["screenshot"] = lutece.shot(bo, "fail_%s_%d" % (sc["id"], i), "jpg")
             record["failed_step"] = i
+            record["failed_step_kind"] = list(step)[0]
             raise AssertionError("step %d %s: %s" % (i, list(step)[0], e)) from None
     final = lutece.classify(bo)
     record["kind"] = final

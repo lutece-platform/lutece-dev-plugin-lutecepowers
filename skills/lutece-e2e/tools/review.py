@@ -95,6 +95,8 @@ def groups():
         shot = r.get("screenshot")
         if not shot or r.get("suite") not in ("screens", "fo", "forms", "scenarios"):
             continue
+        if r.get("failed_step_kind") == "http":
+            continue
         if r.get("suite") != "scenarios" and not in_scope(r.get("url") or r.get("screen") or ""):
             continue
         path = (r.get("url") or r.get("screen") or r["id"]).split("?")[0]
