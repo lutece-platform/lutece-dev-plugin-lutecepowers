@@ -4,12 +4,23 @@
 # The oracle is `expect_message: error` (a Lutece AdminMessage, never an internal error) plus the row unchanged.
 scenarios:
 
-  - id: myentity_csrf_remove_without_token_refused
-    title: Une suppression appelée sans jeton CSRF est refusée et la ligne reste en base
+  # Two forgeries, both mandatory. The POST without token is what the core filter refuses. The GET is a link or an
+  # <img> in any page: core 8.0.x runs an @Action on GET without checking the token, so this scenario is RED until
+  # the core is fixed. Keep it red and labelled, never exclude it, never work around it in the plugin.
+  - id: myentity_csrf_post_without_token_refused
+    title: Une suppression postée sans jeton CSRF est refusée et la ligne reste en base
     req: MYPLUGIN_MANAGEMENT
     steps:
-      - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=doRemoveMyEntity&id=9001
-      - expect_message: error
+      - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp', method: POST, headers: {Content-Type: application/x-www-form-urlencoded}, body: 'action=removeMyEntity&id=9001'}
+      - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9001", expect: 1}
+
+  - id: myentity_csrf_get_without_token_refused
+    title: "Défaut du core : une suppression appelée par un simple lien, sans jeton, ne doit rien supprimer"
+    description: >-
+      Core defect (expected red until lutece-core refuses an @Action on GET): the link deletes the row.
+    req: MYPLUGIN_MANAGEMENT
+    steps:
+      - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=removeMyEntity&id=9001
       - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9001", expect: 1}
 
   # - id: myentity_empty_title_refused
