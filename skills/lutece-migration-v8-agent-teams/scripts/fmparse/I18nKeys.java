@@ -25,7 +25,7 @@ public class I18nKeys
     static final Pattern COMMENT = Pattern.compile( "<#--.*?-->", Pattern.DOTALL );
     static final Pattern PREFIX = Pattern.compile( "\\$\\{\\s*\"([^\"]+)\"\\s*\\+" );
     static final Pattern CONSTANT = Pattern.compile( "final\\s+String\\s+([A-Z][A-Z_0-9]*)\\s*=\\s*\"([^\"]*)\"" );
-    static final Pattern I18N_CALL = Pattern.compile( "(?:getLocalizedString|getLocalizedMessage|getMessageUrl|localize)\\s*\\(([^;)]*)\\)" );
+    static final Pattern I18N_CALL = Pattern.compile( "(?:getLocalizedString|getLocalizedMessage|getMessageUrl|localize|setPageTitleProperty|getPage|addError|addInfo|addWarning)\\s*\\(([^;)]*)\\)|(?:pageTitleI18nKey|pagePathI18nKey)\\s*=\\s*([^,)]+)" );
     static final Pattern WORD = Pattern.compile( "\"([^\"]+)\"|([A-Z][A-Z_0-9]{2,})" );
 
     public static void main( String[] args ) throws Exception
@@ -113,7 +113,7 @@ public class I18nKeys
         Matcher call = I18N_CALL.matcher( text );
         while ( call.find( ) )
         {
-            Matcher word = WORD.matcher( call.group( 1 ) );
+            Matcher word = WORD.matcher( call.group( 1 ) != null ? call.group( 1 ) : call.group( 2 ) );
             while ( word.find( ) )
             {
                 String key = word.group( 1 ) != null ? word.group( 1 ) : constants.get( word.group( 2 ) );
