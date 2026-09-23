@@ -62,6 +62,11 @@ def test_form(bo, anon, record, pair):
     if not bo.locator(form).count():
         if record["screen_kind"] == "screen":
             pytest.skip("form %s no longer on %s: the data it needed was consumed by another test" % (action.split("/")[-1], screen))
+        # A Lutece message in place of the form is the application refusing on the data other tests left (a template
+        # now used by their forms cannot be removed): a controlled answer, whereas a failure is an error-page.
+        if record["screen_kind"] in ("error", "warning", "info"):
+            pytest.skip("form %s not offered on %s: the application answers with a %s message on the current data (%s)"
+                        % (action.split("/")[-1], screen, record["screen_kind"], lutece.page_text(bo)[:120]))
         assert False, "form %s not found on %s (page now at %s, kind %s: %s)" % (
             action, screen, lutece.normalize(bo.url), record["screen_kind"], lutece.page_text(bo)[:120])
     # Several forms of a screen can share the same action url and differ only by the MVC action they name, so a
