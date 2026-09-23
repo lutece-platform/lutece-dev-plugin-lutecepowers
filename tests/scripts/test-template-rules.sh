@@ -131,6 +131,11 @@ expect "I18N02: descriptor and right keys declared nowhere" 1 "$(cd "$J" && bash
 printf 'name=X\nlabel=Second\nmissing.portlet=P\nmissing.right=R\n' > "$J/src/java/x/resources/x_messages.properties"
 expect "I18N02: descriptor and right keys declared" 1 "$(vm I18N02 PASS)"
 rm -rf "$J/webapp/WEB-INF/plugins" "$J/src/sql"
+printf 'class R {\n    String f( ) { return String.valueOf( ThreadLocalRandom.current( ).nextLong( ) ); }\n}\n' > "$J/src/java/x/business/R.java"
+expect "TL01: ThreadLocalRandom is no ThreadLocal" 1 "$(vm TL01 PASS)"
+printf 'class R {\n    private static final ThreadLocal<String> T = new ThreadLocal<>( );\n}\n' > "$J/src/java/x/business/R.java"
+expect "TL01: ThreadLocal never removed" 1 "$(vm TL01 FAIL)"
+rm -f "$J/src/java/x/business/R.java"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, DA02, I18N02, I18N07, I18N10, TL01, JS04, JS07, fix-button-colours"
 exit $fail

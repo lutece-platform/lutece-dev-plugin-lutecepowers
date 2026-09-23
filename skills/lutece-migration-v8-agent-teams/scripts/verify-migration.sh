@@ -725,7 +725,7 @@ else emit "SQ02" "FAIL" "Schema gained by create_db without an upgrade script fo
 # (LUT-31201, see the scalability skill). Applies to migration, not only to scaling work.
 TL01_MATCHES=""
 if [ -d "src/" ]; then
-    TL01_MATCHES=$({ grep -rln 'ThreadLocal' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
+    TL01_MATCHES=$({ grep -rlnE '\bThreadLocal\b' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
         grep -q '\.remove( *)' "$f" 2>/dev/null && continue
         echo "$f: ThreadLocal never cleared with remove()"
     done) || TL01_MATCHES=""

@@ -13,21 +13,23 @@ I18N01, I18N10 and I18N09, in that order:
 `--drop <file>` also removes, from every language, the keys the file lists one per line (the I18N08 keys confirmed
 dead once i18n_unused.py has been run against every consumer of the bundle).
 
-Bytes are kept as they are (latin-1 round trip), line endings too. Prints one line per change; `--dry-run` only prints.
+Bytes are kept as they are (latin-1 round trip), line endings too. Prints one line per change; `--dry-run` runs on a copy and only prints.
 
     fix-i18n-bundles.py [--dry-run] [--drop <keys_file>] <project_dir>
 """
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import bundles
 
 COUNTRY_TO_LANGUAGE = {"cz": "cs", "dk": "da", "se": "sv", "gr": "el", "jp": "ja", "cn": "zh", "ua": "uk", "kr": "ko",
                        "ee": "et", "si": "sl", "rs": "sr", "al": "sq"}
-ARROW = re.compile(r"^([^=:\s]*)>([^=:]*)$")
+ARROW = re.compile(r"^([^=:\s>]+)>")
 
 
 def read(path):
@@ -35,13 +37,12 @@ def read(path):
     return open(path, encoding="latin-1", newline="").read().splitlines(keepends=True)
 
 
-def write(path, lines, dry):
-    """Writes the lines back unless dry."""
-    if not dry:
-        open(path, "w", encoding="latin-1", newline="").write("".join(lines))
+def write(path, lines):
+    """Writes the lines back."""
+    open(path, "w", encoding="latin-1", newline="").write("".join(lines))
 
 
-def rename_country_bundles(root, dry):
+def rename_country_bundles(root):
     """Step 1: country suffixes become language suffixes."""
     for path in sorted(glob.glob(os.path.join(root, "src/java/**/*_messages_*.properties"), recursive=True)):
         m = re.match(r"(.*_messages)_([a-z]{2})\.properties$", path)
@@ -49,8 +50,6 @@ def rename_country_bundles(root, dry):
             continue
         target = "%s_%s.properties" % (m.group(1), COUNTRY_TO_LANGUAGE[m.group(2)])
         print("I18N05 %s -> %s" % (os.path.relpath(path, root), os.path.basename(target)))
-        if dry:
-            continue
         if os.path.exists(target):
             known = bundles.keys(target)
             extra = [ln for s, e, text in bundles.spans(path) for ln in read(path)[s - 1:e]
@@ -58,7 +57,7 @@ def rename_country_bundles(root, dry):
             lines = read(target)
             if lines and not lines[-1].endswith(("\n", "\r")):
                 lines[-1] += "\n"
-            write(target, lines + extra, dry)
+            write(target, lines + extra)
             subprocess.run(["git", "rm", "-q", "--", path], cwd=root, check=False)
             if os.path.exists(path):
                 os.remove(path)
@@ -66,7 +65,7 @@ def rename_country_bundles(root, dry):
             os.rename(path, target)
 
 
-def fix_arrows(path, root, dry):
+def fix_arrows(path, root):
     """Step 2: `key>value` becomes `key=value`."""
     lines = read(path)
     changed = False
@@ -80,7 +79,7 @@ def fix_arrows(path, root, dry):
             print("I18N06 %s:%d %s" % (os.path.relpath(path, root), start, m.group(1)))
             changed = True
     if changed:
-        write(path, lines, dry)
+        write(path, lines)
 
 
 def referenced(root, full):
@@ -90,7 +89,7 @@ def referenced(root, full):
     return bool(out.strip())
 
 
-def strip_prefix(path, root, dry):
+def strip_prefix(path, root):
     """Step 3: `<prefix>.key` becomes `key`, or goes when `key` is already there."""
     prefix = os.path.basename(path).split("_messages")[0] + "."
     known = bundles.keys(path)
@@ -114,10 +113,10 @@ def strip_prefix(path, root, dry):
             print("I18N01 %s:%d %s -> %s" % (rel, start, key, short))
     new = [ln for i, ln in enumerate(lines, 1) if i not in drop]
     if new != read(path):
-        write(path, new, dry)
+        write(path, new)
 
 
-def drop_duplicates(path, root, dry):
+def drop_duplicates(path, root):
     """Step 4: every occurrence of a key but the last one is removed."""
     spans = list(bundles.spans(path))
     last = {}
@@ -133,10 +132,10 @@ def drop_duplicates(path, root, dry):
             print("I18N10 %s:%d %s removed, redeclared line %d" % (os.path.relpath(path, root), start, m.group(1)[:60],
                                                                    last[m.group(1)]))
     if drop:
-        write(path, [ln for i, ln in enumerate(read(path), 1) if i not in drop], dry)
+        write(path, [ln for i, ln in enumerate(read(path), 1) if i not in drop])
 
 
-def drop_keys(path, root, dead, dry):
+def drop_keys(path, root, dead):
     """Removes the listed dead keys from a bundle."""
     lines = read(path)
     drop = set()
@@ -146,10 +145,10 @@ def drop_keys(path, root, dead, dry):
             drop.update(range(start, end + 1))
             print("I18N08 %s:%d %s removed" % (os.path.relpath(path, root), start, m.group(1)[:60]))
     if drop:
-        write(path, [ln for i, ln in enumerate(lines, 1) if i not in drop], dry)
+        write(path, [ln for i, ln in enumerate(lines, 1) if i not in drop])
 
 
-def drop_orphans(path, default, root, dry):
+def drop_orphans(path, default, root):
     """Step 5: a translation key the default bundle does not declare is removed."""
     ref = bundles.keys(default)
     lines = read(path)
@@ -161,30 +160,40 @@ def drop_orphans(path, default, root, dry):
             print("I18N09 %s:%d %s removed, not in %s" % (os.path.relpath(path, root), start, m.group(1)[:60],
                                                            os.path.basename(default)))
     if drop:
-        write(path, [ln for i, ln in enumerate(lines, 1) if i not in drop], dry)
+        write(path, [ln for i, ln in enumerate(lines, 1) if i not in drop])
+
+
+def repair(root, dead):
+    """Runs the five steps on every bundle of the project, each step on what the previous one wrote."""
+    rename_country_bundles(root)
+    files = sorted(glob.glob(os.path.join(root, "src/java/**/*_messages*.properties"), recursive=True))
+    for path in files:
+        fix_arrows(path, root)
+        strip_prefix(path, root)
+        drop_duplicates(path, root)
+        if dead:
+            drop_keys(path, root, dead)
+    for default in sorted(glob.glob(os.path.join(root, "src/java/**/*_messages.properties"), recursive=True)):
+        for path in sorted(glob.glob(default[:-len(".properties")] + "_*.properties")):
+            drop_orphans(path, default, root)
 
 
 def main():
-    """Runs the five steps on every bundle of the project."""
+    """Repairs the project in place, or, with --dry-run, a copy of it: the printed changes are the ones a real run makes."""
     args = [a for a in sys.argv[1:] if a != "--dry-run"]
-    dry = "--dry-run" in sys.argv
     dead = set()
     if "--drop" in args:
         i = args.index("--drop")
         dead = {k.strip() for k in open(args[i + 1]) if k.strip()}
         del args[i:i + 2]
     root = os.path.abspath(args[0] if args else ".")
-    rename_country_bundles(root, dry)
-    files = sorted(glob.glob(os.path.join(root, "src/java/**/*_messages*.properties"), recursive=True))
-    for path in files:
-        fix_arrows(path, root, dry)
-        strip_prefix(path, root, dry)
-        drop_duplicates(path, root, dry)
-        if dead:
-            drop_keys(path, root, dead, dry)
-    for default in sorted(glob.glob(os.path.join(root, "src/java/**/*_messages.properties"), recursive=True)):
-        for path in sorted(glob.glob(default[:-len(".properties")] + "_*.properties")):
-            drop_orphans(path, default, root, dry)
+    if "--dry-run" not in sys.argv:
+        repair(root, dead)
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = os.path.join(tmp, os.path.basename(root))
+        shutil.copytree(root, copy, symlinks=True, ignore=shutil.ignore_patterns("target", ".git", "e2e", "node_modules"))
+        repair(copy, dead)
 
 
 if __name__ == "__main__":
