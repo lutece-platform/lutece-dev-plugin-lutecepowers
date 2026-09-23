@@ -70,6 +70,8 @@ Both sides
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
   TD61 WARN  script or stylesheet (js/, css/, themes/, images/) the assembled webapp does not carry: a 404 on load
+  TD63 WARN  text value (title, name, label, description, comment, message...) interpolated into a JS string literal
+             without ?js_string: an apostrophe ends the string, the script dies, and the value is injected
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
   TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
              rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
@@ -155,6 +157,27 @@ def block_depth(text, index):
     opened = len(re.findall(r"<#(?:if|list)\b", text[:index]))
     closed = len(re.findall(r"</#(?:if|list)>", text[:index]))
     return opened - closed
+
+
+JS_TEXT_FIELD = re.compile(r"^(?!id[A-Z_])(?:(?:title|name|label|description|comment|message|text|address|subject)|[a-z0-9]+(?:Title|Name|Label|Description|Comment|Message|Text|Address|Subject))$")
+
+
+def unescaped_js_strings(text):
+    """(expression, line) of each text value interpolated into a quoted string of an inline script without
+    ?js_string (or ?json_string, ?c, ?html, which turns the apostrophe into an entity): an apostrophe in the data ends
+    the JS string."""
+    out = {}
+    for block in re.finditer(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", text, flags=re.S | re.I):
+        code = block.group(1)
+        for lit in re.finditer(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", code):
+            for expr in re.finditer(r"\$\{([^}]*)\}", lit.group(0)):
+                body = expr.group(1)
+                if re.search(r"\?(js_string|json_string|c|html)\b", body):
+                    continue
+                base = re.split(r"[!?(]", body.strip(), maxsplit=1)[0].strip()
+                if JS_TEXT_FIELD.search(base.split(".")[-1]):
+                    out.setdefault(body.strip(), line_of(text, block.start(1) + lit.start() + expr.start()))
+    return sorted(out.items(), key=lambda kv: kv[1])
 
 
 def conditional_selectors(text):
@@ -758,6 +781,8 @@ def check_common(text, findings, kind, know):
     check_house_forms(text, findings, kind)
     if know.css_classes:
         check_legacy_markup(text, findings, know, kind)
+    for expr, line in unescaped_js_strings(text):
+        add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
         add(findings, "TD43", "WARN", line, "the script looks up '%s' unconditionally while the template only emits it inside a condition: the lookup returns null and the whole script block dies there" % name)
     if know.source.startswith("assembled"):
