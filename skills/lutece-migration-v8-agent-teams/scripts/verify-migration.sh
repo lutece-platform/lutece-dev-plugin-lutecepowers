@@ -320,10 +320,27 @@ echo "CATEGORY: DAO"
 check_grep "DA01" 'daoUtil\.free( )' "src/" "FAIL" "daoUtil.free() -> try-with-resources"
 
 # DA02: a DAOUtil opened outside a try-with-resources: an exception between the constructor and free() leaks the
-# connection (rules/dao-patterns.md: always try ( DAOUtil daoUtil = new DAOUtil( … ) ) ).
+# connection (rules/dao-patterns.md: always try ( DAOUtil daoUtil = new DAOUtil( … ) ) ). A factory method that returns
+# the DAOUtil it built to a caller's try-with-resources is exempt.
 DA02_MATCHES=""
 if [ -d "src/" ]; then
-    DA02_MATCHES=$(grep -rn "new DAOUtil(" src/ --include="*.java" 2>/dev/null | grep -v "try *(" ) || DA02_MATCHES=""
+    DA02_MATCHES=$(grep -rn "new DAOUtil(" src/ --include="*.java" 2>/dev/null | grep -v "try *(" | python3 -c '
+import re, sys
+for hit in sys.stdin:
+    path, line = hit.split(":", 2)[:2]
+    lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+    n = int(line) - 1
+    var = re.search(r"(\w+)\s*=\s*new DAOUtil\(", lines[n])
+    head = next((l for l in reversed(lines[:n]) if re.search(r"\)\s*$|\(\s*$|^\s*(public|private|protected|static)\b.*\(", l) and re.search(r"\b(public|private|protected|static)\b", l)), "")
+    body = []
+    for l in lines[n + 1:]:
+        if re.search(r"^\s*(public|private|protected)\b.*\(", l):
+            break
+        body.append(l)
+    returned = var and re.search(r"\bDAOUtil\s+\w+\s*\(", head) and any(re.search(r"^\s*return\s+%s\s*;" % var.group(1), l) for l in body)
+    if not returned:
+        sys.stdout.write(hit)
+') || DA02_MATCHES=""
 fi
 COUNT=0; [ -n "$DA02_MATCHES" ] && COUNT=$(echo "$DA02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "DA02" "PASS" "Every DAOUtil lives in a try-with-resources" 0
