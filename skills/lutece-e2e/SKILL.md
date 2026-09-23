@@ -252,7 +252,9 @@ untranslated label, a fragment with no design system applied. Only eyes catch th
 until the agent has looked at every screen.
 
 `./run.sh all` runs `tools/review.py todo`, which deduplicates the captures into groups — one group per
-(url path, DOM kind), whatever the data — and writes `artifacts/review-todo.md`. The gate then calls
+(url path, DOM kind), whatever the data, plus one per explicit `shot:` step of a scenario (the way to get a screen
+only a signed-in user reaches, such as a front-office page behind a login, into the review) — and writes
+`artifacts/review-todo.md`. The gate then calls
 `tools/review.py check` and **fails with rc=7** until `artifacts/review.md` carries a verdict for every group.
 `REVIEW=skip ./run.sh all` bypasses it; use that only to iterate, never to hand over. A full run always ends rc=7 the first time: it renumbers
 the groups and writes the war hash, so the review is written after it, on its captures, and `./run.sh review` then

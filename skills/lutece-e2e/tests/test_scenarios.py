@@ -514,6 +514,7 @@ def run_step(page, step, vars_, record):
         vars_.update(arg)
     elif key == "shot":
         record.setdefault("screenshots", []).append(lutece.shot(page, arg, "jpg"))
+        record.setdefault("review_shots", []).append({"shot": record["screenshots"][-1], "url": lutece.normalize(page.url)})
     elif key == "upload":
         page.locator(arg["selector"]).first.set_input_files(str(lutece.E2E / arg["file"]))
     elif key == "download":

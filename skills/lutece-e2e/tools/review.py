@@ -96,12 +96,23 @@ def _screen_key(url):
     return base + ("?" + "&".join(parts) if parts else "")
 
 
+def _with_review_shots(rows_):
+    """The rows plus one row per explicit `shot:` step of a scenario: the screen its author asked to be judged,
+    often one only a signed-in user reaches (a front-office page behind a login)."""
+    out = list(rows_)
+    for r in rows_:
+        for s in r.get("review_shots") or []:
+            out.append({"suite": "scenarios", "id": r["id"], "url": s["url"], "kind": "shot",
+                        "screenshot": s["shot"], "status": r.get("status")})
+    return out
+
+
 def groups():
     """One review group per (url path, kind) of the artefact under test, with a representative screenshot and
     the urls it stands for. Scenario captures count as the artefact's whatever their url."""
     g = collections.OrderedDict()
     in_scope = _in_scope()
-    for r in rows():
+    for r in _with_review_shots(rows()):
         shot = r.get("screenshot")
         if not shot or r.get("suite") not in ("screens", "fo", "forms", "scenarios"):
             continue
