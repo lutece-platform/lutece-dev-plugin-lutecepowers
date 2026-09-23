@@ -21,7 +21,7 @@ public class FmParse
         {
             try ( Stream<Path> stream = Files.walk( Path.of( root ) ) )
             {
-                for ( Path p : (Iterable<Path>) stream.filter( q -> q.toString( ).endsWith( ".html" ) || q.toString( ).endsWith( ".ftl" ) || q.toString( ).endsWith( ".js" ) )::iterator )
+                for ( Path p : (Iterable<Path>) stream.filter( q -> q.toString( ).matches( ".*\\.(html|ftl|js|xml|txt|json)$" ) )::iterator )
                 {
                     files++;
                     try ( FileReader reader = new FileReader( p.toFile( ) ) )

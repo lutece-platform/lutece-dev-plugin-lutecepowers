@@ -46,7 +46,7 @@ TEMPLATES="$ROOT/webapp/WEB-INF/templates"
 OUT="$ROOT/.migration/render"
 mkdir -p "$OUT"
 if [ $# -eq 0 ]; then
-    mapfile -t FILES < <(cd "$TEMPLATES" && find admin skin -name '*.html' -not -path '*/themes/*' 2>/dev/null | sort)
+    mapfile -t FILES < <(cd "$TEMPLATES" && find admin skin \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' \) -not -path '*/themes/*' 2>/dev/null | sort)
 else
     FILES=("$@")
 fi
