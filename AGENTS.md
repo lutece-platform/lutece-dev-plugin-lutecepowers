@@ -28,6 +28,7 @@ bash scripts/build-tables.sh
 bash tests/hooks/test-session-start.sh
 bash tests/scripts/test-i18n-unused.sh
 bash tests/scripts/test-template-rules.sh
+bash tests/scripts/test-checkup.sh
 claude plugin validate .
 ```
 
