@@ -226,7 +226,7 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | I18N05 | FAIL | bundle suffixed with a country code (`_cz`, `_dk`, `_se`…) where Java expects a language code (`_cs`, `_da`, `_sv`): never loaded | file names | *_messages_*.properties |
 | I18N06 | FAIL | bundle line without `=`/`:` separator (`key>value`): read as a key with an empty value | line scan | *_messages*.properties |
 | I18N07 | WARN | French value with a common spelling error (`Etes vous`, `sur de vouloir`) or a leftover Java class name after an article (`un PollFormQuestion`) | decoded `_fr` values | `*_messages_fr.properties` |
-| I18N08 | WARN | Bundle key no Java, template, JSP, XML or SQL file names (generator leftovers); `model.entity.*`, `validation.*`, `site_property.*` and keys under a runtime-built stem (`#i18n{p.${x}`, `"p." + x`) are kept | default bundle keys vs sources | `*_messages.properties` |
+| I18N08 | WARN | Bundle key nothing uses (`i18n_unused.py`): no project file names `<prefix>.<key>` or `"<key>"`, no literal or `${` stem builds it, no reference repository names it; runtime families (`model.entity.*`, `validation.*`, `site_property.*`) are kept | default bundles vs every tracked text file | `*_messages.properties` |
 | I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
 
 **XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second

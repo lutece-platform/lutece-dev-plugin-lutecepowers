@@ -26,6 +26,7 @@ This repository is a plugin for coding agents (Claude Code, Codex, Cursor, Grok 
 bash scripts/build-cursor-rules.sh
 bash scripts/build-tables.sh
 bash tests/hooks/test-session-start.sh
+bash tests/scripts/test-i18n-unused.sh
 claude plugin validate .
 ```
 
