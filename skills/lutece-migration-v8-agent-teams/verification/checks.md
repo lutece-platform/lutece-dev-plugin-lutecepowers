@@ -95,7 +95,7 @@
 
 | ID | Severity | Description | Pattern | Files |
 |----|----------|-------------|---------|-------|
-| DA02 | FAIL | `new DAOUtil(` outside a try-with-resources: the connection leaks on an exception | line without `try (` | *.java |
+| DA02 | FAIL | `new DAOUtil(` outside a try-with-resources: the connection leaks on an exception | line without `try (`, except a method returning the DAOUtil it built | *.java |
 | SQ05 | FAIL | value concatenated into a SQL literal in a DAO (`"… LIKE '%" + str`): injection point | `'\" +` in *DAO.java | *DAO.java |
 | DA01 | FAIL | daoUtil.free() | `daoUtil\.free( )` | *.java |
 
