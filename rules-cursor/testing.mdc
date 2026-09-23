@@ -79,3 +79,9 @@ See `dependency-convergence.md` for the Jakarta EE 10 baseline and the enforcer 
 - Use `MockHttpServletRequest` / `MockHttpServletResponse` from `fr.paris.lutece.test.mocks`
 - NEVER use `fr.paris.lutece.portal.service.spring.MokeHttpServletRequest` (v7 legacy, removed in v8)
 - For CDI beans in tests, use `@Inject` with Weld-testing or `CDI.current().select()`
+
+## Naming trap: LuteceTestCase
+
+`LuteceTestCase` still runs, JUnit-3 style, every public method whose name starts with `test`. A JUnit 5
+`@ParameterizedTest` named `testSomething( String value )` is then also called without arguments and errors with
+"wrong number of arguments". Name parameterized tests without the `test` prefix (`rejectsBadInput( String value )`).
