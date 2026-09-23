@@ -534,7 +534,10 @@ def vendored_bundles(root):
 
 def check_admin(text, findings, kind, opened_in_iframe, know):
     """Back-office rules on a screen template (not an e-mail body)."""
+    modals = [(m.start(), m.end()) for m in re.finditer(r"<@modal(Body)?\b.*?</@modal(Body)?>", text, flags=re.S)]
     for offset, body in blocks(text, "table"):
+        if any(a <= offset < b for a, b in modals):
+            continue
         rows = [m.group(0) for m in re.finditer(r"<#list\b.*?</#list>", body, flags=re.S)]
         per_row = any(len(re.findall(r"<@(aButton|button)\b", row)) >= 2 or re.search(r"<@aButton\b[^>]*href=['\"]\$\{", row) for row in rows)
         if re.search(ACTION_ICONS, body) or per_row:
