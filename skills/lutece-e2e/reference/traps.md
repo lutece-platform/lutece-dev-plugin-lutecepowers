@@ -213,3 +213,18 @@ Every `goto`, `submit` and `click` of a scenario is photographed full page, and 
 viewport: resize events fire in the middle of the scenario. A widget that follows its container (an image cropper,
 a chart, a map) rescales on them, sometimes to zero, and the next step fails with nothing pointing at the
 screenshot. A scenario driving such a widget declares `viewport_shots: true`.
+
+## A mail sent by a workflow task waits for the next daemon run
+
+A workflow action runs inside a transaction (core `WorkflowService.doProcessAction`), and `MailService.enqueue`
+wakes the mail daemon before that transaction commits: the daemon finds an empty queue, and the mail waits for the
+next scheduled run (`daemon.mailSender.interval`, a day by default). A `mail:` step after a workflow action is then
+red while the application is right. Run the mailSender daemon from the daemons screen (`ManageDaemons.jsp`, action
+run) in the scenario before the `mail:` step, and report the ordering as a core defect.
+
+## Seeding plugin-forms for a front-office bench
+
+A form row the front office cannot render answers 500 or "unavailable" with nothing pointing at the seed:
+`breadcrumb_name` must name an existing bean (`forms.horizontalBreadcrumb`, `forms.verticalBreadcrumb`),
+`composite_type` is lower case (`question`, `group`), `css_class` must not be NULL (the geolocation entry reads
+`entry.CSSClass`), and the availability dates must frame the run, or the form shows as unavailable.

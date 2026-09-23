@@ -26,7 +26,9 @@ Step vocabulary (one key per step):
                                    state read on the screen (attr compares an attribute of the first match with a variable)
   dom_set: {var: name, selector: ..., attr: name | text}   store an attribute (or the text) of the first match
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
-                                   {subject: text} restricts to a subject; state that lives in the mail queue
+                                   {subject: text} restricts to a subject, {contains: text} to a text of the message,
+                                   {max: n} bounds the count, {absent: true} proves no such mail was sent; state
+                                   that lives in the mail queue
   http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...,
          (an http call proves an endpoint, not an admin screen or action: those are proven through the browser)
          {raw: true} sends the path exactly as written (no %2e%2e or ../ normalisation), for traversal tests
@@ -401,9 +403,14 @@ def run_step(page, step, vars_, record):
                 "artefact pointed at http://fakes:9030/%s ?)" % (
                     arg["channel"], len(lines), arg.get("contains"), arg.get("min", 1), arg["channel"]))
     elif key == "mail":
-        n = lutece.mail_count(arg["to"], arg.get("subject"))
-        assert n >= int(arg.get("min", 1)), "mail: %d message(s) to %s (subject %r), expected at least %s" % (
-            n, arg["to"], arg.get("subject"), arg.get("min", 1))
+        n = lutece.mail_count(arg["to"], arg.get("subject"), contains=arg.get("contains"))
+        if arg.get("absent"):
+            assert n == 0, "mail: %d message(s) to %s (subject %r, containing %r), expected none" % (n, arg["to"], arg.get("subject"), arg.get("contains"))
+        else:
+            assert n >= int(arg.get("min", 1)), "mail: %d message(s) to %s (subject %r, containing %r), expected at least %s" % (
+                n, arg["to"], arg.get("subject"), arg.get("contains"), arg.get("min", 1))
+            if arg.get("max") is not None:
+                assert n <= int(arg["max"]), "mail: %d message(s) to %s, expected at most %s" % (n, arg["to"], arg["max"])
     elif key == "fill_form":
         form = arg if isinstance(arg, str) else arg["form"]
         filled = lutece.fill_form(page, form, arg.get("values") if isinstance(arg, dict) else None, seed=vars_["rand"])

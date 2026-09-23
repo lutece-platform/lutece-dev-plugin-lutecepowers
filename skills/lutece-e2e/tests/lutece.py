@@ -610,12 +610,13 @@ def screen_query(url):
             continue
     return ""
 
-def mail_count(to, subject=None, wait_s=15):
-    """Number of messages in the Mailpit sink addressed to `to` (optionally with `subject` in the subject), polling
-    a few seconds because the Lutece mail daemon delivers asynchronously."""
+def mail_count(to, subject=None, wait_s=15, contains=None):
+    """Number of messages in the Mailpit sink addressed to `to` (optionally with `subject` in the subject and
+    `contains` anywhere in the message, Mailpit's free-text search), polling a few seconds because the Lutece mail
+    daemon delivers asynchronously."""
     import urllib.request
     api = os.environ.get("E2E_MAIL_API", "http://localhost:18025")
-    q = 'to:"%s"' % to + (' subject:"%s"' % subject if subject else "")
+    q = 'to:"%s"' % to + (' subject:"%s"' % subject if subject else "") + (' "%s"' % contains if contains else "")
     deadline = time.time() + wait_s
     n = 0
     while True:
