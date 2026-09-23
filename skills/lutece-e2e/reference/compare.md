@@ -39,6 +39,16 @@ existing site. `run.sh compare` closes that hole and, on the way, puts the two v
    rendu différent, nouveau, disparu, v8 seulement, inchangé — in `artifacts/compare.md` and `compare.html`
    (every function with its two screenshots, the unchanged ones included: the point is the human review).
 
+**A migration is proven on data.** The v7 base must hold what a site in production holds: the artefact's business
+rows, written in the v7 schema, in `harness/db/seed-<name>-data.sql` with fixed ids and `INSERT IGNORE` (a fresh v8
+bench gets them from the seed; on compare the v7 leg creates them, the v8 site migrates them, and the seed replayed
+after the takeover leaves them as they are). Scenarios then start from those ids: the migrated record opens,
+reads back with its children, still accepts the everyday actions. Phase 2 counts the rows the seed adds to the
+artefact's own tables (those its `plugin/create*.sql` creates) and warns when there are none: the migration is then
+proven on the schema only. Two v7 traps to know when writing that seed: `ant all` runs the plugins in alphabetical
+order (the entrypoint replays the init scripts once every table exists), and a file row needs its `origin` (a v7
+core since 7.0.7 refuses a file whose origin is NULL, and the 7.0.7 upgrade backfills none).
+
 **The same parcours on both legs.** A scenario is written once and plays on both versions; where the
 migration changed a url or a selector, the step value is a per-version mapping:
 

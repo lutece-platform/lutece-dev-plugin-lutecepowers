@@ -492,7 +492,20 @@ cmd_compare() {
   wait_healthy "$APP7" || exit 1
   # --no-deps: dbinit normally waits for the v8 container to be healthy (Liquibase creates the schema there);
   # here the schema comes from the v7 Ant build and the v8 container must stay down until phase 4.
+  local owned before after
+  owned=$(grep -hoiE 'CREATE TABLE( IF NOT EXISTS)? +`?[a-z0-9_]+' $(find "$E2E_SRC/src/sql" -path '*/plugin/create*.sql' 2>/dev/null) 2>/dev/null | awk '{print $NF}' | tr -d '`' | sort -u)
+  rows_owned() { local t q=""; for t in $owned; do q="$q + (SELECT COUNT(*) FROM $t)"; done; [ -n "$q" ] && docker exec "${E2E_NAME}-db-1" mariadb -ulutece -plutece lutece -N -e "SELECT 0 $q" 2>/dev/null || echo 0; }
+  before=$(rows_owned)
   E2E_VERSION=v7 "${COMPOSE[@]}" run --rm --no-deps dbinit
+  after=$(rows_owned)
+  # A migration is proven on data, not on an empty schema: the v7 base must carry what a site in production holds
+  # (the artefact's business rows, in the v7 schema), written by the bench in harness/db/seed-<name>*.sql.
+  if [ "${after:-0}" -le "${before:-0}" ]; then
+    echo ">> WARNING: the seed adds no row to the artefact's tables (${before:-0} rows, all from its install scripts): the"
+    echo ">>          migration is proven on the schema only. Seed business data of a v7 site (harness/db/seed-<name>-data.sql)."
+  else
+    echo ">> v7 base: $((after - before)) business row(s) seeded in the artefact's tables, handed to the v8 site"
+  fi
   # The v7 Ant build continues on SQL errors, so a plugin whose init_core targets tables the chosen v7 core has
   # already dropped installs silently half-way — and the comparison then reads "corrigé" where the bench simply
   # did not prepare v7. Say it here, with the way out.

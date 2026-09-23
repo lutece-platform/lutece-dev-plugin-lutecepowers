@@ -70,6 +70,17 @@ expect "TD60: submit button inside an HTML comment" 1 "$(td TD60)"
 printf "<@tform action='x'><@input name='a' /><#-- <@button type='submit' title='ok' /> --><!-- a note --></@tform>\n" > "$X/a.html"
 expect "TD60: FreeMarker comment and plain HTML comment" 0 "$(td TD60)"
 
+V="$T/assembled"
+L="$V/target/lutece"
+mkdir -p "$V/webapp/WEB-INF/templates/admin/plugins/x" "$L/WEB-INF/templates/admin/themes/tabler" "$L/WEB-INF/templates/skin/themes/macros" "$L/WEB-INF/plugins" "$L/themes/shared/plugins/x/js"
+mkdir -p "$L/WEB-INF/templates/admin/themes/tabler/forms/checkbox"
+touch "$L/WEB-INF/plugins/x.xml" "$L/themes/shared/plugins/x/js/x.js" "$L/WEB-INF/templates/admin/themes/tabler/forms/checkbox/checkBox.ftl"
+tda() { (cd "$V" && python3 "$S/scan-template-design.py" . --flat 2>/dev/null | grep -c " $1 "); }
+printf "<script src=\"js/admin/plugins/x/x.js\"></script>\n" > "$V/webapp/WEB-INF/templates/admin/plugins/x/a.html"
+expect "TD61: script path the assembled webapp does not carry" 1 "$(tda TD61)"
+printf "<script src=\"themes/shared/plugins/x/js/x.js\"></script>\n<#if hasMap><script src=\"js/plugins/leaflet/leaflet.js\"></script></#if>\n" > "$V/webapp/WEB-INF/templates/admin/plugins/x/a.html"
+expect "TD61: carried script, and a script of an optional plugin" 0 "$(tda TD61)"
+
 mkdir -p "$W/webapp/WEB-INF/plugins" "$W/webapp/themes/admin/x/css"
 echo "<plug-in><admin-css-stylesheets><admin-css-stylesheet>themes/admin/x/css/x.css</admin-css-stylesheet></admin-css-stylesheets></plug-in>" > "$W/webapp/WEB-INF/plugins/x.xml"
 printf "#id_form { max-width: 32rem; }\n" > "$W/webapp/themes/admin/x/css/x.css"
@@ -121,5 +132,5 @@ printf 'name=X\nlabel=Second\nmissing.portlet=P\nmissing.right=R\n' > "$J/src/ja
 expect "I18N02: descriptor and right keys declared" 1 "$(vm I18N02 PASS)"
 rm -rf "$J/webapp/WEB-INF/plugins" "$J/src/sql"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
 exit $fail

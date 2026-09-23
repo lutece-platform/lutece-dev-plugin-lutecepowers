@@ -69,6 +69,7 @@ Both sides
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
+  TD61 WARN  script or stylesheet (js/, css/, themes/, images/) the assembled webapp does not carry: a 404 on load
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
   TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
              rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
@@ -761,6 +762,8 @@ def check_common(text, findings, kind, know):
     if know.source.startswith("assembled"):
         for jsp, line in dead_links(text, know.webapps):
             add(findings, "TD44", "WARN", line, "link to %s, which the assembled webapp does not carry: the click answers 404" % jsp)
+        for asset, line in dead_assets(text, know.webapps):
+            add(findings, "TD61", "WARN", line, "script or stylesheet %s, which the assembled webapp does not carry: 404, and what it defines is missing from the page (an asset moved to themes/shared/plugins/<plugin>/ in v8)" % asset)
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
     hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
@@ -781,6 +784,22 @@ def dead_links(text, webapps):
         jsp = match.group(1)
         if jsp not in mapped and not any(os.path.isfile(os.path.join(w, jsp)) for w in webapps):
             out.setdefault(jsp, line_of(text, match.start()))
+    return sorted(out.items(), key=lambda kv: kv[1])
+
+
+def dead_assets(text, webapps):
+    """(asset path, line) of each literal script or stylesheet of the webapp (js/, css/, themes/, images/) that no
+    webapp directory carries: the browser gets a 404 and whatever the file defined is missing from the page. An asset
+    of a plugin the webapp does not assemble belongs to an optional plugin and is skipped."""
+    out = {}
+    assembled = {os.path.splitext(os.path.basename(x))[0] for w in webapps for x in glob.glob(os.path.join(w, "WEB-INF/plugins/*.xml"))}
+    for match in re.finditer(r"""<(?:script\b[^>]*\bsrc|link\b[^>]*\bhref)\s*=\s*['"]((?:js|css|themes|images)/[^'"?#$<{}]+)['"]""", text):
+        asset = match.group(1)
+        owner = re.search(r"(?:^|/)plugins/([^/]+)/", asset)
+        if owner and owner.group(1) not in assembled:
+            continue
+        if not any(os.path.isfile(os.path.join(w, asset)) for w in webapps):
+            out.setdefault(asset, line_of(text, match.start()))
     return sorted(out.items(), key=lambda kv: kv[1])
 
 
