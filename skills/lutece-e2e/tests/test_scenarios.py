@@ -31,7 +31,7 @@ Step vocabulary (one key per step):
                                    {subject: text} restricts to a subject, {contains: text} to a text of the message,
                                    {max: n} bounds the count, {absent: true} proves no such mail was sent; state
                                    that lives in the mail queue
-  http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...,
+  http: {url: path, accept: type, method: GET, expect_status: n, content_type: text, contains: text|[text], not_contains: ...,
          (an http call proves an endpoint, not an admin screen or action: those are proven through the browser)
          {raw: true} sends the path exactly as written (no %2e%2e or ../ normalisation), for traversal tests
          poll: seconds, multipart: {field: value|path}, capture: var,
@@ -391,29 +391,32 @@ def run_step(page, step, vars_, record):
             conn.endheaders(data.encode("utf-8") if data else None)
             resp = conn.getresponse()
             body = resp.read().decode("utf-8", "replace")
-            return body, resp.status, resp.getheader("Location", "")
+            return body, resp.status, resp.getheader("Location", ""), resp.getheader("Content-Type", "")
 
         def call():
             if arg.get("raw"):
                 return raw_call()
-            body = status = location = None
+            body = status = location = ctype = None
             for _ in range(times):
                 if arg.get("fresh"):
                     ctx = page.context.browser.new_context()
                     try:
                         resp = ctx.request.fetch(lutece.url(arg["url"]), **fetch)
-                        body, status, location = _body(resp), resp.status, resp.headers.get("location", "")
+                        body, status, location, ctype = _body(resp), resp.status, resp.headers.get("location", ""), resp.headers.get("content-type", "")
                     finally:
                         ctx.close()
                 else:
                     resp = page.request.fetch(lutece.url(arg["url"]), **fetch)
-                    body, status, location = _body(resp), resp.status, resp.headers.get("location", "")
-            return body, status, location
+                    body, status, location, ctype = _body(resp), resp.status, resp.headers.get("location", ""), resp.headers.get("content-type", "")
+            return body, status, location, ctype
 
-        def check(body, status, location):
+        def check(body, status, location, ctype):
             if arg.get("location_contains"):
                 assert arg["location_contains"] in location, "http %s %s: redirected to %r, expected it to contain %r" % (
                     method, arg["url"], location, arg["location_contains"])
+            if arg.get("content_type"):
+                assert arg["content_type"] in (ctype or ""), "http %s %s: content type %r, expected it to contain %r" % (
+                    method, arg["url"], ctype, arg["content_type"])
             if arg.get("expect_status"):
                 assert status == int(arg["expect_status"]), "http %s %s: status %d, expected %s\n%s" % (
                     method, arg["url"], status, arg["expect_status"], body[:300])
@@ -426,17 +429,17 @@ def run_step(page, step, vars_, record):
         # within a bound; the last failure is the one reported.
         deadline = time.time() + float(arg.get("poll", 0))
         while True:
-            body, status, location = call()
+            body, status, location, ctype = call()
             record["http_status"] = status
             try:
-                check(body, status, location)
+                check(body, status, location, ctype)
                 # `capture` stores the answer's body in a variable, which is what chains two REST calls: an
                 # endpoint that returns the key of what it just created, then the endpoint that reads or deletes
                 # it. Whitespace is stripped, because a plain-text answer often carries a trailing newline.
                 if arg.get("capture"):
                     vars_[arg["capture"]] = body.strip()
                 record.setdefault("rest_calls", []).append({"verb": method, "path": urllib.parse.urlsplit(arg["url"]).path.lstrip("/"),
-                                                            "asserted": bool(arg.get("expect_status") or arg.get("contains") or arg.get("not_contains") or arg.get("location_contains"))})
+                                                            "asserted": bool(arg.get("expect_status") or arg.get("content_type") or arg.get("contains") or arg.get("not_contains") or arg.get("location_contains"))})
                 break
             except AssertionError:
                 if time.time() >= deadline:
