@@ -10,6 +10,7 @@ import urllib.parse
 E2E = pathlib.Path(__file__).resolve().parents[1]
 ARTIFACTS = E2E / "artifacts"
 BASE = os.environ.get("E2E_BASE", "http://localhost:18080/lutece").rstrip("/")
+BENCH_HOSTS = sorted({"localhost", urllib.parse.urlsplit(BASE).hostname})
 ADMIN = (os.environ.get("E2E_ADMIN", "admin"), os.environ.get("E2E_ADMIN_PASSWORD", "adminadmin"))
 DB = {"host": os.environ.get("E2E_DB_HOST", "localhost"), "port": int(os.environ.get("E2E_DB_PORT", "3306")),
       "user": os.environ.get("E2E_DB_USER", "lutece"), "password": os.environ.get("E2E_DB_PASSWORD", "lutece"),
@@ -35,9 +36,17 @@ CONSOLE_ALLOW = tuple(re.compile(p) for p in (
 def chromium_args():
     """Chromium flags of every suite. The bench must be reached as localhost (host port, or the runner
     sharing the application's network namespace): on any other plain-HTTP host Chromium honours the core's
-    CSP `upgrade-insecure-requests` and fetches every asset over https."""
+    CSP `upgrade-insecure-requests` and fetches every asset over https. Every host but the bench's own fails to
+    resolve at once: a page that loads a third-party script (translation widget, CDN, analytics) would otherwise
+    wait for the network until the navigation timeout on an offline machine."""
     return ["--no-sandbox", "--disable-dev-shm-usage", "--disable-features=Translate,TranslateUI,OptimizationHints",
-            "--no-first-run", "--no-default-browser-check"]
+            "--no-first-run", "--no-default-browser-check",
+            "--host-resolver-rules=MAP * ~NOTFOUND, " + ", ".join("EXCLUDE %s" % h for h in BENCH_HOSTS)]
+
+
+def offsite(u):
+    """True for a url outside the bench: the browser never reaches it, so its failure is not a finding."""
+    return urllib.parse.urlsplit(u).hostname not in BENCH_HOSTS
 
 
 def url(path):
@@ -54,8 +63,9 @@ def observe(page):
     page.obs = obs
 
     def on_console(msg):
-        if msg.type in ("error", "warning") and not any(a.search(msg.text) for a in CONSOLE_ALLOW):
-            obs["console"].append({"type": msg.type, "text": msg.text[:300], "url": (msg.location or {}).get("url", "")[:200]})
+        where = (msg.location or {}).get("url", "")
+        if msg.type in ("error", "warning") and not any(a.search(msg.text) for a in CONSOLE_ALLOW) and not (where and offsite(where)):
+            obs["console"].append({"type": msg.type, "text": msg.text[:300], "url": where[:200]})
 
     def on_response(resp):
         if resp.status >= 400:
@@ -81,7 +91,7 @@ def observe(page):
 
     page.on("console", on_console)
     page.on("pageerror", lambda e: obs["errors"].append(str(e)[:300]))
-    page.on("requestfailed", lambda r: obs["requests"].append({"status": 0, "url": r.url[:200], "error": (r.failure or "")[:120]}))
+    page.on("requestfailed", lambda r: offsite(r.url) or obs["requests"].append({"status": 0, "url": r.url[:200], "error": (r.failure or "")[:120]}))
     page.on("response", on_response)
     return obs
 

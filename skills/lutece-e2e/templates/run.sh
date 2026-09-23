@@ -284,7 +284,7 @@ cmd_external() {
   ext -m pytest tests/test_scenarios.py -n "$E2E_WORKERS" -q --tb=line --suite scenarios -m "not serial" --junitxml=artifacts/junit-scenarios.xml || rc=$?
   ext -m pytest tests/test_scenarios.py -q --tb=line --suite scenarios -m serial --junitxml=artifacts/junit-scenarios-serial.xml || rc=$?
   skipped_suites || { [ "$rc" -ne 0 ] || rc=8; }
-  python3 tools/coverage.py | head -3; python3 tools/report.py; echo; cat artifacts/summary.md
+  python3 tools/coverage.py | sed -n 1,3p; python3 tools/report.py; echo; cat artifacts/summary.md
   step "external done in $((SECONDS - START))s, tests rc=$rc"
   exit $rc
 }
@@ -378,7 +378,7 @@ cmd_report() {
   if [ "${E2E_SCOPE:-target}" != all ] && [ -d artifacts/aria ] && [ -z "$(ls -A baselines/aria 2>/dev/null)" ]; then
     mkdir -p baselines/aria && cp artifacts/aria/*.yaml baselines/aria/ 2>/dev/null && echo "baselines/aria seeded from this run ($(ls baselines/aria | wc -l) screens): commit it"
   fi
-  python3 tools/coverage.py | head -3
+  python3 tools/coverage.py | sed -n 1,3p
   python3 tools/causes.py > /dev/null
   python3 tools/report.py
   python3 tools/review.py todo

@@ -230,8 +230,9 @@ services:
       PYTHONPATH: /e2e/artifacts/.pydeps
     volumes:
       - ..:/e2e
-    # Python deps installed once per requirements.txt hash into artifacts/.pydeps (host-owned, cached across runs).
-    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || (pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H); exec \"$$@\"", "--"]
+    # Python deps installed once per requirements.txt hash into artifacts/.pydeps (host-owned, cached across runs); the
+    # container exits when the install fails (offline machine), so run.sh stops with the pip log instead of waiting.
+    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || { pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H; } || exit 1; exec \"$$@\"", "--"]
 
   # Same runner, own network: for `run.sh external`, against an instance that runs elsewhere. The host's
   # network is used so a database on the host or on the LAN is reachable with the E2E_DB_* of e2e.conf.
@@ -257,7 +258,7 @@ services:
       PYTHONPATH: /e2e/artifacts/.pydeps
     volumes:
       - ..:/e2e
-    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || (pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H); exec \"$$@\"", "--"]
+    entrypoint: ["sh", "-c", "H=$$(md5sum /e2e/tools/requirements.txt | cut -c1-8); [ -f /e2e/artifacts/.pydeps/.$$H ] || { pip install -q --target /e2e/artifacts/.pydeps -r /e2e/tools/requirements.txt && touch /e2e/artifacts/.pydeps/.$$H; } || exit 1; exec \"$$@\"", "--"]
 
   # Load generator (run.sh perf).
   k6:
