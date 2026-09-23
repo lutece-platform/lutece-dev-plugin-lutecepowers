@@ -339,20 +339,69 @@ def rest_inventory(root):
     return screens, actions
 
 
+UNRESOLVED = []
+"""Controllers whose @Controller arguments did not resolve: their screens are unknown, which the coverage gate reports."""
+
+
+def constant_table(root):
+    """String constants of the artefact's own sources, keyed by NAME and by Class.NAME: a @Controller or @View argument
+    written as a constant resolves to its literal."""
+    table = {}
+    for java, _ in app_java(root):
+        text = java.read_text(errors="replace")
+        for name, value in CONST.findall(text):
+            table.setdefault(name, value)
+            table["%s.%s" % (java.stem, name)] = value
+    return table
+
+
+def resolve(expr, local, table):
+    """Value of an annotation argument: a literal, a boolean, a constant (local, Class.NAME) or a concatenation of
+    those; None when a part cannot be resolved."""
+    parts = []
+    for part in re.split(r"\s*\+\s*", expr.strip()):
+        if re.fullmatch(r'"[^"]*"', part):
+            parts.append(part[1:-1])
+        elif part in ("true", "false"):
+            parts.append(part)
+        elif part in local:
+            parts.append(local[part])
+        elif part in table:
+            parts.append(table[part])
+        elif part.split(".")[-1] in local and "." in part:
+            parts.append(local[part.split(".")[-1]])
+        else:
+            return None
+    return "".join(parts)
+
+
+def annotation_args(body, local, table):
+    """name -> resolved value of the arguments of an annotation; unresolved names map to None."""
+    args = {}
+    for name, expr in re.findall(r"(\w+)\s*=\s*((?:\"[^\"]*\"|[\w.]+)(?:\s*\+\s*(?:\"[^\"]*\"|[\w.]+))*)", body):
+        args[name] = resolve(expr, local, table)
+    return args
+
+
 def mvc_inventory(root):
     """MVC controllers, front and back. A controller is front office when it carries xpageName (its screens are
     Portal.jsp?page=<name>&view=<v>), back office when it carries controllerJsp. @View/@Action are only read when
     the file imports the platform MVC annotations."""
     screens, actions = [], []
+    table = constant_table(root)
     for java, rel in app_java(root):
         text = java.read_text(errors="replace")
         ctl = CONTROLLER.search(text)
         if not ctl:
             continue
-        attrs = dict(re.findall(r"(\w+)\s*=\s*\"([^\"]*)\"", ctl.group(1)))
+        consts = dict(CONST.findall(text))
+        attrs = annotation_args(ctl.group(1), consts, table)
         if not MVC_IMPORT.search(text):
             continue
-        consts = dict(CONST.findall(text))
+        unresolved = [k for k in ("controllerJsp", "controllerPath", "xpageName") if k in attrs and attrs[k] is None]
+        if unresolved:
+            print("inventory: %s: @Controller %s not resolved to a literal, its screens and actions are missing from the inventory" % (rel, ", ".join(unresolved)), file=sys.stderr)
+            UNRESOLVED.append({"file": str(rel), "attributes": unresolved})
         bean = java.stem
         page = attrs.get("xpageName")
         if page:
@@ -557,7 +606,7 @@ def main():
                "package": pkg, "markers": marks,
                "testable_urls": {"screens": len(tgt), "actions": len(tga)}}
     surface.update(decl)
-    inv = {"root": str(root), "extra": [str(r) for r in roots[1:]], "surface": surface,
+    inv = {"root": str(root), "extra": [str(r) for r in roots[1:]], "surface": surface, "unresolved_controllers": UNRESOLVED,
            "features": sorted(feats.values(), key=lambda f: f["right"]),
            "screens": sorted(screens, key=lambda s: s["id"]), "actions": sorted(actions, key=lambda a: a["id"]),
            "rest": sorted(rest, key=lambda r: (r["url"], r["verb"])),

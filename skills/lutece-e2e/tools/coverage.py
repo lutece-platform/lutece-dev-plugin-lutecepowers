@@ -124,7 +124,7 @@ def main():
         if env_todo:
             print("  (environment: %d %s to do, listed in coverage.json)" % (len(env_todo), kind))
     if "--gate" in sys.argv:
-        gaps = gate(out)
+        gaps = gate(out) + ["controller %s: @Controller %s not resolved, its screens and actions are invisible to the bench" % (u["file"], ", ".join(u["attributes"])) for u in inv.get("unresolved_controllers", [])]
         if gaps:
             print("COVERAGE GATE: %d element(s) of the artefact neither proven nor excluded with a reason:" % len(gaps))
             for g in gaps:
