@@ -546,5 +546,5 @@ case "${1:-all}" in
     [ "${KEEP:-}" = 1 ] || cmd_down
     step "done in $((SECONDS - START))s, tests rc=$rc"
     exit $rc ;;
-  *) sed -n '2,20p' "$0"; exit 2 ;;
+  *) sed -n '2,/^set -euo/{/^set -euo/!p}' "$0"; exit 2 ;;
 esac
