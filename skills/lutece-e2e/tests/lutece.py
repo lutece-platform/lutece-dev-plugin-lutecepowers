@@ -542,6 +542,8 @@ V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
 # webapp does not ship. Reported upstream; kept here so 25 benches do not each rediscover it as a defect.
 CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
     r"themes/shared/css/tabler-icons-filled\.min\.css",
+    # _theme.ftl (LUT-33522) falls back to images/logo-footer.png for the header logo, a file the core does not ship.
+    r"themes/skin/lutece/images/logo-footer\.png",
 ))
 
 
