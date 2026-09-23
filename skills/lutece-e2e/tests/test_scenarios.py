@@ -5,7 +5,9 @@ database is the source of truth for the assertions.
 Step vocabulary (one key per step):
   goto: <path>                     open a webapp-relative url
   click: <selector|text=...>       click and wait for the navigation when one happens
-  fill: {selector: value, ...}     set fields (selectors are CSS; {{var}} placeholders expanded)
+  fill: {selector: value, ...}     set fields (selectors are CSS; {{var}} placeholders expanded); a date or time picker
+                                   (flatpickr) is set through its own API, so it keeps the value
+  type: {selector: text, ...}      clear the field, then type the text key by key (a field reacting to the keyboard: autocomplete)
   fill_form: <form selector>       auto-fill every visible field of a form (values: {name: v} overrides)
   submit: <form selector>          submit a form and wait for the navigation; {form: ..., button: <selector>} names the
                                    submit control when the form has several (reset buttons, per-row actions)
@@ -72,6 +74,9 @@ Step vocabulary (one key per step):
                                    step fails when the login form is still there afterwards
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
+File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
+scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
+fragments, and the mechanical oracle rule applies to the expanded steps.
 Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), steps.
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
@@ -140,13 +145,32 @@ def validate(sc):
     return errors
 
 
+def _inline(steps, fragments, depth=0):
+    """The steps with every `use: <name>` replaced by the steps of that fragment of the file (fragments may use
+    fragments), so a parcours several scenarios start with (create the form they work on) is written once."""
+    out = []
+    for step in steps:
+        if isinstance(step, dict) and list(step) == ["use"]:
+            name = step["use"]
+            assert name in fragments, "use: no fragment named %s in this file" % name
+            assert depth < 5, "use: fragments nested too deep (%s)" % name
+            out.extend(_inline(fragments[name], fragments, depth + 1))
+        else:
+            out.append(step)
+    return out
+
+
 def _load():
     out = []
-    for f in sorted(SCENARIOS.glob("*.yaml")):
-        if f.name.startswith("coverage-"):
-            continue
-        doc = yaml.safe_load(f.read_text()) or {}
+    files = [f for f in sorted(SCENARIOS.glob("*.yaml")) if not f.name.startswith("coverage-")]
+    docs = {f: yaml.safe_load(f.read_text()) or {} for f in files}
+    shared = {}
+    for doc in docs.values():
+        shared.update(doc.get("fragments") or {})
+    for f, doc in docs.items():
+        fragments = dict(shared, **(doc.get("fragments") or {}))
         for sc in doc.get("scenarios", []):
+            sc["steps"] = _inline(sc.get("steps") or [], fragments)
             sc["_file"] = f.stem
             sc["_invalid"] = validate(sc)
             out.append(sc)
@@ -184,19 +208,30 @@ def _expand(value, vars_):
     return value
 
 
+NAVIGATION_START = 1500
+"""How long a click may take to start a navigation (a submit, a link, a script changing location) before it is taken for an
+in-page action (a card, a tab, a modal): only a navigation that started is waited for."""
+
+
 def _click(page, target):
     """Clicks the first match; a missing element is a failure, a click without navigation is not."""
     loc = page.get_by_text(target[5:], exact=False).first if target.startswith("text=") else page.locator(target).first
     assert loc.count(), "nothing matches %s on %s" % (target, lutece.normalize(page.url))
+    started = []
+    watch = lambda req: started.append(req) if req.is_navigation_request() and req.frame == page.main_frame else None
+    page.on("request", watch)
     try:
-        with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
-            if loc.is_visible():
-                loc.click()
-            else:
-                loc.evaluate("e => e.click()")
-    except Exception as e:  # noqa: BLE001 - in-page action without navigation
-        if "navigation" not in str(e).lower():
-            raise
+        if loc.is_visible():
+            loc.click()
+        else:
+            loc.evaluate("e => e.click()")
+        deadline = time.time() + NAVIGATION_START / 1000
+        while not started and time.time() < deadline:
+            page.wait_for_timeout(50)
+        if started:
+            page.wait_for_load_state("domcontentloaded", timeout=15000)
+    finally:
+        page.remove_listener("request", watch)
 
 
 def _dom_value(loc, attr):
@@ -253,13 +288,22 @@ def run_step(page, step, vars_, record):
         match = [v for v, t in options if (t == wanted if arg.get("label") else wanted in t or wanted in v)]
         assert match, "select %s: no option %s %r (options: %s)" % (arg["selector"], "labelled" if arg.get("label") else "containing", wanted, ", ".join(t for _, t in options)[:200])
         loc.select_option(match[0])
+    elif key == "type":
+        for sel, val in arg.items():
+            loc = page.locator(sel).first
+            assert loc.count(), "nothing matches %s on %s" % (sel, lutece.normalize(page.url))
+            loc.fill("")
+            loc.click()
+            loc.press_sequentially(str(val), delay=50)
     elif key == "fill":
         for sel, val in arg.items():
             loc = page.locator(sel).first
             assert loc.count(), "nothing matches %s on %s" % (sel, lutece.normalize(page.url))
             tag = loc.evaluate("e => e.tagName + ':' + (e.type || '')")
             visible = loc.is_visible()
-            if tag.startswith("SELECT"):
+            if loc.evaluate("e => !!e._flatpickr"):
+                loc.evaluate("(e, v) => e._flatpickr.setDate(v, true)", str(val))
+            elif tag.startswith("SELECT"):
                 if visible:
                     loc.select_option(str(val))
                 else:

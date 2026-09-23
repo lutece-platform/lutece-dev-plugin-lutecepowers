@@ -10,7 +10,10 @@ import urllib.parse
 E2E = pathlib.Path(__file__).resolve().parents[1]
 ARTIFACTS = E2E / "artifacts"
 BASE = os.environ.get("E2E_BASE", "http://localhost:18080/lutece").rstrip("/")
-BENCH_HOSTS = sorted({"localhost", urllib.parse.urlsplit(BASE).hostname})
+BENCH_HOSTS = sorted({"localhost", urllib.parse.urlsplit(BASE).hostname,
+                      "lutece", "lutece7", "mail", "fakes", "oauth2", "solr", "elastic"})
+"""Hosts the browser may reach: the application and the bench services (CAS and PayFiP pages of the fakes, the
+OIDC provider, Mailpit, the search engines). Everything else is third party and fails to resolve at once."""
 ADMIN = (os.environ.get("E2E_ADMIN", "admin"), os.environ.get("E2E_ADMIN_PASSWORD", "adminadmin"))
 DB = {"host": os.environ.get("E2E_DB_HOST", "localhost"), "port": int(os.environ.get("E2E_DB_PORT", "3306")),
       "user": os.environ.get("E2E_DB_USER", "lutece"), "password": os.environ.get("E2E_DB_PASSWORD", "lutece"),
@@ -38,9 +41,10 @@ def chromium_args():
     sharing the application's network namespace): on any other plain-HTTP host Chromium honours the core's
     CSP `upgrade-insecure-requests` and fetches every asset over https. Every host but the bench's own fails to
     resolve at once: a page that loads a third-party script (translation widget, CDN, analytics) would otherwise
-    wait for the network until the navigation timeout on an offline machine."""
+    wait for the network until the navigation timeout on an offline machine. Certificate errors are ignored: only the
+    bench hosts resolve, and the fakes answer https with a test certificate (the core CSP upgrades a page's http calls)."""
     return ["--no-sandbox", "--disable-dev-shm-usage", "--disable-features=Translate,TranslateUI,OptimizationHints",
-            "--no-first-run", "--no-default-browser-check",
+            "--no-first-run", "--no-default-browser-check", "--ignore-certificate-errors",
             "--host-resolver-rules=MAP * ~NOTFOUND, " + ", ".join("EXCLUDE %s" % h for h in BENCH_HOSTS)]
 
 
@@ -324,7 +328,8 @@ def aria(page):
 
 
 def fill_form(page, form, values=None, seed="e2e"):
-    """Fills every visible field of a form with plausible values (overridable with values={name: value}),
+    """Fills every visible field of a form with plausible values (overridable with values={name: value}), date and
+    time pickers (flatpickr, whose own input is hidden) through their API,
     returns the names filled. Hidden fields, submit buttons and CSRF tokens are left untouched."""
     values = values or {}
     loc = page.locator(form).first
@@ -334,6 +339,13 @@ def fill_form(page, form, values=None, seed="e2e"):
         const stamp = seed + '_' + Date.now().toString(36);
         const password = 'E2e-Passw0rd!' + stamp;
         for (const el of form.elements) {
+            if (el.name && !el.disabled && el._flatpickr) {
+                const fp = el._flatpickr, v = values[el.name];
+                if (v !== undefined) { fp.setDate(v, true); }
+                else if (!el.value) { fp.setDate(fp.config.noCalendar ? '09:00' : (fp.config.enableTime ? '2030-01-15 09:00' : '2030-01-15'), true); }
+                done.push(el.name);
+                continue;
+            }
             if (!el.name || el.disabled || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') continue;
             if (el.offsetParent === null && el.type !== 'checkbox' && el.type !== 'radio') continue;
             const v = values[el.name];
@@ -431,8 +443,11 @@ def render_check(page, kind=None):
         const body = document.body;
         if (!body) { return ['no body']; }
         const txt = (body.innerText || '');
-        const raw = txt.match(/#i18n\\{[^}]{0,60}\\}|\\$\\{[^}]{0,60}\\}|<#[a-z][^>]{0,40}>/g);
-        if (raw) { out.push('unresolved template expression: ' + [...new Set(raw)].slice(0, 3).join(' ')); }
+        // A marker shown as code (the list of ${...} a mail template accepts, a copy-to-clipboard snippet) is content.
+        const code = [...body.querySelectorAll('code, pre, kbd, samp, textarea, .copy-content')].map(e => e.textContent || '').join('\\n');
+        const count = (s, m) => s.split(m).length - 1;
+        const raw = (txt.match(/#i18n\\{[^}]{0,60}\\}|\\$\\{[^}]{0,60}\\}|<#[a-z][^>]{0,40}>/g) || []).filter(m => count(txt, m) > count(code, m));
+        if (raw.length) { out.push('unresolved template expression: ' + [...new Set(raw)].slice(0, 3).join(' ')); }
         const keys = (txt.match(/(?:^|\\s)[a-z][a-z0-9]*(?:\\.[a-z0-9_]+){2,}(?=\\s|$)/g) || [])
             .map(k => k.trim()).filter(k => !/\\.(jsp|html|js|css|png|jpg|xml|java)$/.test(k));
         if (keys.length) { out.push('i18n key shown raw: ' + [...new Set(keys)].slice(0, 3).join(' ')); }

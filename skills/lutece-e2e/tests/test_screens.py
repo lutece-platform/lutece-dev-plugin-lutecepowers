@@ -14,7 +14,7 @@ BASELINES = lutece.E2E / "baselines" / "aria"
 ARIA_OUT = lutece.ARTIFACTS / "aria"
 SESSIONLESS = re.compile(r"AdminLogin|AdminForgot|AdminResetPassword|AdminFormContact|ReactivateAccount", re.I)
 """Public screens: visiting them inside the admin session destroys it, they have their own anonymous tests."""
-CONFIRM_SCREENS = lutece.rule_re("confirm", r"/(Remove|Confirm|DoConfirm|Anonymize|GetChangeUse)\w*\.jsp|view=confirm")
+CONFIRM_SCREENS = lutece.rule_re("confirm", r"/(Remove|Confirm|DoConfirm|Anonymize|GetChangeUse)\w*\.jsp|view=(get)?confirm")
 """Screens whose normal answer is a Lutece confirmation question, not a menu-bearing screen."""
 """Screens that answer with a fragment (offcanvas, insert service popup) or a front-office preview are declared
 per bench in scenarios/screens.yaml, key `fragment`, and read through lutece.is_fragment."""

@@ -139,6 +139,8 @@ cmd_up() {
     local sconf; sconf=$(find harness/site/target -maxdepth 1 -type d -name "e2e-site-*" | head -1)/WEB-INF/plugins/solr/conf
     [ -f "$sconf/solrconfig.xml" ] && export E2E_SOLR_CONF="$(cd "$sconf" && pwd)" && echo "solr: schema from the assembled site ($E2E_SOLR_CONF)"
   fi
+  # The stand-ins' image follows harness/fakes: rebuilt when it changed (a cached no-op otherwise).
+  [ -n "${E2E_FAKES:-}" ] && { "${COMPOSE[@]}" build -q fakes || exit 1; }
   "${COMPOSE[@]}" up -d db lutece ${E2E_FAKES:+fakes oauth2} ${E2E_SEARCH:+solr elastic}
   step "waiting for the application"
   until [ "$(health)" != starting ]; do sleep 1; done
@@ -423,7 +425,11 @@ cmd_deploy() {
     (cd "$E2E_SRC" && ${MVN:-mvn} -q -o install -DskipTests)
     jar=$(ls "$E2E_SRC"/target/*.jar 2>/dev/null | grep -vE -- '-(sources|javadoc|tests)\.jar$' | head -1)
     [ -n "$jar" ] || { echo "no jar under $E2E_SRC/target"; exit 1; }
-    docker cp -q "$jar" "$APP:$war/WEB-INF/lib/"
+    # Liberty expands lutece.war again at start: the restarted server must find the new jar (and the webapp files
+    # copied above) in the war itself, a copy into the expanded directory would be overwritten.
+    python3 tools/patch-war.py harness/site/target/lutece.war "$jar" "$E2E_SRC/webapp" artifacts/.deploy.war >/dev/null || exit 1
+    docker cp -q artifacts/.deploy.war "$APP:/opt/wlp/usr/servers/defaultServer/apps/lutece.war"
+    rm -f artifacts/.deploy.war
     docker restart "$APP" >/dev/null
     wait_healthy "$APP" || exit 1
     echo "deploy: $(basename "$jar") replaced, application restarted"

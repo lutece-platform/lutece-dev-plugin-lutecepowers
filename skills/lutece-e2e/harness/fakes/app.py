@@ -8,6 +8,7 @@ import json
 import os
 import pathlib
 import re
+import ssl
 import threading
 import time
 import urllib.parse
@@ -16,6 +17,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "9030"))
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
+TLS_PORT = 9443
+"""HTTPS listener for the services a page calls from the browser (BAN): the core CSP carries upgrade-insecure-requests,
+so a plain-http fetch from an admin page is rewritten to https. The certificate is a test one (CN fakes), accepted by
+the bench browser only."""
+HERE = pathlib.Path(__file__).resolve().parent
 PRO_GUID = os.environ.get("PRO_GUID", "e2e-pro-guid")
 
 # CAS accounts. The key is what the operator types in the fake login form.
@@ -52,6 +58,17 @@ def _next(name):
     with _lock:
         _counters[name] += 1
         return _counters[name]
+
+
+BAN_ADDRESSES = [
+    {"label": "4 Rue de Rivoli 75004 Paris", "name": "4 Rue de Rivoli", "id": "75104_8249_00004", "postcode": "75004",
+     "citycode": "75104", "lon": 2.361406, "lat": 48.855254},
+    {"label": "Place de l'Hôtel de Ville 75004 Paris", "name": "Place de l'Hôtel de Ville", "id": "75104_4633",
+     "postcode": "75004", "citycode": "75104", "lon": 2.351828, "lat": 48.856614},
+    {"label": "8 Boulevard du Palais 75001 Paris", "name": "8 Boulevard du Palais", "id": "75101_7043_00008",
+     "postcode": "75001", "citycode": "75101", "lon": 2.346344, "lat": 48.855410},
+]
+"""The addresses the BAN stand-in knows, in the shape of the real service (label, id, lon/lat in WGS84)."""
 
 
 def log(channel, payload):
@@ -213,7 +230,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.identitystore(path, body)
         if path.startswith("/ants/"):
             return self.ants(method, path, body)
+        if path.startswith("/ban/"):
+            return self.ban(path)
         return self.send(404, "no fake for " + path)
+
+    # -- BAN (api-adresse.data.gouv.fr), called by the browser --------------
+    def ban(self, path):
+        """GET /ban/search/?q=&limit= answers the BAN GeoJSON: the fixed Paris addresses whose label holds every word
+        of the query, best first. The browser calls it from the application's origin, so it allows any origin."""
+        q = self.query()
+        words = [w for w in re.split(r"\W+", (q.get("q") or "").lower()) if w]
+        limit = int(q.get("limit") or 5) if (q.get("limit") or "5").isdigit() else 5
+        hits = [a for a in BAN_ADDRESSES if words and all(w in a["label"].lower() for w in words)][:limit]
+        log("ban", {"q": q.get("q"), "limit": limit, "results": len(hits)})
+        features = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [a["lon"], a["lat"]]},
+                     "properties": {"label": a["label"], "score": 0.97, "id": a["id"], "name": a["name"],
+                                    "postcode": a["postcode"], "citycode": a["citycode"], "city": "Paris",
+                                    "context": "75, Paris, \u00cele-de-France", "type": "housenumber"}} for a in hits]
+        return self.send(200, json.dumps({"type": "FeatureCollection", "features": features}),
+                         "application/json; charset=utf-8", {"Access-Control-Allow-Origin": "*"})
 
     # -- CAS 2 ------------------------------------------------------------
     def cas(self, method, path, body):
@@ -392,5 +427,10 @@ def load_extras(directory):
 if __name__ == "__main__":
     os.makedirs(DATA_DIR, exist_ok=True)
     load_extras(os.environ.get("EXTRA_DIR", "/app/extra"))
-    print("fakes listening on %d" % PORT, flush=True)
+    tls = ThreadingHTTPServer(("0.0.0.0", TLS_PORT), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(HERE / "fakes-cert.pem", HERE / "fakes-key.pem")
+    tls.socket = context.wrap_socket(tls.socket, server_side=True)
+    threading.Thread(target=tls.serve_forever, daemon=True).start()
+    print("fakes listening on %d, https on %d" % (PORT, TLS_PORT), flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
