@@ -826,6 +826,27 @@ if [ "$COUNT" -eq 0 ]; then emit "I18N04" "PASS" "The other languages of the bun
 else emit "I18N04" "WARN" "Other languages (beyond the default bundle and _fr, the two the core ships) lack keys: they show the default text" "$COUNT" "$I18N03_OTHERS"; fi
 echo ""
 
+# I18N05: a bundle suffixed with a country code where Java expects a language code (_cz for Czech is _cs, _dk is _da,
+# _se is _sv…): ResourceBundle never loads it, the file is dead and its language falls back.
+I18N05_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N05_MATCHES=$(find src/java -name "*_messages_*.properties" 2>/dev/null | while read -r f; do
+        lang=$(basename "$f" .properties | sed -E 's/.*_messages_([A-Za-z]+).*/\1/')
+        case "$lang" in
+            cz) echo "$f: _cz is a country, Czech is _cs";; dk) echo "$f: _dk is a country, Danish is _da";;
+            se) echo "$f: _se is a country, Swedish is _sv";; gr) echo "$f: _gr is a country, Greek is _el";;
+            jp) echo "$f: _jp is a country, Japanese is _ja";; cn) echo "$f: _cn is a country, Chinese is _zh";;
+            ua) echo "$f: _ua is a country, Ukrainian is _uk";; kr) echo "$f: _kr is a country, Korean is _ko";;
+            ee) echo "$f: _ee is a country, Estonian is _et";; si) echo "$f: _si is a country, Slovenian is _sl";;
+            rs) echo "$f: _rs is a country, Serbian is _sr";; al) echo "$f: _al is a country, Albanian is _sq";;
+        esac
+    done) || I18N05_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N05_MATCHES" ] && COUNT=$(echo "$I18N05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N05" "PASS" "Bundle suffixes are language codes" 0
+else emit "I18N05" "FAIL" "Bundle suffixed with a country code: Java never loads it" "$COUNT" "$I18N05_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 
