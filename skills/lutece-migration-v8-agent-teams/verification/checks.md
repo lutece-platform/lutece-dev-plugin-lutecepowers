@@ -122,6 +122,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | CD03 | WARN | CompletableFuture.runAsync | `CompletableFuture\.runAsync` | *.java |
 | CD04 | FAIL | commons.fileupload | `org\.apache\.commons\.fileupload` | *.java |
 | CD05 | WARN | Constructor self-registration (lazy CDI bean) | `registerIndexer\|registerCacheableService\|registerProvider` in files without `@Observes @Initialized` | *.java |
+| CD06 | FAIL | `@Observes` on an event the publishers fire only with `fireAsync()`: the observer is never called | firing sites (`select( X.class ).fireAsync(`, `Event<X>` fields) in the project and the reference clones vs `@Observes X` | *.java |
 
 ## MVC / New Patterns (MV) — v2 additions
 

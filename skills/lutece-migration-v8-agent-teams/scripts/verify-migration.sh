@@ -401,6 +401,39 @@ fi
 COUNT=0; [ -n "$CD05_MATCHES" ] && COUNT=$(echo "$CD05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "CD05" "PASS" "No lazy bean self-registration trap" 0
 else emit "CD05" "WARN" "Constructor self-registration without @Observes @Initialized" "$COUNT" "$CD05_MATCHES"; fi
+
+# CD06: an event fired only with fireAsync() reaches @ObservesAsync observers only: a plain @Observes observer of it is
+# never called and nothing fails (a search index never updated, a listener silent). The firing sites are read in this
+# project and in the reference clones, where the plugins publishing the events live.
+CD06_MATCHES=""
+if [ -d "src/java" ]; then
+    CD06_MATCHES=$(REFS="${LUTECE_REFERENCES:-$HOME/.lutece-references}" python3 - <<'PY'
+import glob, os, re
+fired = {}
+roots = ["src/java"] + glob.glob(os.path.join(os.environ["REFS"], "*", "src", "java"))
+for root in roots:
+    for path in glob.glob(os.path.join(root, "**", "*.java"), recursive=True):
+        text = open(path, encoding="utf-8", errors="replace").read()
+        if ".fire" not in text:
+            continue
+        for m in re.finditer(r"select\(\s*(\w+)\.class[^;]*?\.(fireAsync|fire)\s*\(", text, flags=re.S):
+            fired.setdefault(m.group(1), set()).add(m.group(2))
+        for field in re.finditer(r"\bEvent\s*<\s*(\w+)\s*>\s+(\w+)\s*;", text):
+            for m in re.finditer(r"\b%s\s*\.(?:select\([^;]*?\)\s*\.)?(fireAsync|fire)\s*\(" % re.escape(field.group(2)), text, flags=re.S):
+                fired.setdefault(field.group(1), set()).add(m.group(1))
+for path in glob.glob("src/java/**/*.java", recursive=True):
+    text = open(path, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"@Observes\s+(?:@\w+(?:\([^)]*\))?\s+)*(\w+)\s+\w+\s*\)", text):
+        kinds = fired.get(m.group(1))
+        if kinds == {"fireAsync"}:
+            line = text.count("\n", 0, m.start()) + 1
+            print("%s:%d: @Observes %s, which is only fired with fireAsync(): the observer is never called, use @ObservesAsync" % (path, line, m.group(1)))
+PY
+)
+fi
+COUNT=0; [ -n "$CD06_MATCHES" ] && COUNT=$(echo "$CD06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "CD06" "PASS" "No synchronous observer of an event only fired asynchronously" 0
+else emit "CD06" "FAIL" "@Observes on an event only fired with fireAsync(): never called (use @ObservesAsync)" "$COUNT" "$CD06_MATCHES"; fi
 echo ""
 
 # ─── MVC / New Patterns (v2 additions) ──────────────────
