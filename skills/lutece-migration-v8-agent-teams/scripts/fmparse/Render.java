@@ -49,9 +49,23 @@ public class Render
     /** A value that is at once an empty string, an empty sequence, an empty hash, false, zero and a directive that renders a marker comment. */
     static class Lenient implements TemplateHashModelEx, TemplateSequenceModel, TemplateScalarModel, TemplateBooleanModel, TemplateNumberModel, TemplateMethodModelEx, TemplateDirectiveModel
     {
+        final String name;
+
+        /** A lenient value for an unnamed lookup. */
+        Lenient( )
+        {
+            this( "" );
+        }
+
+        /** A lenient value standing for the model or macro name it was looked up by. */
+        Lenient( String name )
+        {
+            this.name = name;
+        }
+
         public void execute( Environment env, Map params, TemplateModel[] loopVars, TemplateDirectiveBody body ) throws freemarker.template.TemplateException, java.io.IOException
         {
-            env.getOut( ).write( "<!-- render: unresolved macro -->" );
+            env.getOut( ).write( "<!-- render: unresolved macro" + ( name.isEmpty( ) ? "" : " @" + name ) + " -->" );
             if ( body != null ) body.render( env.getOut( ) );
         }
         public TemplateModel get( String key ) { return this; }
@@ -89,7 +103,7 @@ public class Render
         public TemplateModel get( String key ) throws TemplateModelException
         {
             if ( values.containsKey( key ) ) return wrapper.wrap( values.get( key ) );
-            return known.contains( key ) ? null : new Lenient( );
+            return known.contains( key ) ? null : new Lenient( key );
         }
         public boolean isEmpty( ) { return false; }
         public int size( ) { return values.size( ); }
@@ -154,13 +168,16 @@ public class Render
                 String html = writer.toString( );
                 int wrong = count( html, "wrong or deprecated argument" );
                 int unresolved = count( html, "render: unresolved macro" );
+                java.util.Set<String> unresolvedNames = new java.util.TreeSet<>( );
+                java.util.regex.Matcher un = java.util.regex.Pattern.compile( "render: unresolved macro @(\\w+)" ).matcher( html );
+                while ( un.find( ) ) unresolvedNames.add( un.group( 1 ) );
                 Set<String> missing = new TreeSet<>( );
                 html = bundles.localize( html, missing );
                 missingKeys.addAll( missing );
                 Files.writeString( Path.of( out, rel.replace( '/', '_' ) ), html );
                 warnings += wrong;
                 unresolvedTotal += unresolved;
-                System.out.println( ( wrong == 0 && unresolved == 0 && missing.isEmpty( ) ? "OK    " : "WARN  " ) + rel + " -> " + html.length( ) + " bytes" + ( wrong == 0 ? "" : ", " + wrong + " wrong-argument comment(s)" ) + ( unresolved == 0 ? "" : ", " + unresolved + " unresolved macro(s): defined in a template that is not auto-included, or nowhere" ) + ( missing.isEmpty( ) ? "" : ", " + missing.size( ) + " i18n key(s) resolving to nothing: " + String.join( ", ", missing ) ) + ( Files.exists( json ) ? " (json model)" : " (lenient model)" ) );
+                System.out.println( ( wrong == 0 && unresolved == 0 && missing.isEmpty( ) ? "OK    " : "WARN  " ) + rel + " -> " + html.length( ) + " bytes" + ( wrong == 0 ? "" : ", " + wrong + " wrong-argument comment(s)" ) + ( unresolved == 0 ? "" : ", " + unresolved + " unresolved macro(s)" + ( unresolvedNames.isEmpty( ) ? "" : " (@" + String.join( ", @", unresolvedNames ) + ")" ) + ": defined in a template that is not auto-included, or nowhere" ) + ( missing.isEmpty( ) ? "" : ", " + missing.size( ) + " i18n key(s) resolving to nothing: " + String.join( ", ", missing ) ) + ( Files.exists( json ) ? " (json model)" : " (lenient model)" ) );
             }
             catch ( Exception e )
             {
