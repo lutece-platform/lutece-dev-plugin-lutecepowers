@@ -260,8 +260,9 @@ How the agent does it:
   only: a defect that a mechanical check could see would already have been reported.
 - Judge against the five points printed in `review-todo.md`: charte, mise en page, contenu, cohérence,
   lisibilité.
-- Write one line per group in `artifacts/review.md`: `- [x] G012 ok` or `- [x] G012 defect: …`, then a short
-  synthesis ordering the plugin's own defects by impact.
+- Write `war: <hash>` (the line `review-todo.md` prints) at the top of `artifacts/review.md`, then one line per group:
+  `- [x] G012 ok` or `- [x] G012 defect: …`, then a short synthesis ordering the plugin's own defects by impact. The
+  gate refuses a review written for another war or older than the run's list: groups are renumbered on every run.
 - **Attribute**, exactly like the server-error gate. A broken footer image or a mislabelled core dialog belongs
   to the site theme or the core, not to the artefact under test. Say so in the verdict and keep it out of the
   synthesis.

@@ -116,6 +116,14 @@ def groups():
     return ordered
 
 
+def war_stamp():
+    """Short hash of the war the run tested (fingerprint.json), or None: a review is valid for that war only."""
+    try:
+        return json.loads((A / "fingerprint.json").read_text()).get("war_sha256", "")[:12] or None
+    except Exception:  # noqa: BLE001 - no fingerprint: the date check alone applies
+        return None
+
+
 def todo():
     gs = groups()
     L = ["# Revue visuelle — %d groupes" % len(gs), "",
@@ -123,6 +131,8 @@ def todo():
          "soient les données. Ouvrir la capture indiquée, répondre à la grille, puis reporter un verdict par",
          "groupe dans `artifacts/review.md` (une ligne `- [x] G012 ok` ou `- [x] G012 defect: …`).", "",
          CHECKLIST, "",
+         "War jugé : `%s` — recopier cette ligne `war: %s` en tête de `artifacts/review.md` : une revue ne vaut "
+         "que pour le war qu'elle a regardé." % (war_stamp() or "?", war_stamp() or "?"), "",
          "| Groupe | Écran | Type | Constat mécanique | Capture |", "|---|---|---|---|---|"]
     seen = {}
     for e in gs:
@@ -161,6 +171,11 @@ def check():
     if listed.exists() and f.stat().st_mtime < listed.stat().st_mtime:
         print("REVUE VISUELLE PÉRIMÉE : artifacts/review.md date d'avant la liste de ce run (review-todo.md) ; "
               "les groupes sont renumérotés à chaque run, refaire la revue sur les captures actuelles")
+        return 7
+    stamp = war_stamp()
+    if stamp and ("war: %s" % stamp) not in f.read_text():
+        print("REVUE VISUELLE D'UN AUTRE WAR : artifacts/review.md ne porte pas la ligne `war: %s` du war de ce run "
+              "(fingerprint.json) ; refaire la revue sur les captures de ce war" % stamp)
         return 7
     done = set(re.findall(r"\bG\d{3}\b", f.read_text()))
     missing = [e["id"] for e in gs if e["id"] not in done]
