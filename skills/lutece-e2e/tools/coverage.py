@@ -84,16 +84,16 @@ def main():
                 status = "defect"
             elif bare_red:
                 status = "robustness"
-            elif tests:
-                status = "reached"
             elif rule and rule.get("blocked_by"):
                 status = "blocked"
             elif rule:
                 status = "unreachable"
+            elif tests:
+                status = "reached"
             else:
                 status = "todo"
             out[kind].append({"id": e["id"], "url": e["url"], "origin": e.get("origin", "target"), "surface": e.get("surface", "bo"), "status": status, "covered": bool(tests), "proven": bool(proven),
-                              "tests": (tests or [])[:5], "n_tests": len(tests), "excluded": rule["reason"] if rule and not tests else None,
+                              "tests": (tests or [])[:5], "n_tests": len(tests), "excluded": rule["reason"] if rule and not proven else None,
                               "blocked_by": rule.get("blocked_by") if rule else None})
     def count(v):
         st = {"total": len(v), "covered": sum(1 for x in v if x["covered"]), "proven": sum(1 for x in v if x["proven"]),
