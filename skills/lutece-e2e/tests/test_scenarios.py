@@ -64,8 +64,8 @@ Step vocabulary (one key per step):
   set: {var: value}                define variables; {{rand}} is a per-scenario random token
   shot: <name>                     screenshot
   upload: {selector: ..., file: ...}   set a file input (path relative to e2e/)
-  select: {selector: ..., label: text | option_contains: text}   pick an option by its label, or the first whose label
-                                   or value contains the text (fill takes the option value)
+  select: {selector: ..., label: text | option_contains: text | value: v}   pick an option by its label, the first
+                                   whose label or value contains the text, or the one of that exact value
   download: <form or link selector> submit the form, or click the link or button, that answers with a file; records
                                    its name and size
   login: {user: ..., password: ...}    log out then sign in as another admin (use with isolated: true)
@@ -76,6 +76,7 @@ Step vocabulary (one key per step):
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
   drag: {from: <selector>, to: <selector>}   press the mouse on the first match of `from`, move over `to`, release:
                                    a selection made by dragging (several calendar slots at once)
+  dblclick: <selector>             double-click the first match (a helper bound to dblclick: insert a marker)
 File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
 scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
 fragments, and the mechanical oracle rule applies to the expanded steps.
@@ -285,11 +286,20 @@ def run_step(page, step, vars_, record):
     elif key == "select":
         loc = page.locator(arg["selector"]).first
         assert loc.count(), "select: nothing matches %s on %s" % (arg["selector"], lutece.normalize(page.url))
-        wanted = arg.get("label") or arg.get("option_contains")
         options = loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
-        match = [v for v, t in options if (t == wanted if arg.get("label") else wanted in t or wanted in v)]
-        assert match, "select %s: no option %s %r (options: %s)" % (arg["selector"], "labelled" if arg.get("label") else "containing", wanted, ", ".join(t for _, t in options)[:200])
+        if "value" in arg:
+            wanted, how = str(arg["value"]), "of value"
+            match = [v for v, _ in options if v == wanted]
+        else:
+            wanted = arg.get("label") or arg.get("option_contains")
+            how = "labelled" if arg.get("label") else "containing"
+            match = [v for v, t in options if (t == wanted if arg.get("label") else wanted in t or wanted in v)]
+        assert match, "select %s: no option %s %r (options: %s)" % (arg["selector"], how, wanted, ", ".join(t for _, t in options)[:200])
         loc.select_option(match[0])
+    elif key == "dblclick":
+        loc = page.locator(arg).first
+        assert loc.count(), "dblclick: nothing matches %s on %s" % (arg, lutece.normalize(page.url))
+        loc.dblclick()
     elif key == "drag":
         src, dst = page.locator(arg["from"]).first, page.locator(arg["to"]).first
         assert src.count() and dst.count(), "drag: nothing matches %s or %s on %s" % (arg["from"], arg["to"], lutece.normalize(page.url))
