@@ -293,6 +293,8 @@ def run_step(page, step, vars_, record):
         # carried by Lutece-Request-Signature and Lutece-Request-Timestamp. An element the request does not carry
         # contributes nothing, exactly as HeaderHashAuthenticator drops a null parameter — so the values come from
         # the query string and, for a urlencoded body, from that body; a multipart part is never a signature value.
+        # `mode: query` carries them as the timestamp and signature parameters instead, as RequestHashAuthenticator
+        # reads them (the signed download links of blobstore, for instance).
         if arg.get("sign"):
             sign = arg["sign"]
             params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(arg["url"]).query, keep_blank_values=True))
@@ -300,9 +302,12 @@ def run_step(page, step, vars_, record):
                 params.update(dict(urllib.parse.parse_qsl(arg["body"], keep_blank_values=True)))
             stamp = str(int(time.time() * 1000))
             raw = "".join(params[e] for e in (sign.get("elements") or []) if e in params)
-            headers["Lutece-Request-Timestamp"] = stamp
-            headers["Lutece-Request-Signature"] = hashlib.sha1(
-                (raw + str(sign.get("private_key", "")) + stamp).encode("utf-8")).hexdigest()
+            signature = hashlib.sha1((raw + str(sign.get("private_key", "")) + stamp).encode("utf-8")).hexdigest()
+            if sign.get("mode") == "query":
+                arg = dict(arg, url=arg["url"] + ("&" if "?" in arg["url"] else "?") + "timestamp=%s&signature=%s" % (stamp, signature))
+            else:
+                headers["Lutece-Request-Timestamp"] = stamp
+                headers["Lutece-Request-Signature"] = signature
 
         fetch = {"method": method, "headers": headers, "data": arg.get("body")}
         # `multipart` sends a multipart/form-data body, which is how an upload endpoint is called. A value that
