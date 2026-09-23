@@ -11,6 +11,7 @@ import json
 import pathlib
 import re
 import statistics
+import sys
 
 import report_page
 
@@ -87,13 +88,13 @@ def summary(rows, perf, disc, inv):
     rv = A / "review.md"
     todo = A / "review-todo.md"
     if todo.exists():
-        n = len(re.findall(r"^\| G\d{3} ", todo.read_text(), re.M))
-        done = len(set(re.findall(r"\bG\d{3}\b", rv.read_text()))) if rv.exists() else 0
-        # No screen family captured (an artefact with no screen of its own): review.py check answers "nothing to
-        # judge" and passes, so the banner must not read "À FAIRE" against the gate.
-        L += ["> **Revue visuelle : %s** — %d/%d familles d'écrans jugées (charte, mise en page, cohérence). "
-              "Liste : `artifacts/review-todo.md`, verdicts : `artifacts/review.md`."
-              % ("sans objet (aucune famille capturée)" if not n else ("faite" if done >= n else "À FAIRE"), done, n), ""]
+        # The banner says what the gate says: the same check (war, date, one verdict per group), never a count of
+        # verdict lines that may belong to another run.
+        import subprocess
+        gate = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("review.py")), "check"], capture_output=True, text=True)
+        verdict = (gate.stdout.strip().splitlines() or ["?"])[-1]
+        L += ["> **Revue visuelle : %s** — %s. Liste : `artifacts/review-todo.md`, verdicts : `artifacts/review.md`."
+              % ("faite" if gate.returncode == 0 else "À FAIRE", verdict), ""]
     if (A / "INVARIANT-BROKEN.txt").exists():
         L += ["> **INVARIANT DU BANC ROMPU** : " + (A / "INVARIANT-BROKEN.txt").read_text().strip(), ""]
     cov = js("coverage.json")
