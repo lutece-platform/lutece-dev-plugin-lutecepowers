@@ -278,6 +278,8 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | SQ04 | FAIL | `INSERT INTO core_x VALUES (…)` without a column list: fails as soon as the core adds a column (core_portlet.id_template in 8.0.2) | `INSERT +INTO +core_[a-z0-9_]+ +VALUES` | src/sql |
 | JS06 | FAIL | JSP streaming a file (download, export) that leaves template text, a newline between its directives included (`trimDirectiveWhitespaces` does not remove it on Liberty): "OutputStream already obtained" on every download | (cross-file check) | *.jsp |
 | JS05 | FAIL | admin JSP writing its own HTML (`<form>`, `<table>`, `<div>`…): the screen belongs in a template rendered by a `@View` | markup tags in webapp/jsp/admin | *.jsp |
+| WB06 | FAIL | `<admin-feature>` without `<feature-group>`: a reinstall rebuilds the right from the descriptor, outside every menu group | (cross-file check) | plugins/*.xml |
+| WB07 | WARN | admin feature icon in `<feature-icon-url>`, which the core digester ignores (it reads `<icon-url>`): a reinstall loses the icon | (cross-file check) | plugins/*.xml |
 | JS04 | FAIL | admin JSP driving a bean that is not a `@Controller` (legacy `DoXxx.jsp`, portlets excepted): no v8 dispatch, no automatic CSRF | (cross-file check) | *.jsp, *.java |
 
 ## Templates (TM)

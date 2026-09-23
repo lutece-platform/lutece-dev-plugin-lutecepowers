@@ -886,6 +886,43 @@ if [ "$COUNT" -eq 0 ]; then emit "I18N06" "PASS" "Every bundle line is key=value
 else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value" "$COUNT" "$I18N06_MATCHES"; fi
 echo ""
 
+# WB06: an <admin-feature> without <feature-group>. Reinstalling the plugin from the Plugins screen rebuilds its
+# rights from the descriptor (Plugin.install -> registerRights), and a feature without a group lands outside every
+# menu group (id_feature_group NULL), whatever the install SQL said.
+WB06_MATCHES=""
+if [ -d "webapp/WEB-INF/plugins" ]; then
+    WB06_MATCHES=$(python3 - <<'PY'
+import glob, re
+for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
+    text = open(f, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"<admin-feature>(.*?)</admin-feature>", text, re.S):
+        if not re.search(r"<feature-group>\s*\S", m.group(1)):
+            fid = re.search(r"<feature-id>\s*([^<\s]+)", m.group(1))
+            print("%s: admin-feature %s has no <feature-group>" % (f, fid.group(1) if fid else "?"))
+PY
+) || WB06_MATCHES=""
+fi
+WB07_MATCHES=""
+if [ -d "webapp/WEB-INF/plugins" ]; then
+    WB07_MATCHES=$(python3 - <<'PY'
+import glob, re
+for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
+    text = open(f, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"<admin-feature>(.*?)</admin-feature>", text, re.S):
+        if "<feature-icon-url>" in m.group(1) and "<icon-url>" not in m.group(1):
+            fid = re.search(r"<feature-id>\s*([^<\s]+)", m.group(1))
+            print("%s: admin-feature %s carries its icon in <feature-icon-url>, which the core digester ignores (it reads <icon-url>): a reinstall resets icon_url to NULL" % (f, fid.group(1) if fid else "?"))
+PY
+) || WB07_MATCHES=""
+fi
+COUNT=0; [ -n "$WB06_MATCHES" ] && COUNT=$(echo "$WB06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "WB06" "PASS" "Every admin feature declares its menu group" 0
+else emit "WB06" "FAIL" "admin-feature without feature-group: a reinstall moves it out of every menu group" "$COUNT" "$WB06_MATCHES"; fi
+COUNT=0; [ -n "$WB07_MATCHES" ] && COUNT=$(echo "$WB07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "WB07" "PASS" "Admin feature icons survive a reinstall" 0
+else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url> (core inconsistency with the DTD, reported upstream)" "$COUNT" "$WB07_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 
