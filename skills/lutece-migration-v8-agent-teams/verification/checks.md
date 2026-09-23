@@ -228,7 +228,8 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | I18N09 | WARN | translation key the default bundle does not declare (translated key name, key renamed or removed since): never shown | (cross-file check) | *_messages_*.properties |
 | I18N07 | WARN | French value with a common spelling error (`Etes vous`, `sur de vouloir`) or a leftover Java class name after an article (`un PollFormQuestion`) | decoded `_fr` values | `*_messages_fr.properties` |
 | I18N08 | WARN | Bundle key nothing uses (`i18n_unused.py`): no project file names `<prefix>.<key>` or `"<key>"`, no literal or `${` stem builds it, no reference repository names it; runtime families (`model.entity.*`, `validation.*`, `site_property.*`) are kept | default bundles vs every tracked text file | `*_messages.properties` |
-| I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
+| I18N02 | WARN | i18n key asked for by a template, a message constant, a label tag of the plugin descriptor or a `core_admin_right`/`core_portlet_type` row, declared in no bundle | (cross-file check) | webapp, src/java |
+| I18N10 | WARN | key declared twice in the same bundle: `java.util.Properties` keeps the last value, the first never shows | (cross-file check) | *_messages*.properties |
 
 **XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second
 option.** `core_style`, `core_style_mode_stylesheet` and `core_stylesheet` left the core for
@@ -259,7 +260,7 @@ model. The check fails on a class extending `PortletJspBean` that never calls
 `<plugin>.message.x` written there resolves as `<plugin>.<plugin>.message.x` and renders
 as the raw key: nothing fails and nothing logs. The same grep catches a key appended without a
 trailing newline, glued to the value of the line above, which corrupts both entries.
-`scripts/fix-i18n-bundles.py <project>` repairs I18N01, I18N05, I18N06 and I18N09 in place (`--dry-run` to list).
+`scripts/fix-i18n-bundles.py <project>` repairs I18N01, I18N05, I18N06, I18N09 and I18N10 in place (`--dry-run` to list).
 
 **I18N02** — a `#i18n{...}` of a template, or a `MESSAGE_*` / `INFO_*` / `ERROR_*` / `TITLE_*` constant, naming a
 key no bundle declares: Lutece prints the raw key on the screen and nothing fails at build time. WARN, because

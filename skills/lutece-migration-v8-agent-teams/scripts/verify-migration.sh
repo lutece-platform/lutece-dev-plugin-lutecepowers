@@ -782,9 +782,10 @@ else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the l
 echo ""
 
 # I18N02: a key a template or a message constant asks for, that no bundle of this plugin declares. Lutece then
-# renders the raw key on screen and nothing fails at build time. Two sources only, both unambiguous: `#i18n{}` in
-# the templates, and the Java constants whose name says they hold a message key (MESSAGE_, INFO_, ERROR_,
-# WARNING_, TITLE_, PROPERTY_PAGE_TITLE_). Bean names and CSRF action names are strings too, and are not keys.
+# renders the raw key on screen and nothing fails at build time. Unambiguous sources only: `#i18n{}` in the
+# templates, the Java constants whose name says they hold a message key (MESSAGE_, INFO_, ERROR_, WARNING_, TITLE_,
+# PROPERTY_PAGE_TITLE_), the label tags of the plugin descriptor (feature, portlet type, daemon, description) and the
+# name/description of the core_admin_right and core_portlet_type rows the SQL inserts. Bean names and CSRF action names are strings too, and are not keys.
 # Every grep here is `-a`: a bundle written in ISO-8859 counts as binary for grep, which then reports nothing and
 # the check would silently pass — the same trap applies to any manual search in these files.
 I18N02_MATCHES=""
@@ -797,9 +798,13 @@ if [ -d "src/java" ]; then
         grep -arhoE "#i18n\{$PLUGIN\.[A-Za-z0-9_.-]+\}" webapp src 2>/dev/null | sed -E "s/^#i18n\{$PLUGIN\.//; s/\}$//" >> "$ASKED"
         grep -arhoE "(MESSAGE|INFO|ERROR|WARNING|TITLE|PROPERTY_PAGE_TITLE)_[A-Z0-9_]+ *= *\"$PLUGIN\.[A-Za-z0-9_.-]+\"" src/java --include="*.java" 2>/dev/null \
             | grep -oE "\"$PLUGIN\.[A-Za-z0-9_.-]+\"" | tr -d '"' | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
+        grep -ahoE "<(description|feature-title|feature-description|portlet-type-name|daemon-name|daemon-description|insert-service-label)>$PLUGIN\.[A-Za-z0-9_.-]+<" webapp/WEB-INF/plugins/*.xml 2>/dev/null \
+            | sed -E "s/^<[a-z-]+>$PLUGIN\.//; s/<$//" >> "$ASKED"
+        grep -rahiE "INSERT +INTO +core_(portlet_type|admin_right)\b" src/sql --include="*.sql" 2>/dev/null \
+            | grep -oE "'$PLUGIN\.[A-Za-z0-9_.-]+'" | tr -d "'" | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
         I18N02_MATCHES=$(sort -u "$ASKED" | while read -r k; do
             [ -n "$k" ] || continue
-            grep -qxF "$k" "$DECLARED" || echo "$PLUGIN.$k: asked for by a template or a message constant, declared in no bundle"
+            grep -qxF "$k" "$DECLARED" || echo "$PLUGIN.$k: asked for by a template, a message constant, the plugin descriptor or a right/portlet type row, declared in no bundle"
         done)
         rm -f "$DECLARED" "$ASKED"
     fi
@@ -887,6 +892,28 @@ fi
 COUNT=0; [ -n "$I18N09_MATCHES" ] && COUNT=$(echo "$I18N09_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N09" "PASS" "Every translation key exists in the default bundle" 0
 else emit "I18N09" "WARN" "Translation key the default bundle does not declare: it never shows (fix-i18n-bundles.py)" "$COUNT" "$I18N09_MATCHES"; fi
+echo ""
+
+# I18N10: a key declared twice in the same bundle. java.util.Properties keeps the last value: the first one is dead,
+# and whoever edits it sees no change. fix-i18n-bundles.py keeps the last occurrence, which is what already shows.
+I18N10_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N10_MATCHES=$(SCRIPT_DIR="$SCRIPT_DIR" python3 - <<'PY'
+import glob, os, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from bundles import entries
+for path in sorted(glob.glob("src/java/**/*_messages*.properties", recursive=True)):
+    seen = {}
+    for n, k, _ in entries(path):
+        if k in seen:
+            print("%s:%d: %s (also line %d, the last one wins)" % (path, seen[k], k[:80], n))
+        seen[k] = n
+PY
+) || I18N10_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N10_MATCHES" ] && COUNT=$(echo "$I18N10_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N10" "PASS" "No key declared twice in a bundle" 0
+else emit "I18N10" "WARN" "Key declared twice in a bundle: the first value never shows (fix-i18n-bundles.py)" "$COUNT" "$I18N10_MATCHES"; fi
 echo ""
 
 # I18N05: a bundle suffixed with a country code where Java expects a language code (_cz for Czech is _cs, _dk is _da,

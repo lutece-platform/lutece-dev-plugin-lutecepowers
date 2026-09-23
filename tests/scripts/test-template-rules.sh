@@ -92,5 +92,17 @@ expect "JS07: script with an extra brace" 1 "$(vm JS07 FAIL)"
 printf 'function a(v) {\n\treturn v ? 1 : 2;\n}\n' > "$J/webapp/js/plugins/x/x.js"
 expect "JS07: script that parses" 1 "$(vm JS07 PASS)"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, DA02, I18N07, JS04, JS07, fix-button-colours"
+printf 'name=X\nlabel=First\nlabel=Second\n' > "$J/src/java/x/resources/x_messages.properties"
+expect "I18N10: key declared twice" 1 "$(vm I18N10 WARN)"
+printf 'name=X\nlabel=Second\n' > "$J/src/java/x/resources/x_messages.properties"
+expect "I18N10: every key once" 1 "$(vm I18N10 PASS)"
+mkdir -p "$J/webapp/WEB-INF/plugins" "$J/src/sql/plugins/x/core"
+printf '<plug-in>\n<name>x</name>\n<description>x.name</description>\n<portlet-type-name>x.missing.portlet</portlet-type-name>\n</plug-in>\n' > "$J/webapp/WEB-INF/plugins/x.xml"
+printf "INSERT INTO core_admin_right (id_right,name,description) VALUES ('X_RIGHT','x.label','x.missing.right');\n" > "$J/src/sql/plugins/x/core/init_core_x.sql"
+expect "I18N02: descriptor and right keys declared nowhere" 1 "$(cd "$J" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.missing.portlet\|x.missing.right' | grep -qx 2 && echo 1)"
+printf 'name=X\nlabel=Second\nmissing.portlet=P\nmissing.right=R\n' > "$J/src/java/x/resources/x_messages.properties"
+expect "I18N02: descriptor and right keys declared" 1 "$(vm I18N02 PASS)"
+rm -rf "$J/webapp/WEB-INF/plugins" "$J/src/sql"
+
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
 exit $fail

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Repairs the i18n bundles of a Lutece project, in place, for the defects verify-migration reports as I18N05, I18N06,
-I18N01 and I18N09, in that order:
+I18N01, I18N10 and I18N09, in that order:
 
 1. a bundle suffixed with a country code (`_cz`, `_dk`, `_se`...) is renamed to its language code with `git mv`
    (merged into the language bundle when both exist, the language bundle winning);
 2. a `key>value` line gets its `=` back;
 3. a key repeating the bundle prefix (`appointment.name` in appointment_messages) loses the prefix, or is removed when
    the bundle already declares the short key;
-4. in a translation, a key the default bundle does not declare is removed: nothing asks for it, it never shows.
+4. a key declared twice in a bundle keeps its last occurrence only, the one java.util.Properties already shows;
+5. in a translation, a key the default bundle does not declare is removed: nothing asks for it, it never shows.
 
 `--drop <file>` also removes, from every language, the keys the file lists one per line (the I18N08 keys confirmed
 dead once i18n_unused.py has been run against every consumer of the bundle).
@@ -116,6 +117,25 @@ def strip_prefix(path, root, dry):
         write(path, new, dry)
 
 
+def drop_duplicates(path, root, dry):
+    """Step 4: every occurrence of a key but the last one is removed."""
+    spans = list(bundles.spans(path))
+    last = {}
+    for start, _, text in spans:
+        m = bundles.KEY.match(text)
+        if m:
+            last[m.group(1)] = start
+    drop = set()
+    for start, end, text in spans:
+        m = bundles.KEY.match(text)
+        if m and last[m.group(1)] != start:
+            drop.update(range(start, end + 1))
+            print("I18N10 %s:%d %s removed, redeclared line %d" % (os.path.relpath(path, root), start, m.group(1)[:60],
+                                                                   last[m.group(1)]))
+    if drop:
+        write(path, [ln for i, ln in enumerate(read(path), 1) if i not in drop], dry)
+
+
 def drop_keys(path, root, dead, dry):
     """Removes the listed dead keys from a bundle."""
     lines = read(path)
@@ -130,7 +150,7 @@ def drop_keys(path, root, dead, dry):
 
 
 def drop_orphans(path, default, root, dry):
-    """Step 4: a translation key the default bundle does not declare is removed."""
+    """Step 5: a translation key the default bundle does not declare is removed."""
     ref = bundles.keys(default)
     lines = read(path)
     drop = set()
@@ -145,7 +165,7 @@ def drop_orphans(path, default, root, dry):
 
 
 def main():
-    """Runs the four steps on every bundle of the project."""
+    """Runs the five steps on every bundle of the project."""
     args = [a for a in sys.argv[1:] if a != "--dry-run"]
     dry = "--dry-run" in sys.argv
     dead = set()
@@ -159,6 +179,7 @@ def main():
     for path in files:
         fix_arrows(path, root, dry)
         strip_prefix(path, root, dry)
+        drop_duplicates(path, root, dry)
         if dead:
             drop_keys(path, root, dead, dry)
     for default in sorted(glob.glob(os.path.join(root, "src/java/**/*_messages.properties"), recursive=True)):
