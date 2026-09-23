@@ -86,6 +86,16 @@ def _in_scope():
         return lambda u: True
 
 
+def _screen_key(url):
+    """What makes two captures the same screen: the path plus its routing parameters (page, view, action), so the
+    list, create and modify views of one MVC controller are three groups, not one."""
+    import urllib.parse
+    base, _, query = url.partition("?")
+    q = urllib.parse.parse_qs(query)
+    parts = ["%s=%s" % (k, q[k][0]) for k in ("page", "view", "action") if k in q]
+    return base + ("?" + "&".join(parts) if parts else "")
+
+
 def groups():
     """One review group per (url path, kind) of the artefact under test, with a representative screenshot and
     the urls it stands for. Scenario captures count as the artefact's whatever their url."""
@@ -99,7 +109,7 @@ def groups():
             continue
         if r.get("suite") != "scenarios" and not in_scope(r.get("url") or r.get("screen") or ""):
             continue
-        path = (r.get("url") or r.get("screen") or r["id"]).split("?")[0]
+        path = _screen_key(r.get("url") or r.get("screen") or r["id"])
         key = (path, r.get("kind") or "?")
         e = g.setdefault(key, {"path": path, "kind": key[1], "suite": r["suite"], "shot": shot,
                                "urls": set(), "render": [], "status": set()})
