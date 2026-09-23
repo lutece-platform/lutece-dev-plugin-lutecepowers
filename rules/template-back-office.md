@@ -39,7 +39,7 @@ Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`.
 
 - **No offcanvas** (`verify-migration.sh` TM10, `scan-template-design.py` TD48). Content written in the page (search, a short creation form, editor properties) goes in `@modal` > `@modalHeader modalTitle` / `@modalBody` / `@modalFooter`, opened by `<@button type='button' params='data-bs-toggle="modal" data-bs-target="#id"' />`. Another page (create, modify, properties screen) is a plain link `<@aButton href>` (`<@link class='dropdown-item' href>` in a dropdown) to a full page with its own back link.
 - **Required fields carry `mandatory=true`**: the BO `@tform` loads no validation module (the `@cForm` rule, TM11 / TD49, is front office only).
-- **No inline form** (TM12, TD50): no `@tform type='inline'` / `'flex'`, no `form-inline` / `d-flex` on a form, no two `formStyle='inline'` fields in a form. One field per row. A hidden form with a single submit button (Import, Export) may keep `type='inline'`.
+- **No inline form** (TM12, TD50): no `@tform type='inline'` / `'flex'`, no `form-inline` / `d-flex` on a form, no two `formStyle='inline'` fields in a form, no `@row` whose `@columns` each carry a text field (X/Y/width/height side by side, fields left and image right). One field per row; a grid of checkboxes or switches is allowed. A hidden form with a single submit button (Import, Export) may keep `type='inline'`.
 
 ## Messages — `@messages`
 

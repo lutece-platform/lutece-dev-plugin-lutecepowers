@@ -23,6 +23,9 @@ FIELD = re.compile(r"<@(input|select|checkBox|radioButton|cInput|cSelect|cCheckb
 NOT_A_FIELD = re.compile(r"""\btype\s*=\s*['"](hidden|submit|button|reset)['"]""")
 FORM = re.compile(r"<(@tform|@cForm|form)\b([^>]*)>(.*?)</\1\s*>", re.S)
 INLINE_OPEN = re.compile(r"""\btype\s*=\s*['"](inline|flex)['"]|\bclass\s*=\s*['"][^'"]*\b(form-inline|d-flex|d-inline-flex)\b""")
+ROW = re.compile(r"""<@(?:row|cRow)\b[^>]*>(.*?)</@(?:row|cRow)\s*>|<div\b[^>]*\bclass=['"][^'"]*\brow\b[^'"]*['"][^>]*>(.*?)</div>""", re.S)
+CHOICE = re.compile(r"""<@(checkBox|radioButton|cCheckbox|cRadio|cFormCheck)\b[^>]*>|<input\b[^>]*\btype\s*=\s*['"](checkbox|radio)['"][^>]*>""", re.S)
+CELL = re.compile(r"""<@(?:columns|cCol)\b|<div\b[^>]*\bclass=['"][^'"]*\bcol(?:-[a-z0-9-]+)?\b""")
 OFFCANVAS = re.compile(r"""<@c?[Oo]ffcanvas\b[^>]*>|class=["'][^"']*\boffcanvas\b|data-bs-toggle=["']offcanvas""")
 FO_FORM = re.compile(r"<form\b|<@tform\b|\bfoValidation\s*=\s*false")
 
@@ -57,13 +60,22 @@ def fo_forms(text, skin):
     return [line_of(text, m.start()) for m in FO_FORM.finditer(text)]
 
 
+def grid_fields(body):
+    """True when a row of the form holds two columns or more that each carry a text-like field."""
+    for row in ROW.finditer(body):
+        cells = CELL.split(row.group(1) or row.group(2) or "")[1:]
+        if sum(1 for cell in cells if visible_fields(CHOICE.sub("", cell)) >= 1) >= 2:
+            return True
+    return False
+
+
 def inline_forms(text, skin):
     """Lines of the forms that put two visible fields or more on one line."""
     out = []
     for m in FORM.finditer(text):
         body = m.group(3)
-        inline = INLINE_OPEN.search(m.group(2)) or len(re.findall(r"""formStyle\s*=\s*['"]inline['"]""", body)) >= 2
-        if inline and visible_fields(body) >= 2:
+        inline = (INLINE_OPEN.search(m.group(2)) and "flex-column" not in m.group(2)) or len(re.findall(r"""formStyle\s*=\s*['"]inline['"]""", body)) >= 2
+        if (inline and visible_fields(body) >= 2) or grid_fields(body):
             out.append(line_of(text, m.start()))
     return out
 

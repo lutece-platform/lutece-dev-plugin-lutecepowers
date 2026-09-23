@@ -50,7 +50,7 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 
 - **Every form is `<@cForm>`** (`verify-migration.sh` TM11, `scan-template-design.py` TD49): it loads the core `theme-form-validation` by default. Never `foValidation=false`, never a raw `<form>`.
 - **No offcanvas** (TM10, TD48): content of the page goes in `<@cModal title id>`; the macro suffixes the id, so `id='search'` is opened by `data-bs-toggle="modal" data-bs-target="#searchModal"`. Another page is reached by a plain link (`@cLink`, `@cBtn href`).
-- **No inline form** (TM12, TD50): no two visible fields side by side (`form-inline`, `d-flex` on a form). One field per row.
+- **No inline form** (TM12, TD50): no two visible fields side by side (`form-inline`, `d-flex` on a form, a `@cRow` whose `@cCol` each carry a text field). One field per row.
 
 ## Model Messages — Null-Safety and Value Types (MANDATORY)
 
