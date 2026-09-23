@@ -749,9 +749,9 @@ def mail_count(to, subject=None, wait_s=15, contains=None):
 
 def mail_capture(to, pattern, subject=None, wait_s=15):
     """First group of `pattern` in the latest message of the Mailpit sink addressed to `to` (optionally with `subject`),
-    searched in its HTML then its text with HTML entities decoded: the link or the code a mail carries, which the
-    scenario then follows. None when no message or no match."""
-    import html as html_lib
+    searched in its HTML then its text, &amp; read as &: the link or the code a mail carries, which the scenario then
+    follows. Other entities are left as they are: a bare &times in a link is a parameter, not a character. None when
+    no message or no match."""
     import urllib.request
     api = os.environ.get("E2E_MAIL_API", "http://localhost:18025")
     q = 'to:"%s"' % to + (' subject:"%s"' % subject if subject else "")
@@ -764,7 +764,7 @@ def mail_capture(to, pattern, subject=None, wait_s=15):
                 with urllib.request.urlopen(api + "/api/v1/message/" + found[0]["ID"], timeout=5) as r:
                     msg = json.loads(r.read().decode())
                 for body in (msg.get("HTML") or "", msg.get("Text") or ""):
-                    m = re.search(pattern, html_lib.unescape(body))
+                    m = re.search(pattern, body.replace("&amp;", "&"))
                     if m:
                         return m.group(1) if m.groups() else m.group(0)
         except Exception:  # noqa: BLE001
