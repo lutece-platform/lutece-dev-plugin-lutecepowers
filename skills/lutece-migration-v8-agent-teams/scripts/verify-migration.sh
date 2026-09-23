@@ -847,6 +847,35 @@ if [ "$COUNT" -eq 0 ]; then emit "I18N05" "PASS" "Bundle suffixes are language c
 else emit "I18N05" "FAIL" "Bundle suffixed with a country code: Java never loads it" "$COUNT" "$I18N05_MATCHES"; fi
 echo ""
 
+# I18N06: a bundle line with no = or : separator (key>value, a pasted sentence): Java reads the whole line as a key with
+# an empty value, so the intended key answers nothing. Continuation lines (after a trailing backslash) are skipped.
+I18N06_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N06_MATCHES=$(python3 - <<'PY'
+import glob, re
+for f in sorted(glob.glob("src/java/**/*_messages*.properties", recursive=True)):
+    cont = False
+    for n, line in enumerate(open(f, encoding="latin-1"), 1):
+        raw = line.rstrip("\r\n")
+        s = raw.strip()
+        if cont:
+            cont = raw.endswith("\\")
+            continue
+        cont = raw.endswith("\\")
+        if not s or s[0] in "#!":
+            continue
+        if not re.search(r"(?<!\\)[=:]", s) and not re.match(r"^\S+\s+\S", s):
+            print("%s:%d: no separator: %s" % (f, n, s[:80]))
+        elif re.match(r"^[^=:\s]*>[^=:]*$", s):
+            print("%s:%d: '>' used as a separator: %s" % (f, n, s[:80]))
+PY
+) || I18N06_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N06_MATCHES" ] && COUNT=$(echo "$I18N06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N06" "PASS" "Every bundle line is key=value" 0
+else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value" "$COUNT" "$I18N06_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 

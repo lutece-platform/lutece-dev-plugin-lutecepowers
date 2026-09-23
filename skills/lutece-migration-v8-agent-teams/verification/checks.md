@@ -222,6 +222,7 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | I18N03 | FAIL | i18n key in the default bundle and not in `_fr`, or the reverse (the two languages the core ships) | (cross-file check) | *_messages*.properties |
 | I18N04 | WARN | the other languages of a bundle lack keys of the default bundle | (cross-file check) | *_messages_*.properties |
 | I18N05 | FAIL | bundle suffixed with a country code (`_cz`, `_dk`, `_se`…) where Java expects a language code (`_cs`, `_da`, `_sv`): never loaded | file names | *_messages_*.properties |
+| I18N06 | FAIL | bundle line without `=`/`:` separator (`key>value`): read as a key with an empty value | line scan | *_messages*.properties |
 | I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
 
 **XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second
