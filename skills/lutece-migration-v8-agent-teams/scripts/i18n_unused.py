@@ -16,6 +16,8 @@ import re
 import subprocess
 import sys
 
+import bundles
+
 RUNTIME = ("model.entity.", "validation.", "site_property.", "plugin.", "adminFeature.")
 BUNDLE = re.compile(r"_messages(_\w+)?\.properties$")
 SKIP_DIRS = ("target/", "e2e/", ".migration/", "node_modules/")
@@ -65,10 +67,8 @@ def used_elsewhere(refs, full, own):
 
 def keys_of(bundle):
     """(line, key) of each entry of a bundle."""
-    for n, line in enumerate(open(bundle, encoding="latin-1"), 1):
-        s = line.strip()
-        if "=" in s and not s.startswith(("#", "!")):
-            yield n, s.split("=", 1)[0].strip()
+    for n, key, _ in bundles.entries(bundle):
+        yield n, key
 
 
 def unused(root, refs):
