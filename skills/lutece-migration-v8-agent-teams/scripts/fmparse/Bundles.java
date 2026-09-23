@@ -18,11 +18,14 @@ class Bundles
 
     final boolean fromAssembly;
 
+    private final java.util.Set<String> fromSources = new java.util.HashSet<>( );
+
     Bundles( Path classes, Path lib, Path... sources )
     {
         fromAssembly = classes != null && Files.isDirectory( classes );
-        index( classes );
         for ( Path source : sources ) index( source );
+        fromSources.addAll( byName.keySet( ) );
+        index( classes );
         if ( lib != null && Files.isDirectory( lib ) )
         {
             try ( Stream<Path> jars = Files.list( lib ) )
@@ -45,7 +48,8 @@ class Bundles
             {
                 Properties props = new Properties( );
                 try ( var in = Files.newInputStream( f ) ) { props.load( in ); }
-                byName.merge( name( root.relativize( f ).toString( ) ), props, Bundles::keepFirst );
+                String bundle = name( root.relativize( f ).toString( ) );
+                if ( !fromSources.contains( bundle ) ) byName.merge( bundle, props, Bundles::keepFirst );
             }
         }
         catch ( Exception e )
@@ -62,7 +66,8 @@ class Bundles
             {
                 Properties props = new Properties( );
                 try ( var in = file.getInputStream( entry ) ) { props.load( in ); }
-                byName.merge( name( entry.getName( ) ), props, Bundles::keepFirst );
+                String bundle = name( entry.getName( ) );
+                if ( !fromSources.contains( bundle ) ) byName.merge( bundle, props, Bundles::keepFirst );
             }
         }
         catch ( Exception e )
