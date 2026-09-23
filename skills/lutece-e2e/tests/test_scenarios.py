@@ -30,7 +30,8 @@ Step vocabulary (one key per step):
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
                                    {subject: text} restricts to a subject, {contains: text} to a text of the message,
                                    {max: n} bounds the count, {absent: true} proves no such mail was sent; state
-                                   that lives in the mail queue
+                                   that lives in the mail queue. {capture: var, pattern: regex} stores the first
+                                   group of the regex in the latest such message (a link the scenario then follows)
   http: {url: path, accept: type, method: GET, expect_status: n, content_type: text, contains: text|[text], not_contains: ...,
          (an http call proves an endpoint, not an admin screen or action: those are proven through the browser)
          {raw: true} sends the path exactly as written (no %2e%2e or ../ normalisation), for traversal tests
@@ -474,6 +475,10 @@ def run_step(page, step, vars_, record):
                 n, arg["to"], arg.get("subject"), arg.get("contains"), arg.get("min", 1))
             if arg.get("max") is not None:
                 assert n <= int(arg["max"]), "mail: %d message(s) to %s, expected at most %s" % (n, arg["to"], arg["max"])
+            if arg.get("capture"):
+                value = lutece.mail_capture(arg["to"], arg["pattern"], arg.get("subject"))
+                assert value is not None, "mail: no match of %r in the latest message to %s" % (arg["pattern"], arg["to"])
+                vars_[arg["capture"]] = value
     elif key == "fill_form":
         form = arg if isinstance(arg, str) else arg["form"]
         filled = lutece.fill_form(page, form, arg.get("values") if isinstance(arg, dict) else None, seed=vars_["rand"])

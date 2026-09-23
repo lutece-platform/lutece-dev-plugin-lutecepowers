@@ -747,6 +747,33 @@ def mail_count(to, subject=None, wait_s=15, contains=None):
         time.sleep(1)
 
 
+def mail_capture(to, pattern, subject=None, wait_s=15):
+    """First group of `pattern` in the latest message of the Mailpit sink addressed to `to` (optionally with `subject`),
+    searched in its HTML then its text with HTML entities decoded: the link or the code a mail carries, which the
+    scenario then follows. None when no message or no match."""
+    import html as html_lib
+    import urllib.request
+    api = os.environ.get("E2E_MAIL_API", "http://localhost:18025")
+    q = 'to:"%s"' % to + (' subject:"%s"' % subject if subject else "")
+    deadline = time.time() + wait_s
+    while True:
+        try:
+            with urllib.request.urlopen(api + "/api/v1/search?" + urllib.parse.urlencode({"query": q}), timeout=5) as r:
+                found = json.loads(r.read().decode()).get("messages", [])
+            if found:
+                with urllib.request.urlopen(api + "/api/v1/message/" + found[0]["ID"], timeout=5) as r:
+                    msg = json.loads(r.read().decode())
+                for body in (msg.get("HTML") or "", msg.get("Text") or ""):
+                    m = re.search(pattern, html_lib.unescape(body))
+                    if m:
+                        return m.group(1) if m.groups() else m.group(0)
+        except Exception:  # noqa: BLE001
+            pass
+        if time.time() > deadline:
+            return None
+        time.sleep(1)
+
+
 def _fake_haystack(raw):
     """The log line plus its payload decoded, so a fragment matches the JSON the artefact really sent.
 
