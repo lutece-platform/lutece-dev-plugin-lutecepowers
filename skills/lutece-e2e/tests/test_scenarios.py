@@ -74,6 +74,8 @@ Step vocabulary (one key per step):
                                    step fails when the login form is still there afterwards
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
+  drag: {from: <selector>, to: <selector>}   press the mouse on the first match of `from`, move over `to`, release:
+                                   a selection made by dragging (several calendar slots at once)
 File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
 scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
 fragments, and the mechanical oracle rule applies to the expanded steps.
@@ -288,6 +290,10 @@ def run_step(page, step, vars_, record):
         match = [v for v, t in options if (t == wanted if arg.get("label") else wanted in t or wanted in v)]
         assert match, "select %s: no option %s %r (options: %s)" % (arg["selector"], "labelled" if arg.get("label") else "containing", wanted, ", ".join(t for _, t in options)[:200])
         loc.select_option(match[0])
+    elif key == "drag":
+        src, dst = page.locator(arg["from"]).first, page.locator(arg["to"]).first
+        assert src.count() and dst.count(), "drag: nothing matches %s or %s on %s" % (arg["from"], arg["to"], lutece.normalize(page.url))
+        src.drag_to(dst)
     elif key == "type":
         for sel, val in arg.items():
             loc = page.locator(sel).first
