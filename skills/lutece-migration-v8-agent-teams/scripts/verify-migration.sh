@@ -886,19 +886,31 @@ if [ "$COUNT" -eq 0 ]; then emit "I18N06" "PASS" "Every bundle line is key=value
 else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value" "$COUNT" "$I18N06_MATCHES"; fi
 echo ""
 
-# WB06: an <admin-feature> without <feature-group>. Reinstalling the plugin from the Plugins screen rebuilds its
-# rights from the descriptor (Plugin.install -> registerRights), and a feature without a group lands outside every
-# menu group (id_feature_group NULL), whatever the install SQL said.
+# WB06: an <admin-feature> whose <feature-group> is not the group its install SQL gives it. Reinstalling the plugin from
+# the Plugins screen rebuilds its rights from the descriptor (Plugin.install -> registerRights), so the feature moves
+# (tagcloud: CONTENT -> NULL, then shown in the last menu group). A NULL group in both is consistent (plugin-forms).
 WB06_MATCHES=""
 if [ -d "webapp/WEB-INF/plugins" ]; then
     WB06_MATCHES=$(python3 - <<'PY'
 import glob, re
+sql = " ".join(open(f, encoding="utf-8", errors="replace").read() for f in glob.glob("src/sql/**/*.sql", recursive=True) if "/upgrade/" not in f)
+def sql_group(fid):
+    for ins in re.finditer(r"INSERT INTO core_admin_right\s*\(([^)]*)\)\s*VALUES\s*\((.*?)\)\s*;", sql, re.S | re.I):
+        vals = [v.strip().strip("'") for v in re.split(r",(?=(?:[^']*'[^']*')*[^']*$)", ins.group(2))]
+        cols = [c.strip().lower() for c in ins.group(1).split(",")]
+        if vals and vals[0] == fid and "id_feature_group" in cols and len(vals) == len(cols):
+            g = vals[cols.index("id_feature_group")]
+            return None if g.upper() == "NULL" else g
+    return None
 for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
     text = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r"<admin-feature>(.*?)</admin-feature>", text, re.S):
-        if not re.search(r"<feature-group>\s*\S", m.group(1)):
-            fid = re.search(r"<feature-id>\s*([^<\s]+)", m.group(1))
-            print("%s: admin-feature %s has no <feature-group>" % (f, fid.group(1) if fid else "?"))
+        fid = re.search(r"<feature-id>\s*([^<\s]+)", m.group(1))
+        fid = fid.group(1) if fid else "?"
+        xml = re.search(r"<feature-group>\s*([^<\s]+)", m.group(1))
+        want = sql_group(fid)
+        if want and (not xml or xml.group(1) != want):
+            print("%s: admin-feature %s: the install SQL puts it in %s, the descriptor says %s: a reinstall rebuilds it from the descriptor" % (f, fid, want, xml.group(1) if xml else "nothing"))
 PY
 ) || WB06_MATCHES=""
 fi
@@ -917,7 +929,7 @@ PY
 fi
 COUNT=0; [ -n "$WB06_MATCHES" ] && COUNT=$(echo "$WB06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB06" "PASS" "Every admin feature declares its menu group" 0
-else emit "WB06" "FAIL" "admin-feature without feature-group: a reinstall moves it out of every menu group" "$COUNT" "$WB06_MATCHES"; fi
+else emit "WB06" "FAIL" "admin-feature whose descriptor group differs from its install SQL: a reinstall moves it" "$COUNT" "$WB06_MATCHES"; fi
 COUNT=0; [ -n "$WB07_MATCHES" ] && COUNT=$(echo "$WB07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB07" "PASS" "Admin feature icons survive a reinstall" 0
 else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url> (core inconsistency with the DTD, reported upstream)" "$COUNT" "$WB07_MATCHES"; fi
