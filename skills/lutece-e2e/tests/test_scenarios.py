@@ -29,6 +29,7 @@ Step vocabulary (one key per step):
                                    {subject: text} restricts to a subject; state that lives in the mail queue
   http: {url: path, accept: type, method: GET, expect_status: n, contains: text|[text], not_contains: ...,
          (an http call proves an endpoint, not an admin screen or action: those are proven through the browser)
+         {raw: true} sends the path exactly as written (no %2e%2e or ../ normalisation), for traversal tests
          poll: seconds, multipart: {field: value|path}, capture: var,
          sign: {elements: [...], private_key: ...}}
                                    `capture` stores the answer's body in a variable, which chains two REST calls.
@@ -59,6 +60,8 @@ Step vocabulary (one key per step):
   set: {var: value}                define variables; {{rand}} is a per-scenario random token
   shot: <name>                     screenshot
   upload: {selector: ..., file: ...}   set a file input (path relative to e2e/)
+  select: {selector: ..., label: text | option_contains: text}   pick an option by its label, or the first whose label
+                                   or value contains the text (fill takes the option value)
   download: <form selector>        submit a form that answers with a file; records its name and size
   login: {user: ..., password: ...}    log out then sign in as another admin (use with isolated: true)
   login_fo: {user: ..., password: ..., provider: mylutece-database}
@@ -239,6 +242,14 @@ def run_step(page, step, vars_, record):
         _probe_guard(page, arg, resp)
     elif key == "click":
         _click(page, arg)
+    elif key == "select":
+        loc = page.locator(arg["selector"]).first
+        assert loc.count(), "select: nothing matches %s on %s" % (arg["selector"], lutece.normalize(page.url))
+        wanted = arg.get("label") or arg.get("option_contains")
+        options = loc.evaluate("e => [...e.options].map(o => [o.value, o.textContent.trim()])")
+        match = [v for v, t in options if (t == wanted if arg.get("label") else wanted in t or wanted in v)]
+        assert match, "select %s: no option %s %r (options: %s)" % (arg["selector"], "labelled" if arg.get("label") else "containing", wanted, ", ".join(t for _, t in options)[:200])
+        loc.select_option(match[0])
     elif key == "fill":
         for sel, val in arg.items():
             loc = page.locator(sel).first
@@ -307,7 +318,26 @@ def run_step(page, step, vars_, record):
             fetch.pop("data", None)
         if arg.get("follow") is False:
             fetch["max_redirects"] = 0
+        def raw_call():
+            """The request sent byte for byte, path unnormalised (%2e%2e stays as written), with the session cookies."""
+            import http.client
+            target = urllib.parse.urlsplit(lutece.url(arg["url"]))
+            conn = http.client.HTTPConnection(target.hostname, target.port or 80, timeout=30)
+            cookie = "; ".join("%s=%s" % (c["name"], c["value"]) for c in page.context.cookies(lutece.url("")))
+            conn.putrequest(method, lutece.url(arg["url"])[len("%s://%s" % (target.scheme, target.netloc)):], skip_accept_encoding=True)
+            for name, value in dict(headers, Cookie=cookie).items():
+                conn.putheader(name, value)
+            data = arg.get("body")
+            if data:
+                conn.putheader("Content-Length", str(len(data.encode("utf-8"))))
+            conn.endheaders(data.encode("utf-8") if data else None)
+            resp = conn.getresponse()
+            body = resp.read().decode("utf-8", "replace")
+            return body, resp.status, resp.getheader("Location", "")
+
         def call():
+            if arg.get("raw"):
+                return raw_call()
             body = status = location = None
             for _ in range(times):
                 if arg.get("fresh"):
