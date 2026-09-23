@@ -802,7 +802,7 @@ if [ -d "src/sql" ]; then
 fi
 COUNT=0; [ -n "$SQ04_MATCHES" ] && COUNT=$(echo "$SQ04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ04" "PASS" "INSERTs into core tables name their columns" 0
-else emit "SQ04" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column" "$COUNT" "$SQ04_MATCHES"; fi
+else emit "SQ04" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column. In a script already released with a liquibase header, keep the old checksums valid: liquibase-checksum.sh <file> <release tag>, then -- validCheckSum: lines" "$COUNT" "$SQ04_MATCHES"; fi
 echo ""
 
 # I18N03: a key the default bundle carries and _fr does not, or the reverse (the two languages the core ships): the
