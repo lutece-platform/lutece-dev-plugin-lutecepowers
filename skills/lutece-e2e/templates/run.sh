@@ -221,7 +221,7 @@ cmd_test() {
   pyrun -m pytest tests/test_forms.py -n "$E2E_WORKERS" -q --tb=line --suite forms --junitxml=artifacts/junit-forms.xml "$@" || rc=$?
   runner tools/metrics.py snapshot after
   invariants || rc=4
-  skipped_suites || { [ "$rc" -eq 0 ] && rc=8; }
+  skipped_suites || { [ "$rc" -ne 0 ] || rc=8; }
   return $rc
 }
 
@@ -243,7 +243,7 @@ cmd_external() {
   ext -m pytest tests/test_fo.py -n "$E2E_WORKERS" -q --tb=line --suite fo --junitxml=artifacts/junit-fo.xml || rc=$?
   ext -m pytest tests/test_scenarios.py -n "$E2E_WORKERS" -q --tb=line --suite scenarios -m "not serial" --junitxml=artifacts/junit-scenarios.xml || rc=$?
   ext -m pytest tests/test_scenarios.py -q --tb=line --suite scenarios -m serial --junitxml=artifacts/junit-scenarios-serial.xml || rc=$?
-  skipped_suites || { [ "$rc" -eq 0 ] && rc=8; }
+  skipped_suites || { [ "$rc" -ne 0 ] || rc=8; }
   python3 tools/coverage.py | head -3; python3 tools/report.py; echo; cat artifacts/summary.md
   step "external done in $((SECONDS - START))s, tests rc=$rc"
   exit $rc
@@ -531,17 +531,17 @@ case "${1:-all}" in
     rc=0; cmd_test || rc=$?
     cmd_perf
     cmd_report
-    check_server_errors || { [ "$rc" -eq 0 ] && rc=5; }
-    security_overrides || { [ "$rc" -eq 0 ] && rc=4; }
+    check_server_errors || { [ "$rc" -ne 0 ] || rc=5; }
+    security_overrides || { [ "$rc" -ne 0 ] || rc=4; }
     # The bench is not delivered until a human-or-agent eye has judged the rendering of every screen family:
     # the assertions prove behaviour, not that the screens follow the design system and hold together visually.
     # A green run that never played the artefact's own actions proves nothing about them: every action of the target
     # is proven by a scenario, tested red, or excluded with a written reason, before the bench is delivered.
     if [ "${COVERAGE:-}" != skip ]; then
-      python3 tools/coverage.py --gate > /dev/null || { python3 tools/coverage.py --gate | sed -n '/COVERAGE GATE/,$p'; [ "$rc" -eq 0 ] && rc=9; }
+      python3 tools/coverage.py --gate > /dev/null || { python3 tools/coverage.py --gate | sed -n '/COVERAGE GATE/,$p'; [ "$rc" -ne 0 ] || rc=9; }
     fi
     if [ "${REVIEW:-}" != skip ]; then
-      python3 tools/review.py check || { [ "$rc" -eq 0 ] && rc=7; }
+      python3 tools/review.py check || { [ "$rc" -ne 0 ] || rc=7; }
     fi
     [ "${KEEP:-}" = 1 ] || cmd_down
     step "done in $((SECONDS - START))s, tests rc=$rc"
