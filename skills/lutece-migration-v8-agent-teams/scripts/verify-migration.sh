@@ -778,7 +778,7 @@ if [ -d "src/java" ]; then
 fi
 COUNT=0; [ -n "$I18N01_MATCHES" ] && COUNT=$(echo "$I18N01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N01" "PASS" "No i18n key repeating the plugin prefix" 0
-else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the line above): it never resolves" "$COUNT" "$I18N01_MATCHES"; fi
+else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the line above): it never resolves (fix-i18n-bundles.py)" "$COUNT" "$I18N01_MATCHES"; fi
 echo ""
 
 # I18N02: a key a template or a message constant asks for, that no bundle of this plugin declares. Lutece then
@@ -793,7 +793,7 @@ if [ -d "src/java" ]; then
     PLUGIN=$(basename "${BUNDLE:-}" 2>/dev/null | sed 's/_messages.properties//')
     if [ -n "$PLUGIN" ] && [ -n "$BUNDLE" ]; then
         DECLARED=$(mktemp); ASKED=$(mktemp)
-        find src/java -name "*_messages*.properties" -exec env LC_ALL=C sed -nE 's/^([A-Za-z0-9_.-]+) *=.*/\1/p' {} \; | LC_ALL=C sort -u > "$DECLARED"
+        SCRIPT_DIR="$SCRIPT_DIR" python3 -c 'import glob, os, sys; sys.path.insert(0, os.environ["SCRIPT_DIR"]); from bundles import keys; print("\n".join(k for f in glob.glob("src/java/**/*_messages*.properties", recursive=True) for k in keys(f)))' | LC_ALL=C sort -u > "$DECLARED"
         grep -arhoE "#i18n\{$PLUGIN\.[A-Za-z0-9_.-]+\}" webapp src 2>/dev/null | sed -E "s/^#i18n\{$PLUGIN\.//; s/\}$//" >> "$ASKED"
         grep -arhoE "(MESSAGE|INFO|ERROR|WARNING|TITLE|PROPERTY_PAGE_TITLE)_[A-Z0-9_]+ *= *\"$PLUGIN\.[A-Za-z0-9_.-]+\"" src/java --include="*.java" 2>/dev/null \
             | grep -oE "\"$PLUGIN\.[A-Za-z0-9_.-]+\"" | tr -d '"' | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
@@ -826,15 +826,10 @@ echo ""
 # missing language falls back, a French user reads the English text, nothing logs it. I18N04: the other languages.
 I18N03_MATCHES=""
 if [ -d "src/java" ]; then
-    I18N03_MATCHES=$(python3 - <<'PY'
-import glob, os, re
-def keys(path):
-    out = set()
-    for line in open(path, encoding="latin-1"):
-        m = re.match(r"\s*([^#!\s=:][^=:\s]*)\s*[=:]", line)
-        if m:
-            out.add(m.group(1))
-    return out
+    I18N03_MATCHES=$(SCRIPT_DIR="$SCRIPT_DIR" python3 - <<'PY'
+import glob, os, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from bundles import keys
 for base in glob.glob("src/java/**/*_messages.properties", recursive=True):
     stem = base[:-len(".properties")]
     variants = [base] + sorted(glob.glob(stem + "_*.properties"))
@@ -849,10 +844,10 @@ for base in glob.glob("src/java/**/*_messages.properties", recursive=True):
             print("%s: %s missing (present in %s)" % (fr, k, os.path.basename(base)))
 PY
 ) || I18N03_MATCHES=""
-    I18N03_OTHERS=$(python3 - <<'PY'
-import glob, os, re
-def keys(path):
-    return {m.group(1) for line in open(path, encoding="latin-1") for m in [re.match(r"\s*([^#!\s=:][^=:\s]*)\s*[=:]", line)] if m}
+    I18N03_OTHERS=$(SCRIPT_DIR="$SCRIPT_DIR" python3 - <<'PY'
+import glob, os, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from bundles import keys
 for base in glob.glob("src/java/**/*_messages.properties", recursive=True):
     stem = base[:-len(".properties")]
     ref = keys(base)
@@ -871,6 +866,27 @@ else emit "I18N03" "FAIL" "i18n key in the default bundle and not in _fr, or the
 COUNT=0; [ -n "${I18N03_OTHERS:-}" ] && COUNT=$(echo "$I18N03_OTHERS" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N04" "PASS" "The other languages of the bundles carry every key" 0
 else emit "I18N04" "WARN" "Other languages (beyond the default bundle and _fr, the two the core ships) lack keys: they show the default text" "$COUNT" "$I18N03_OTHERS"; fi
+
+# I18N09: a translation key the default bundle does not declare (a translated key name, a key renamed or removed since):
+# nothing asks for it, it never shows. fix-i18n-bundles.py removes them.
+I18N09_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N09_MATCHES=$(SCRIPT_DIR="$SCRIPT_DIR" python3 - <<'PY'
+import glob, os, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from bundles import entries, keys
+for base in sorted(glob.glob("src/java/**/*_messages.properties", recursive=True)):
+    ref = keys(base)
+    for v in sorted(glob.glob(base[:-len(".properties")] + "_*.properties")):
+        for n, k, _ in entries(v):
+            if k not in ref:
+                print("%s:%d: %s" % (v, n, k[:80]))
+PY
+) || I18N09_MATCHES=""
+fi
+COUNT=0; [ -n "$I18N09_MATCHES" ] && COUNT=$(echo "$I18N09_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N09" "PASS" "Every translation key exists in the default bundle" 0
+else emit "I18N09" "WARN" "Translation key the default bundle does not declare: it never shows (fix-i18n-bundles.py)" "$COUNT" "$I18N09_MATCHES"; fi
 echo ""
 
 # I18N05: a bundle suffixed with a country code where Java expects a language code (_cz for Czech is _cs, _dk is _da,
@@ -891,7 +907,7 @@ if [ -d "src/java" ]; then
 fi
 COUNT=0; [ -n "$I18N05_MATCHES" ] && COUNT=$(echo "$I18N05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N05" "PASS" "Bundle suffixes are language codes" 0
-else emit "I18N05" "FAIL" "Bundle suffixed with a country code: Java never loads it" "$COUNT" "$I18N05_MATCHES"; fi
+else emit "I18N05" "FAIL" "Bundle suffixed with a country code: Java never loads it (fix-i18n-bundles.py)" "$COUNT" "$I18N05_MATCHES"; fi
 echo ""
 
 # I18N06: a bundle line with no = or : separator (key>value, a pasted sentence): Java reads the whole line as a key with
@@ -920,23 +936,22 @@ PY
 fi
 COUNT=0; [ -n "$I18N06_MATCHES" ] && COUNT=$(echo "$I18N06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N06" "PASS" "Every bundle line is key=value" 0
-else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value" "$COUNT" "$I18N06_MATCHES"; fi
+else emit "I18N06" "FAIL" "Bundle line without = or : separator: Java reads it as a key with an empty value (fix-i18n-bundles.py)" "$COUNT" "$I18N06_MATCHES"; fi
 
 # I18N07: French value with a common spelling error (Etes vous, sur de vouloir) or a Java class name left from a
 # generator (supprimer ce PollFormQuestion): the user reads it as is.
 I18N07_MATCHES=""
 if [ -d "src/java" ]; then
-    I18N07_MATCHES=$(python3 - <<'PY'
-import glob, re
+    I18N07_MATCHES=$(SCRIPT_DIR="$SCRIPT_DIR" python3 - <<'PY'
+import glob, os, re, sys
+sys.path.insert(0, os.environ["SCRIPT_DIR"])
+from bundles import entries
 BAD = re.compile(r"\b[EÉ]tes[ -]vous\b(?<!Êtes-vous)|\bsur de vouloir\b|\b(ce|cette|le|la|un|une)\s+[A-Z][a-z]+[A-Z]\w*")
 for f in sorted(glob.glob("src/java/**/*_messages_fr.properties", recursive=True)):
-    for n, line in enumerate(open(f, encoding="latin-1"), 1):
-        if "=" not in line or line.lstrip().startswith(("#", "!")):
-            continue
-        value = line.split("=", 1)[1].rstrip("\r\n")
+    for n, key, value in entries(f):
         value = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), value)
         if BAD.search(value):
-            print("%s:%d: %s" % (f, n, line.strip()[:100]))
+            print("%s:%d: %s=%s" % (f, n, key, value[:100]))
 PY
 ) || I18N07_MATCHES=""
 fi
@@ -1123,13 +1138,36 @@ if [ -d "webapp/jsp/admin" ] && [ -d "src/java" ]; then
         cls=$(printf '%s' "$bean" | sed -E 's/^(.)/\U\1/')
         src=$(grep -rlE "class $cls\b" src/java --include="*.java" 2>/dev/null | head -1)
         [ -n "$src" ] || continue
-        grep -qE 'extends +PortletJspBean|@Controller' "$src" && continue
+        legacy=1
+        for _ in 1 2 3 4 5; do
+            grep -qE 'extends +PortletJspBean\b|@Controller' "$src" && { legacy=0; break; }
+            parent=$(grep -oE 'class +[A-Za-z0-9_]+(<[^>]*>)? +extends +[A-Za-z0-9_]+' "$src" | head -1 | sed -E 's/.* extends +//')
+            [ -n "$parent" ] || break
+            src=$(grep -rlE "class +$parent\b" src/java --include="*.java" 2>/dev/null | head -1)
+            [ -n "$src" ] || break
+        done
+        [ "$legacy" = 0 ] && continue
         echo "$jsp: calls $bean, a JspBean without @Controller: port it to MVCAdminJspBean, one JSP with processController"
     done) || JS04_MATCHES=""
 fi
 COUNT=0; [ -n "$JS04_MATCHES" ] && COUNT=$(echo "$JS04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS04" "PASS" "Admin JSPs dispatch through a @Controller" 0
 else emit "JS04" "FAIL" "Legacy admin JSP on a non-MVC bean: no v8 dispatch, no automatic CSRF (rules/jsp-admin.md)" "$COUNT" "$JS04_MATCHES"; fi
+echo ""
+
+# JS07: a static script of the plugin that does not parse. The browser drops the whole file on the first syntax error
+# (an extra brace, a truncated line), so every function it declares is missing on the page and nothing fails in the
+# build. Checked with node --check when node is installed; FreeMarker templates under WEB-INF and minified vendor files
+# are left out.
+JS07_MATCHES=""
+if [ -d "webapp" ] && command -v node >/dev/null 2>&1; then
+    JS07_MATCHES=$(find webapp -path webapp/WEB-INF -prune -o -name "*.js" ! -name "*.min.js" ! -path "*/lib/*" ! -path "*/vendor/*" -print 2>/dev/null | while read -r js; do
+        out=$(node --check "$js" 2>&1) || echo "$js: $(printf '%s\n' "$out" | grep -m1 -E 'SyntaxError')"
+    done) || JS07_MATCHES=""
+fi
+COUNT=0; [ -n "$JS07_MATCHES" ] && COUNT=$(echo "$JS07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JS07" "PASS" "Static scripts parse" 0
+else emit "JS07" "FAIL" "Script that does not parse: the browser drops the whole file" "$COUNT" "$JS07_MATCHES"; fi
 echo ""
 
 # ─── Templates ───────────────────────────────────────────
@@ -1186,10 +1224,11 @@ COUNT=0; [ -n "$TM02_MATCHES" ] && COUNT=$(echo "$TM02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM02" "PASS" "No jQuery in the templates and scripts of the plugin" 0
 else emit "TM02" "$TM02_SEV" "jQuery -> vanilla JS (no library-theme-jquery: nothing loads it); an upload widget -> plugin-asynchronousupload" "$COUNT" "$TM02_MATCHES"; fi
 
-# TM03: Old upload macro names
+# TM03: a back-office template calling the front-office upload macros (addFileInput, addUploadedFilesBox): the admin
+# side of plugin-asynchronousupload names them addFileBOInput, addBOUploadedFilesBox. Skin templates keep the FO names.
 TM03_MATCHES=""
-if [ -d "webapp/WEB-INF/templates/" ]; then
-    TM03_MATCHES=$(grep -rn '<@addFileInput \|<@addUploadedFilesBox\|<@addFileInputAndfilesBox' webapp/WEB-INF/templates/ --include="*.html" 2>/dev/null \
+if [ -d "webapp/WEB-INF/templates/admin" ]; then
+    TM03_MATCHES=$(grep -rn '<@addFileInput \|<@addUploadedFilesBox\|<@addFileInputAndfilesBox' webapp/WEB-INF/templates/admin/ --include="*.html" 2>/dev/null \
         | grep -v 'addFileBOInput\|addBOUploadedFilesBox\|addFileBOInputAndfilesBox') || TM03_MATCHES=""
 fi
 COUNT=0; [ -n "$TM03_MATCHES" ] && COUNT=$(echo "$TM03_MATCHES" | wc -l)
@@ -1200,7 +1239,7 @@ else emit "TM03" "FAIL" "Old upload macros -> BO variants" "$COUNT" "$TM03_MATCH
 TM04_MATCHES=""
 if [ -d "webapp/WEB-INF/templates/" ]; then
     TM04_MATCHES=$(grep -rn 'errors?size\|errors?has_content\|infos?size\|infos?has_content\|warnings?size\|warnings?has_content' webapp/WEB-INF/templates/ --include="*.html" 2>/dev/null \
-        | grep -v '(errors!)\|(infos!)\|(warnings!)') || TM04_MATCHES=""
+        | grep -v '(errors!)\|(infos!)\|(warnings!)' | grep -vE '(errors|infos|warnings)\?\?[[:space:]]*&&[[:space:]]*\1\?') || TM04_MATCHES=""
 fi
 COUNT=0; [ -n "$TM04_MATCHES" ] && COUNT=$(echo "$TM04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM04" "PASS" "Null-safe errors/infos/warnings access" 0

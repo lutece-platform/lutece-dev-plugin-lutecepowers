@@ -26,9 +26,10 @@ NOT_A_FIELD = re.compile(r"""\btype\s*=\s*['"](hidden|submit|button|reset)['"]""
 FORM = re.compile(r"<(@tform|@cForm|form)\b([^>]*)>(.*?)</\1\s*>", re.S)
 INLINE_OPEN = re.compile(r"""\btype\s*=\s*['"](inline|flex)['"]|\bclass\s*=\s*['"][^'"]*\b(form-inline|d-flex|d-inline-flex)\b""")
 SIDE_BY_SIDE = 3
-ROW = re.compile(r"""<@(?:row|cRow)\b[^>]*>(.*?)</@(?:row|cRow)\s*>|<div\b[^>]*\bclass=['"][^'"]*\brow\b[^'"]*['"][^>]*>(.*?)</div>""", re.S)
+GRID_TOKEN = re.compile(r"<@(row|cRow|columns|cCol)\b(?:'[^']*'|\"[^\"]*\"|[^>'\"])*?(?<!/)>|</@(row|cRow|columns|cCol)\s*>")
+DIV_ROW = re.compile(r"""<div\b[^>]*\bclass=['"][^'"]*\brow\b[^'"]*['"][^>]*>(.*?)</div>""", re.S)
 CHOICE = re.compile(r"""<@(checkBox|radioButton|cCheckbox|cRadio|cFormCheck)\b[^>]*>|<input\b[^>]*\btype\s*=\s*['"](checkbox|radio)['"][^>]*>""", re.S)
-CELL = re.compile(r"""<@(?:columns|cCol)\b|<div\b[^>]*\bclass=['"][^'"]*\bcol(?:-[a-z0-9-]+)?\b""")
+DIV_CELL = re.compile(r"""<div\b[^>]*\bclass=['"][^'"]*\bcol(?:-[a-z0-9-]+)?\b""")
 OFFCANVAS = re.compile(r"""<@c?[Oo]ffcanvas\b[^>]*>|class=["'][^"']*\boffcanvas\b|data-bs-toggle=["']offcanvas""")
 FO_FORM = re.compile(r"<form\b|<@tform\b|\bfoValidation\s*=\s*false")
 
@@ -63,23 +64,73 @@ def fo_forms(text, skin):
     return [line_of(text, m.start()) for m in FO_FORM.finditer(text)]
 
 
+def macro_rows(body):
+    """(offset, direct column bodies) of every @row / @cRow of the body, nesting aware: a column of a row nested in a
+    column belongs to the inner row only."""
+    stack = []
+    for tok in GRID_TOKEN.finditer(body):
+        name = tok.group(1) or tok.group(2)
+        closing = tok.group(2) is not None
+        if not closing and name in ("row", "cRow"):
+            stack.append({"row": True, "start": tok.start(), "cells": []})
+        elif not closing:
+            stack.append({"row": False, "open": tok.end(), "width": column_width(tok.group(0))})
+        elif stack:
+            frame = stack.pop()
+            if frame["row"]:
+                yield frame["start"], frame["cells"]
+            elif stack and stack[-1]["row"]:
+                stack[-1]["cells"].append((frame["width"], body[frame["open"]:tok.start()]))
+
+
+def column_width(tag):
+    """Width in twelfths a column takes on a desktop screen (md, else lg, xl, xxl, sm, xs, cols), 0 when it has none
+    and shares the line with its siblings."""
+    for bp in ("md", "lg", "xl", "xxl", "sm", "xs", "cols"):
+        m = re.search(r"\b%s\s*=\s*['\"]?(\d+)" % bp, tag)
+        if m:
+            return int(m.group(1))
+    return 0
+
+
+def lines_of_cells(cells):
+    """The cells grouped by the visual line Bootstrap puts them on: a line holds twelve twelfths."""
+    lines, current, used = [], [], 0
+    for width, body in cells:
+        if current and width and used + width > 12:
+            lines.append(current)
+            current, used = [], 0
+        current.append(body)
+        used += width
+    if current:
+        lines.append(current)
+    return lines
+
+
 def grid_fields(body):
-    """True when a row of the form holds SIDE_BY_SIDE columns or more that each carry a text-like field."""
-    for row in ROW.finditer(body):
-        cells = CELL.split(row.group(1) or row.group(2) or "")[1:]
+    """Offset in the body of the first row holding SIDE_BY_SIDE columns or more that each carry a text-like field,
+    or None."""
+    hits = [start for start, cells in macro_rows(body)
+            if any(sum(1 for cell in line if visible_fields(CHOICE.sub("", cell)) >= 1) >= SIDE_BY_SIDE for line in lines_of_cells(cells))]
+    for row in DIV_ROW.finditer(body):
+        cells = DIV_CELL.split(row.group(1))[1:]
         if sum(1 for cell in cells if visible_fields(CHOICE.sub("", cell)) >= 1) >= SIDE_BY_SIDE:
-            return True
-    return False
+            hits.append(row.start())
+    return min(hits) if hits else None
 
 
 def inline_forms(text, skin):
-    """Lines of the forms that put SIDE_BY_SIDE visible fields or more on one line."""
+    """Lines of the forms that put SIDE_BY_SIDE visible fields or more on one line: the offending row of a grid, else
+    the form itself."""
     out = []
     for m in FORM.finditer(text):
         body = m.group(3)
         inline = (INLINE_OPEN.search(m.group(2)) and "flex-column" not in m.group(2)) or len(re.findall(r"""formStyle\s*=\s*['"]inline['"]""", body)) >= 2
-        if (inline and visible_fields(body) >= SIDE_BY_SIDE) or grid_fields(body):
+        row = grid_fields(body)
+        if inline and visible_fields(body) >= SIDE_BY_SIDE:
             out.append(line_of(text, m.start()))
+        elif row is not None:
+            out.append(line_of(text, m.start(3) + row))
     return out
 
 

@@ -225,6 +225,7 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | I18N04 | WARN | the other languages of a bundle lack keys of the default bundle | (cross-file check) | *_messages_*.properties |
 | I18N05 | FAIL | bundle suffixed with a country code (`_cz`, `_dk`, `_se`…) where Java expects a language code (`_cs`, `_da`, `_sv`): never loaded | file names | *_messages_*.properties |
 | I18N06 | FAIL | bundle line without `=`/`:` separator (`key>value`): read as a key with an empty value | line scan | *_messages*.properties |
+| I18N09 | WARN | translation key the default bundle does not declare (translated key name, key renamed or removed since): never shown | (cross-file check) | *_messages_*.properties |
 | I18N07 | WARN | French value with a common spelling error (`Etes vous`, `sur de vouloir`) or a leftover Java class name after an article (`un PollFormQuestion`) | decoded `_fr` values | `*_messages_fr.properties` |
 | I18N08 | WARN | Bundle key nothing uses (`i18n_unused.py`): no project file names `<prefix>.<key>` or `"<key>"`, no literal or `${` stem builds it, no reference repository names it; runtime families (`model.entity.*`, `validation.*`, `site_property.*`) are kept | default bundles vs every tracked text file | `*_messages.properties` |
 | I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
@@ -258,6 +259,7 @@ model. The check fails on a class extending `PortletJspBean` that never calls
 `<plugin>.message.x` written there resolves as `<plugin>.<plugin>.message.x` and renders
 as the raw key: nothing fails and nothing logs. The same grep catches a key appended without a
 trailing newline, glued to the value of the line above, which corrupts both entries.
+`scripts/fix-i18n-bundles.py <project>` repairs I18N01, I18N05, I18N06 and I18N09 in place (`--dry-run` to list).
 
 **I18N02** — a `#i18n{...}` of a template, or a `MESSAGE_*` / `INFO_*` / `ERROR_*` / `TITLE_*` constant, naming a
 key no bundle declares: Lutece prints the raw key on the screen and nothing fails at build time. WARN, because
@@ -281,6 +283,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | JS02 | FAIL | JSP scriptlets | `<%[^@-]` | *.jsp |
 | SQ04 | FAIL | `INSERT INTO core_x VALUES (…)` without a column list: fails as soon as the core adds a column (core_portlet.id_template in 8.0.2) | `INSERT +INTO +core_[a-z0-9_]+ +VALUES` | src/sql |
 | JS06 | FAIL | JSP streaming a file (download, export) that leaves template text, a newline between its directives included (`trimDirectiveWhitespaces` does not remove it on Liberty): "OutputStream already obtained" on every download | (cross-file check) | *.jsp |
+| JS07 | FAIL | static script of the plugin that does not parse (`node --check`): the browser drops the whole file | node --check | webapp/**/*.js (outside WEB-INF, not *.min.js) |
 | JS05 | FAIL | admin JSP writing its own HTML (`<form>`, `<table>`, `<div>`…): the screen belongs in a template rendered by a `@View` | markup tags in webapp/jsp/admin | *.jsp |
 | WB06 | FAIL | `<admin-feature>` whose `<feature-group>` differs from the group its install SQL gives: a reinstall rebuilds the right from the descriptor and moves it | (cross-file check) | plugins/*.xml |
 | WB07 | WARN | admin feature icon in `<feature-icon-url>`, which the core digester ignores (it reads `<icon-url>`): a reinstall loses the icon | (cross-file check) | plugins/*.xml |

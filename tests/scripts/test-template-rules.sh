@@ -18,6 +18,12 @@ printf "<@tform action='x'><@row><@columns md=4><@input name='a' /></@columns><@
 expect "inline-forms: three field columns in a row" 1 "$(rule inline-forms "$A")"
 printf "<@tform action='x'><@row><@columns md=6><@input name='a' /></@columns><@columns md=6><@input name='b' /></@columns></@row></@tform>\n" > "$A"
 expect "inline-forms: two field columns are fine" 0 "$(rule inline-forms "$A")"
+printf "<@tform action='x'><@row><@columns md=6><@input name='a' /></@columns><@columns md=6><@input name='b' /></@columns><@columns md=6><@input name='c' /></@columns><@columns md=6><@input name='d' /></@columns></@row></@tform>\n" > "$A"
+expect "inline-forms: four md=6 columns wrap two per line" 0 "$(rule inline-forms "$A")"
+printf "<@tform action='x'><@row><@columns md=6><@row><@columns md=6><@input name='a' /></@columns><@columns md=6><@input name='b' /></@columns></@row></@columns><@columns md=6><@input name='c' /></@columns></@row></@tform>\n" > "$A"
+expect "inline-forms: a nested row is not counted in the outer one" 0 "$(rule inline-forms "$A")"
+printf "<@tform action='x'><@row><@columns md=4><@input name='a' /></@columns><@columns md=4><@input name='b' /></@columns><@columns md=4><@input name='c' /></@columns></@row></@tform>\n" > "$A"
+expect "inline-forms: three md=4 field columns" 1 "$(rule inline-forms "$A")"
 printf "<@tform action='x'><@row><@columns md=4><@checkBox name='a' /></@columns><@columns md=4><@checkBox name='b' /></@columns><@columns md=4><@checkBox name='c' /></@columns></@row></@tform>\n" > "$A"
 expect "inline-forms: a grid of switches is fine" 0 "$(rule inline-forms "$A")"
 printf "<@tform action='x' class='d-flex flex-column'><@input name='a' /><@input name='b' /><@input name='c' /></@tform>\n" > "$A"
@@ -54,6 +60,14 @@ expect "TD57: generic id in a stylesheet loaded on every page" 1 "$(td TD57)"
 printf ".x-plugin #id_form { max-width: 32rem; }\n#x-chart-list { margin: 0; }\n" > "$W/webapp/themes/admin/x/css/x.css"
 expect "TD57: rules scoped to the plugin" 0 "$(td TD57)"
 
+printf "<@button type='submit' title='#i18n{portal.util.labelValidate}' />\n<@aButton href='x' title='#i18n{portal.util.labelBack}' color='secondary' />\n<@aButton href='x' title='#i18n{portal.util.labelCancel}' />\n<@button cancel=true title='#i18n{portal.util.labelCancel}' />\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
+expect "TD56 before fix-button-colours" 1 "$(td TD56)"
+python3 "$S/fix-button-colours.py" "$W" > /dev/null
+expect "TD51 secondary and cancel=true made light" 2 "$(grep -cE "color='secondary'|cancel=true title='#i18n\{portal.util.labelCancel\}' color='light'|labelBack\}' color='light'" "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html")"
+expect "TD56 after fix-button-colours" 0 "$(td TD56)"
+expect "submit button left as it is" 1 "$(grep -c "type='submit' title='#i18n{portal.util.labelValidate}' />" "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html")"
+expect "fix-button-colours is idempotent" 0 "$(python3 "$S/fix-button-colours.py" "$W" | wc -l)"
+
 vm() { (cd "$J" && bash "$S/verify-migration.sh" . 2>/dev/null | grep "\[$1\]" | grep -c "$2"); }
 printf 'class XDAO {\n    public void f( Plugin plugin )\n    {\n        DAOUtil daoUtil = new DAOUtil( SQL, plugin );\n        daoUtil.executeUpdate( );\n    }\n}\n' > "$J/src/java/x/business/XDAO.java"
 expect "DA02: DAOUtil outside try-with-resources" 1 "$(vm DA02 FAIL)"
@@ -64,5 +78,19 @@ expect "I18N07: French spelling error" 1 "$(vm I18N07 WARN)"
 printf 'message.confirm=\\u00cates-vous s\\u00fbr de vouloir supprimer ce graphique ?\n' > "$J/src/java/x/resources/x_messages_fr.properties"
 expect "I18N07: correct French" 1 "$(vm I18N07 PASS)"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, DA02, I18N07"
+mkdir -p "$J/webapp/jsp/admin/plugins/x" "$J/src/java/x/web"
+printf '${ xPortletJspBean.init( pageContext.request, "R" ) }\n' > "$J/webapp/jsp/admin/plugins/x/CreatePortletX.jsp"
+printf 'public abstract class AbstractXPortletJspBean extends PortletJspBean\n{\n}\n' > "$J/src/java/x/web/AbstractXPortletJspBean.java"
+printf 'public class XPortletJspBean extends AbstractXPortletJspBean\n{\n}\n' > "$J/src/java/x/web/XPortletJspBean.java"
+expect "JS04: portlet bean through a local base class" 1 "$(vm JS04 PASS)"
+printf 'public abstract class AbstractXPortletJspBean extends AdminFeaturesPageJspBean\n{\n}\n' > "$J/src/java/x/web/AbstractXPortletJspBean.java"
+expect "JS04: legacy bean through a local base class" 1 "$(vm JS04 FAIL)"
+
+mkdir -p "$J/webapp/js/plugins/x"
+printf 'function a(v) {\n\tif (v) {\n\t\treturn 1;\n\t} else {\t{\n\t\treturn 2;\n\t}\n}\n' > "$J/webapp/js/plugins/x/x.js"
+expect "JS07: script with an extra brace" 1 "$(vm JS07 FAIL)"
+printf 'function a(v) {\n\treturn v ? 1 : 2;\n}\n' > "$J/webapp/js/plugins/x/x.js"
+expect "JS07: script that parses" 1 "$(vm JS07 PASS)"
+
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, DA02, I18N07, JS04, JS07, fix-button-colours"
 exit $fail
