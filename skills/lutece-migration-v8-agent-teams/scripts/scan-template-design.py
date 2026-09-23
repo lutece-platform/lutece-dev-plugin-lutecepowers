@@ -60,6 +60,8 @@ Both sides
              @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
   TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
   TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
+  TD53 INFO  third-party bundle shipped under webapp/ (a .min.js, a *-bundle.js, or a .js over 100 KB), with the version
+             its header gives: nothing updates it, compare it with the latest upstream release
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
@@ -512,6 +514,21 @@ def vendored_libraries(root):
     return sorted(out)
 
 
+def vendored_bundles(root):
+    """(path, version) of the third-party script bundles shipped under webapp/, outside the templates."""
+    out = []
+    for dirpath, _, files in os.walk(os.path.join(root, "webapp")):
+        if "/WEB-INF/" in dirpath + "/":
+            continue
+        for name in files:
+            path = os.path.join(dirpath, name)
+            if name.endswith(".js") and (name.endswith(".min.js") or "-bundle" in name or os.path.getsize(path) > 100000):
+                head = open(path, encoding="utf-8", errors="replace").read(800)
+                version = re.search(r"\bv?(\d+\.\d+\.\d+(?:[-.][A-Za-z0-9]+)?)\b", head)
+                out.append((os.path.relpath(path, root), version.group(1) if version else "unknown"))
+    return sorted(out)
+
+
 def check_admin(text, findings, kind, opened_in_iframe, know):
     """Back-office rules on a screen template (not an e-mail body)."""
     for offset, body in blocks(text, "table"):
@@ -795,6 +812,8 @@ def main():
     for files, scope in ((admin_files, "admin"), (skin_files, "skin"), (js_files, "js"), (sql_files, "sql")):
         for rel in files:
             entries.append(scan_file(root, rel, scope, iframe_targets, know, jquery_declared))
+    for rel, version in vendored_bundles(root):
+        entries.append({"path": rel, "kind": "vendored", "findings": [{"code": "TD53", "severity": "INFO", "line": 1, "message": "third-party bundle shipped by the project, version %s: nothing updates it, compare with the latest upstream release and say which you checked" % version}]})
     for code, rel in vendored_libraries(root):
         message = "upload widget library shipped by the project: " + UPLOAD_ADVICE + "; delete it once the screen uses the component" if code == "TD45" else "jQuery, or a jQuery plugin, shipped by the project: nothing updates this copy (jQuery before 3.5 carries known XSS flaws); port its callers to vanilla JS and delete it"
         entries.append({"path": rel, "kind": "vendored", "findings": [{"code": code, "severity": "WARN", "line": 1, "message": message}]})
