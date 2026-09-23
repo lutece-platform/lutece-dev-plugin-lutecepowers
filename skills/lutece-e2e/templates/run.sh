@@ -18,7 +18,7 @@
 #   ./run.sh py <script> [args]  a Python script in the test runner, with the bench's own environment (a hand-made
 #                        `docker compose run` with another environment recreates the running app and db)
 #
-# Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n, RUNNER=local (host venv instead of the container),
+# Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n (default: from the free cores), RUNNER=local (host venv instead of the container),
 # KEEP=1 (do not stop the stack after a full run). Everything else lives in e2e.conf.
 # Exit codes: 1 stack, 2 usage, 3 the bench's own oracle fails, 4 bench invariant broken, 5 unexpected server
 # errors, 6 smoke test, 7 visual review missing, 8 a suite with something to prove was entirely skipped,
@@ -36,8 +36,7 @@ set -a; . ./e2e.conf; set +a
 # command (E2E_MVN7, gen-site7.sh) unless the bench set one.
 if [ "${E2E_MVN_OFFLINE:-0}" = 1 ]; then export MVN="${MVN:-mvn} -o"; export E2E_MVN7="${E2E_MVN7:-mvn}"; fi
 eval "$_e2e_env"
-# Browsers per suite: the cores left to this bench once the other benches running on the machine have theirs,
-# at most 4. A fixed 4 per bench put 36 Chromium on 12 cores with nine benches up, and every timeout became a red.
+# Browsers per suite: half the cores left to this bench by the other benches running on the machine, 1 to 4.
 auto_workers() {
   local cores others
   cores=$(nproc 2>/dev/null || echo 4)
@@ -48,8 +47,7 @@ auto_workers() {
   [ "$n" -lt 1 ] && n=1
   echo "$n"
 }
-# E2E_JFR=1 records the application with the flight recorder (hot methods in the report). Off by default: the
-# profiling costs CPU for the whole run and its views take a minute to compute.
+# E2E_JFR=1 records the application with the flight recorder (hot methods in the report).
 [ "${E2E_JFR:-}" = 1 ] && export E2E_JVM_ARGS="${E2E_JVM_ARGS:-} -XX:StartFlightRecording=filename=/logs/lutece.jfr,dumponexit=true,settings=profile -XX:FlightRecorderOptions=stackdepth=128"
 export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-small} E2E_WORKERS=${E2E_WORKERS:-$(auto_workers)}
 APP="${E2E_NAME}-lutece-1"
@@ -73,10 +71,8 @@ health() { docker inspect -f '{{.State.Health.Status}}' "$APP" 2>/dev/null || ec
 # pytest returns 5 when a suite collects no tests (a plugin with no front office, no forms): not a failure.
 pyrun() { runner "$@"; local c=$?; [ "$c" = 5 ] && return 0 || return $c; }
 
-# One test runner container per run, reused by every python call through docker exec: a `compose run` per call
-# (a dozen per run) paid a container creation and a Python start each time. It shares the application's network
-# namespace, so it is recreated when the application container was recreated or restarted, or when a variable
-# baked into its environment changed.
+# One test runner container, reused by every python call through docker exec. It shares the application's network
+# namespace: recreated when the application restarted or a variable of its environment changed.
 RUNNER_C="${E2E_NAME}-runner"
 runner_up() {
   local key; key="$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' "${E2E_NAME}-${E2E_APP:-lutece}-1" 2>/dev/null) ${E2E_SCOPE:-} ${E2E_VERSION:-} ${E2E_APP:-} ${E2E_APP_PORT:-} ${E2E_CONTEXT:-}"
@@ -317,7 +313,7 @@ needs_build() {
   # e2e.conf, the harness and gen-site.sh decide what goes INTO the war (plugins assembled, plugins enabled, liquibase
   # version); the other tools (inventory, review, report) do not, and a toolkit refresh must not rebuild for them.
   # Without them here, editing the conf changes nothing, the old war keeps running and the symptom is a screen
-  # answering "this page does not exist" with no explanation. Cost a full afternoon once.
+  # answering "this page does not exist" with no explanation.
   [ -n "$(find e2e.conf harness tools/gen-site.sh tools/liquibase-visibility.sh -type f -newer harness/site/target/lutece.war 2>/dev/null | grep -v '^harness/site/target/' | head -1)" ] && return 0
   # A Lutece artefact rebuilt in the local repository since this war was assembled — a dependency fixed locally,
   # a sibling plugin reinstalled — is not in the war yet. Without this the bench silently keeps testing the old
@@ -433,7 +429,7 @@ cmd_deploy() {
     echo "deploy: $(basename "$jar") replaced, application restarted"
   fi
   mkdir -p artifacts; touch "$stamp"
-  echo "deploy: webapp copied; replay with ./run.sh test -k <scenario>"
+  echo "deploy: webapp copied; replay with ./run.sh test tests/test_scenarios.py -k <id>"
 }
 snapshot() {
   mkdir -p "artifacts/$1"

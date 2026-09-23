@@ -103,7 +103,7 @@ no guesswork.
 git worktree add --detach <scratch>/before HEAD      # the state before, as a second checkout
 bash <skill>/scripts/init-e2e.sh <scratch>/before --target core --name <name>-avant
 sed -i 's/^E2E_PORT=.*/E2E_PORT=22180/;s/^E2E_DB_PORT=.*/E2E_DB_PORT=17406/;s/^E2E_MAIL_PORT=.*/E2E_MAIL_PORT=22125/' <scratch>/before/e2e/e2e.conf
-cd <scratch>/before/e2e && ./run.sh build && ./run.sh up && ./run.sh inventory && ./run.sh discover && ./run.sh test tests/test_screens.py
+cd <scratch>/before/e2e && ./run.sh build && ./run.sh up && ./run.sh inventory && ./run.sh discover && ./run.sh test
 ```
 
 Then compare the two `artifacts/junit-*.xml`, **on the tests present in both runs only**: a crawl follows the

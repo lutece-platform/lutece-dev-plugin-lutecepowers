@@ -409,21 +409,15 @@ References:
 
 ### S13. jQuery → Vanilla JS ES6 conversion
 
-jQuery code **without external plugin dependencies** should be converted to vanilla JavaScript ES6. This applies to `.js` files and inline `<script>` blocks in templates.
+Conversion table: `skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS.
 
-**Common conversions:**
-- `$(selector)` → `document.querySelector(selector)` / `document.querySelectorAll(selector)`
-- `$.ajax()` → `fetch()`
-- `$(document).ready()` → `document.addEventListener('DOMContentLoaded', ...)`
-- `$.each()` → `Array.from().forEach()` or `for...of`
-- `$(el).on('click', ...)` → `el.addEventListener('click', ...)`
-
-The v8 theme does not load jQuery (no `webapp/js/jquery` in the core; `page_frameset` loads it only when the project ships its own `commons_theme_jquery.html`). jQuery code that depends on jQuery plugins (DataTables, Select2, jQuery UI) is therefore broken at runtime unless the project ships jQuery itself: it needs a manual port or an explicit jQuery inclusion, never a silent PASS.
+The v8 theme loads jQuery only when the pom declares `library-theme-jquery`. Rules: `rules/template-back-office.md` § JavaScript.
 
 | Check | Severity |
 |-------|----------|
-| jQuery usage with no external plugin dependency | WARN: convert to vanilla JS ES6 |
-| jQuery usage required by jQuery plugin (DataTables, Select2, etc.) | WARN: port to a vanilla library or ship jQuery explicitly; jQuery is not loaded by the theme |
+| jQuery usage, pom without `library-theme-jquery` (TM02) | FAIL: port to vanilla JS ES6 |
+| a copy of jQuery or of a jQuery plugin shipped by the project (VL01) | FAIL: remove it; an upload widget goes to plugin-asynchronousupload |
+| jQuery usage, pom declares `library-theme-jquery` | WARN: name the widget with no v8 equivalent that justifies it, else port |
 | Already vanilla JS | PASS |
 | No JavaScript in project | N/A |
 
@@ -508,7 +502,7 @@ Output the report using this exact structure:
 | S10 | Pagination Modernization | PASS/WARN/N/A | 0 |
 | S11 | Template Message Patterns | PASS/FAIL/N/A | 0 |
 | S12 | ConfigProperty Usage | PASS/WARN | 0 |
-| S13 | jQuery → Vanilla JS | PASS/WARN/N/A | 0 |
+| S13 | jQuery → Vanilla JS | PASS/WARN/FAIL/N/A | 0 |
 | S14 | CSRF policy | PASS/WARN/FAIL | 0 |
 | | **Total semantic** | | **X** |
 

@@ -334,7 +334,7 @@ It keeps `@pageContainer > @pageColumn > @pageHeader` and a back link to the pag
 
 ```freemarker
 <@pageHeader title='#i18n{...modifyTitle}'>
-    <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp' buttonIcon='arrow-left' title='#i18n{portal.util.labelBack}' color='' />
+    <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp' buttonIcon='arrow-left' title='#i18n{portal.util.labelBack}' color='light' />
 </@pageHeader>
 ```
 

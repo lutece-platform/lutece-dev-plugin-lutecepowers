@@ -12,11 +12,11 @@ Un dossier `e2e/` autoportant, produit par un skill générique : environnement 
 | Runner | Image officielle `mcr.microsoft.com/playwright/python:v1.62.0-noble`, épinglée | Zéro dépendance sur l'agent Jenkins ; `RUNNER=local` pour itérer sur le poste. |
 | Environnement | **Docker Compose v2** (db, app, dbinit, tests, k6) | Une pile e2e est un stack complet monté une fois ; Testcontainers vise l'isolation par test (intégration Java), hors sujet ici. |
 | Serveur d'application | **Open Liberty 26.0.0.9 sur Temurin 21 (HotSpot)**, zip Maven Central | Les images ICR sont OpenJ9 uniquement ; OpenJ9 0.61 **plante** (assertion `VMAccess.cpp:133`) sous échantillonnage JFR et n'accepte pas `dumponexit`. HotSpot donne JFR complet, `jcmd JFR.dump` à chaud, `jfr view`. Différence JIT assumée : les goulots (SQL, N+1, verrous) sont les mêmes. |
-| Base | **MariaDB 11.8** + `performance_schema` + slow log | Digests natifs (top requêtes par temps cumulé, lignes lues, sans index), zéro outil externe. `pt-query-digest`/PMM écartés : une image de plus pour la même info. |
+| Base | **MariaDB 11.8** en mémoire (`tmpfs`) + `performance_schema` + slow log | Digests natifs (top requêtes par temps cumulé, lignes lues, sans index), zéro outil externe. `pt-query-digest`/PMM écartés : une image de plus pour la même info. |
 | Schéma | plugin-liquibase au premier boot, comme en production v8 | Générique pour tout plugin/site : chaque jar apporte ses SQL ; pas de scripts à collecter à la main. |
 | Volume synthétique | SQL pur, moteur **SEQUENCE** de MariaDB (`seq_1_to_N`) | 100 000 utilisateurs en quelques secondes côté serveur, idempotent, sans générateur externe (Datafaker, Misata… : dépendance et lenteur pour zéro gain sur des tables de référentiel). |
 | Timings serveur | **Access log Liberty** (`%D` µs par requête) + `/metrics` (mpMetrics 5.1 / monitor-1.0 : pool JDBC, servlets, GC) | Mesure côté serveur sans instrumentation applicative ; p50/p95 par chemin dérivés par script. |
-| Profil JVM | **JFR** continu (`settings=profile`) dumpé à chaud, résumé par `jfr view hot-methods / allocation-by-class / gc-pauses / contention-by-site` | Texte compact, lisible par un agent ; pas de JMC, pas de Grafana. |
+| Profil JVM | **JFR** à la demande (`E2E_JFR=1`, `settings=profile`), dumpé à chaud, résumé par `jfr view hot-methods / allocation-by-class / gc-pauses / contention-by-site` | Texte compact, lisible par un agent. Coupé par défaut : il coûte du CPU sur tout le run. |
 | Charge | **k6 1.5** (conteneur `grafana/k6`) sur les écrans d'entrée, seuils p95 / taux d'erreur | Binaire unique, seuils = code de sortie. Gatling écarté (JVM, rapport HTML lourd) : la charge n'est qu'une phase courte du bench. |
 | Empreinte d'écran | **Aria snapshot** (YAML de l'arbre d'accessibilité) + capture JPEG | Le diff structurel est textuel, stable entre machines, et coûte quelques lignes ; les pixels servent aux humains, pas aux assertions. |
 | Console navigateur | `console` (error/warning), `pageerror`, `requestfailed`, réponses ≥ 400 sur chaque page | « Console 100 % propre » est une assertion, pas une option. |
@@ -40,8 +40,8 @@ build      mvn install (cible) → site e2e (pom généré) → war → image ap
 up         compose up db+app → healthcheck → dbinit (post-init + seed)
 inventory  inventory.py (SQL rights, plugin.xml, JSP, @Controller/@View/@Action, templates) → EARS
 discover   crawl authentifié : liens GET depuis le menu et les entrées (jamais Do*/action=) → urls concrètes
-test       screens (parallèle) → scenarios → forms ; /metrics avant/après
-perf       k6 → jcmd JFR.dump → jfr view → access log → digests SQL → perf.json
+test       screens (parallèle) → scenarios → forms ; /metrics avant/après ; un seul conteneur runner (docker exec)
+perf       [k6] → [JFR] → access log → digests SQL → perf.json
 report     summary.md + report.html + results.json
 down       compose down -v
 ```
@@ -97,7 +97,7 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - `configure.sh` de l'image Liberty échoue (code 22) si `jvm.options` contient `-XX:StartFlightRecording` (populate_scc).
 - OpenJ9 : `dumponexit` invalide ; le dump se fait à l'arrêt de la JVM ; assertion VM sous échantillonnage → HotSpot.
 - Le `dataSource` Liberty est résolu **avant** l'expansion du war : le driver JDBC doit être extrait à la construction de l'image (`shared/resources/jdbc`), pas lu dans `apps/expanded`.
-- Bind mount `/logs` : créé root par Docker → `chmod 777` avant `up`, et l'app tourne avec l'uid hôte (`user:`) pour que JFR et access log soient lisibles.
+- Bind mount `/logs` : créé root par Docker → `chmod 777` avant `up`, et l'app tourne avec l'uid hôte (`user:`) pour que logs et access log soient lisibles.
 - `form.action` n'est pas une chaîne quand un champ s'appelle `action` : lire `getAttribute('action')`.
 - `plugins.dat.tpl` posé dans `webapp/` finit dans le war : garder les templates hors de l'arborescence copiée.
 - Le healthcheck sur `AdminLogin.jsp` passe avant la fin de l'init Lutece si Liquibase échoue : lire `messages.log`, pas seulement l'état `healthy`.
@@ -132,7 +132,6 @@ Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
 - `gen-site.sh` prenait `project.parent.version` pour le core : c'est la version du global-pom, pas du core. Résolu par `mvn dependency:list`.
 - Un bench de plugin scanne aussi la webapp éclatée du site : sans marquage `origin`, 80 rouges du core noyaient les 4 du plugin dans le rapport.
 - TinyMCE recopie le contenu de l'éditeur dans le textarea au submit : un `fill` DOM sur le textarea caché est écrasé. Le pas `fill` alimente aussi l'éditeur.
-- Le macro offcanvas du core importe `./themes/shared/modules/bootstrap/luteceBSOffCanvas.js` en relatif : sur une page sans `<base>` (fragment servi sous `jsp/admin/plugins/<p>/`), la requête part vers `jsp/admin/plugins/<p>/themes/...` → 500. Défaut du core, visible dans « sous-requêtes en échec ».
 - Les données d'exemple d'un plugin (`init_db_<p>_data_sample.sql`) sont consommées par le fuzzer dès le premier run : les scénarios ne s'y fient jamais, ils lisent `seed-<plugin>.sql`.
 - Sans puits SMTP, `MailService.sendMailHtml` lève `MailConnectException` (localhost:25) et le flux métier qui l'appelle avant d'écrire en base échoue : Mailpit dans la stack, adressé par variables d'environnement (MicroProfile Config lit `MAIL_SERVER` pour `mail.server`).
 - Un bench de plugin ne doit ouvrir que les écrans du plugin : `E2E_SCOPE=target` filtre découverte, suites et k6 sur l'inventaire `origin=target`.

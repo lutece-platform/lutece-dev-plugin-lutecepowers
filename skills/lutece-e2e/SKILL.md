@@ -72,8 +72,10 @@ full run.
 | `up` | starts the stack on an empty database, waits for health, seeds | to work step by step |
 | `inventory` | reads the sources: every screen, action, right and REST endpoint | to see what there is to cover |
 | `discover` | crawls the running site and completes the inventory | after `up` |
-| `test [args]` | the Playwright suites; takes pytest arguments, so one scenario at a time | while writing scenarios |
-| `perf` | server timings, SQL digests, JFR, k6 | after the suites |
+| `test` | every suite against the running stack | after `up` |
+| `test <pytest args>` | one pytest call, e.g. `test tests/test_scenarios.py -k <id>` (seconds) | while writing or fixing |
+| `deploy` | copies `webapp/` into the running site at once; rebuilds and swaps the jar, then restarts, when Java or resources changed | after each fix |
+| `perf` | server timings, SQL digests; `E2E_PERF=1` adds k6, `E2E_JFR=1` JFR hot methods | after the suites |
 | `report` | rebuilds `summary.md` and `report.html` from the artefacts already there | free, anytime |
 | `review` | the screen-by-screen visual gate | before handing over |
 | `logs`, `status`, `sh` | the application log, the containers, a shell inside the application | while diagnosing |
@@ -126,9 +128,14 @@ three random screenshots in `report.html` before calling a run green.
 ## PHASE 2 — First run, read the summary (5–8 minutes)
 
 ```bash
-KEEP=1 ./e2e/run.sh          # keep the stack up while iterating
+KEEP=1 ./e2e/run.sh                                  # full run, stack kept up
 cat e2e/artifacts/summary.md
+./e2e/run.sh deploy                                  # after each fix
+./e2e/run.sh test tests/test_scenarios.py -k <id>    # replay what the fix touches
+./e2e/run.sh                                         # once at the end, then the review
 ```
+
+Never a full run per fix. Stacks on one machine share its cores: run one bench at a time.
 
 Read in this order: the suite table, the failures, the console section, the server errors, the slowest
 paths. **A failing test is a finding, not a harness bug, until proven otherwise**: the core itself shows
@@ -232,7 +239,7 @@ judged on behaviour; performance is this phase's question, not every run's. The 
 it writes `artifacts/perf.json`, which the server-error gate reads.
 
 ```bash
-E2E_VOLUME=large ./e2e/run.sh down && E2E_VOLUME=large KEEP=1 ./e2e/run.sh
+E2E_VOLUME=large ./e2e/run.sh down && E2E_VOLUME=large E2E_JFR=1 KEEP=1 ./e2e/run.sh
 ```
 
 **The generic harness seeds nothing.** Bottlenecks are hunted in the tables *the artefact under test* actually

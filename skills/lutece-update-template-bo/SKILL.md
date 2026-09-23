@@ -146,7 +146,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 - `buttonIcon` uses the Tabler icons (without prefix): `'edit'`, `'trash'`, `'plus'`, `'check'`, `'times'`
 - `hideTitle=['all']` for icon-only buttons in lists
 - `hideTitle=['xs','sm', 'md', 'lg']` for toolbar buttons (icon-only except on large screens)
-- `cancel=true` on the Cancel button of a form
+- The Cancel button of a form: `<@aButton href='…' title='#i18n{portal.util.labelCancel}' buttonIcon='x' color='light' />`; the header back link: `labelBack`, `color='light'`. Never `cancel=true` (TD51) nor a cancel without colour (TD56)
 - `color`: `'primary'`, `'light'`, `'success'`, `'danger'`, `'warning'`, `'info'`. **The neutral button is `color='light'`**: `aButton.ftl`/`button.ftl` turn `color='secondary'` and `cancel=true` into the class `btn-default`, which no admin stylesheet defines (`rules/template-back-office.md` § Back-office macro bugs)
 
 ### @paginationAdmin - Pagination
@@ -184,8 +184,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
   ```freemarker
   <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' buttonIcon='plus' title='#i18n{myplugin.manage_items.buttonCreate}' />
   ```
-- **No inline form**: no `<@tform type='inline'>` / `type='flex'`, no `@formGroup formStyle='inline'`, no
-  `form-inline` / `d-flex` class on a form. One field per row.
+- **No inline form** (three fields or more side by side): `rules/template-back-office.md` § No inline form.
 
 ### What NOT to do
 - Do not use raw HTML when a macro exists

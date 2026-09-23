@@ -125,7 +125,7 @@ Tabular variant (data grid, no per-row CRUD):
 <@pageContainer>
     <@pageColumn>
         <@pageHeader title='#i18n{myplugin.create_task.pageTitle}'>
-            <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='arrow-left' title='#i18n{portal.util.labelBack}' />
+            <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='arrow-left' title='#i18n{portal.util.labelBack}' color='light' />
         </@pageHeader>
         <@messages errors=errors![] />
         <@tform method='post' name='create_task' action='jsp/admin/plugins/myplugin/ManageTasks.jsp' boxed=true>

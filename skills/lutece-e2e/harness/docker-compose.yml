@@ -11,8 +11,7 @@ services:
     volumes:
       - ./db/my.cnf:/etc/mysql/conf.d/e2e.cnf:ro
       - ./db/00-grants.sql:/docker-entrypoint-initdb.d/00-grants.sql:ro
-    # The database lives in memory: every run starts from an empty schema anyway, and a disk-backed volume made
-    # Liquibase's thousands of statements wait on fsync.
+    # In memory: every run starts from an empty schema.
     tmpfs:
       - /var/lib/mysql
     ports:
@@ -65,7 +64,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 90
-      # Probed every second while it starts, so a run goes on as soon as the site answers, not up to 5 s later.
+      # Probed every second while it starts.
       start_period: 300s
       start_interval: 1s
     networks: [e2e]

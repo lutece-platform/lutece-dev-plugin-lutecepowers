@@ -176,7 +176,7 @@ scenario its own discriminating value (a different term, id or key).
 
 ## The bench protects itself
 
-`run.sh test` re-seeds before running (the forms fuzzer consumes keyed reference rows; the seed restores them),
+A full `run.sh test` re-seeds before running (the forms fuzzer consumes keyed reference rows; the seed restores them),
 the fuzzer never touches the bench accounts nor plugin/cache toggles (`PROTECTED_SCREEN`, `DENY`), and
 `run.sh` checks after the tests that the admin account it authenticates with (id 1) is intact — otherwise the
 report opens on the alert and the exit code is 4. Accounts a bench seeds for its own target are that bench's
