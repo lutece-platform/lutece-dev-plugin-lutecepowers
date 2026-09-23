@@ -460,11 +460,16 @@ def artefact_markers(root, pkg):
         m = re.search(r"<name>([^<]+)</name>", xml.read_text(errors="replace"))
         if m:
             names.add(m.group(1).strip())
-    for d in list(root.rglob("templates/admin/plugins/*")) + list(root.rglob("templates/skin/plugins/*")):
-        if d.is_dir() and not in_build(d, root):
-            names.add(d.name)
     for n in names:
         marks.add("plugins/%s/" % n)
+    for d in list(root.rglob("templates/admin/plugins/*")) + list(root.rglob("templates/skin/plugins/*")):
+        if not d.is_dir() or in_build(d, root):
+            continue
+        children = [c for c in d.iterdir()]
+        if children and all(c.is_dir() and c.name == "modules" for c in children):
+            marks.update("plugins/%s/modules/%s/" % (d.name, m.name) for m in (d / "modules").iterdir() if m.is_dir())
+        else:
+            marks.add("plugins/%s/" % d.name)
     for sql in root.rglob("*.sql"):
         if in_build(sql, root) or "/upgrade" in str(sql):
             continue
