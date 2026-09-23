@@ -420,6 +420,35 @@ if [ "$COUNT" -eq 0 ]; then emit "MV01" "PASS" "new HashMap in JspBean/XPage (us
 else emit "MV01" "FAIL" "new HashMap in JspBean/XPage (use @Inject Models)" "$COUNT" "$MV01_MATCHES"; fi
 
 check_grep "MV02" 'AbstractPaginatorJspBean' "src/" "FAIL" "AbstractPaginatorJspBean -> @Pager IPager"
+# MV05: a @View that calls a do* @Action method of its bean runs that action on a GET, which the token filter never
+# checks (it only reads the action named in the request): a link followed by a crawler, a prefetch or an <img> then
+# writes. The view asks for a confirmation whose form posts the action instead (AdminMessage TYPE_CONFIRMATION).
+MV05_MATCHES=""
+if [ -d "src/java" ]; then
+    MV05_MATCHES=$({ grep -rlE '@View' src/java --include="*.java" 2>/dev/null || true; } | python3 -c '
+import re, sys
+SIG = r"(?:\s*@\w+(?:\([^)]*\))?)*\s*(?:public|protected|private)\s+[\w<>\[\], ]+\s+(\w+)\s*\("
+for path in sys.stdin.read().split():
+    text = open(path, encoding="utf-8", errors="replace").read()
+    actions = {a for a in re.findall(r"@Action\s*\([^)]*\)" + SIG, text) if a.startswith("do")}
+    if not actions:
+        continue
+    for m in re.finditer(r"@View\s*\([^)]*\)" + SIG, text):
+        start = text.find("{", m.end())
+        depth, i = 0, start
+        while i < len(text):
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            if depth == 0:
+                break
+            i += 1
+        for call in re.finditer(r"\b(%s)\s*\(" % "|".join(map(re.escape, sorted(actions))), text[start:i]):
+            line = text.count("\n", 0, start + call.start()) + 1
+            print("%s:%d: @View %s calls @Action %s: the action runs on a GET, unchecked by the token filter" % (path, line, m.group(1), call.group(1)))
+')
+fi
+COUNT=0; [ -n "$MV05_MATCHES" ] && COUNT=$(echo "$MV05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "MV05" "PASS" "No @View runs an @Action of its bean" 0
+else emit "MV05" "WARN" "@View calling an @Action: the write runs on a GET without token (confirm, then post the action)" "$COUNT" "$MV05_MATCHES"; fi
 # MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
 # token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
 # must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.

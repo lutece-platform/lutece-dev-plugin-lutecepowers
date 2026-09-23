@@ -136,6 +136,11 @@ expect "TL01: ThreadLocalRandom is no ThreadLocal" 1 "$(vm TL01 PASS)"
 printf 'class R {\n    private static final ThreadLocal<String> T = new ThreadLocal<>( );\n}\n' > "$J/src/java/x/business/R.java"
 expect "TL01: ThreadLocal never removed" 1 "$(vm TL01 FAIL)"
 rm -f "$J/src/java/x/business/R.java"
+printf 'class XJspBean extends MVCAdminJspBean {\n    @View( VIEW_CREATE )\n    public String getCreate( HttpServletRequest request )\n    {\n        return doCreate( request );\n    }\n    @Action( ACTION_CREATE )\n    public String doCreate( HttpServletRequest request )\n    {\n        return null;\n    }\n}\n' > "$J/src/java/x/web/XJspBean.java"
+expect "MV05: a view running a do* action" 1 "$(vm MV05 WARN)"
+printf 'class XJspBean extends MVCAdminJspBean {\n    @View( VIEW_LIST )\n    public String getList( HttpServletRequest request )\n    {\n        return getConfirmRemove( request );\n    }\n    @Action( ACTION_CONFIRM )\n    public String getConfirmRemove( HttpServletRequest request )\n    {\n        return null;\n    }\n    @Action( ACTION_CREATE )\n    public String doCreate( HttpServletRequest request )\n    {\n        return null;\n    }\n}\n' > "$J/src/java/x/web/XJspBean.java"
+expect "MV05: a view showing a confirmation action" 1 "$(vm MV05 PASS)"
+rm -f "$J/src/java/x/web/XJspBean.java"
 M="$T/module"
 mkdir -p "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources" "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/web"
 printf 'task.title=Task\n' > "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources/x_messages.properties"
@@ -143,5 +148,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, DA02, I18N02, I18N07, I18N10, TL01, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, DA02, I18N02, I18N07, I18N10, TL01, MV05, JS04, JS07, fix-button-colours"
 exit $fail

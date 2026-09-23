@@ -122,6 +122,10 @@ cover each one with a negative e2e scenario:
 - **An `@Action` also runs on GET, unvalidated.** The filter skips GET while `processController` dispatches the action
   whatever the method, so `ManageX.jsp?action=removeX&id=1` in a link or an `<img>` deletes. Every mutation is a POST
   form (a link to a confirmation `@View`, never to the action), and the negative scenario proves the GET forgery.
+- **A `@View` never calls a `do*` `@Action` of its bean** (MV05): a view is a GET, the filter checks only the action
+  the request names, so the write runs unvalidated, and a crawler or a link preview triggers it. A view with nothing
+  to show (an entry type without creation screen, a workflow action without form) redirects to an
+  `AdminMessage.TYPE_CONFIRMATION` (FO: `SiteMessage.TYPE_CONFIRMATION`) whose form posts the action with its token.
 - **The default view reached without `?view=` issues no token**: an entry point linked from elsewhere
   (`admin_url`, another plugin) opens the default view bare, and its form then posts no valid token. Redirect the bare
   default view to `?view=<name>`, or link the entry points with their view.
