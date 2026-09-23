@@ -967,6 +967,45 @@ if [ "$COUNT" -eq 0 ]; then emit "ST07" "PASS" "No production class named like a
 else emit "ST07" "FAIL" "Production class named like a test: surefire collects it from WEB-INF/classes and the test run breaks" "$COUNT" "$ST07_MATCHES"; fi
 echo ""
 
+# PV01: the pom and the plugin descriptor disagree on the version: the plugin screen, the upgrade scripts (Liquibase
+# compares the installed version with the scripts' target) and the release read different ones.
+# PV02: the v8 version is not above the last released tag: a site already on that release is "up to date", so the new
+# upgrade scripts are silently NOT included (workflow-rest: 2.0.0-SNAPSHOT after a 2.1.x release).
+PV_MATCHES=$(python3 - <<'PY'
+import glob, re, subprocess
+def version(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v.split("-")[0])[:3])
+pom = open("pom.xml", encoding="utf-8").read() if __import__("os").path.isfile("pom.xml") else ""
+own = re.sub(r"<parent>.*?</parent>", "", pom, flags=re.S)
+m = re.search(r"<version>([^<]+)</version>", own)
+if not m:
+    raise SystemExit
+pv = m.group(1).strip()
+for x in glob.glob("webapp/WEB-INF/plugins/*.xml"):
+    xv = re.search(r"<version>([^<]+)</version>", open(x, encoding="utf-8", errors="replace").read())
+    if xv and "${" not in xv.group(1) and xv.group(1).strip() != pv:
+        print("PV01 %s: <version>%s</version>, the pom says %s" % (x, xv.group(1).strip(), pv))
+try:
+    tags = subprocess.run(["git", "tag"], capture_output=True, text=True).stdout.split()
+except OSError:
+    tags = []
+released = [(version(t.rsplit("-", 1)[-1] if re.search(r"-\d+\.\d+", t) else t), t) for t in tags if re.search(r"\d+\.\d+", t)]
+released = [(v, t) for v, t in released if v]
+if released:
+    last = max(released)
+    if version(pv) <= last[0]:
+        print("PV02 pom.xml: version %s is not above the last release %s: a site on that release never runs the new upgrade scripts" % (pv, last[1]))
+PY
+) || PV_MATCHES=""
+PV01_MATCHES=$(echo "$PV_MATCHES" | grep "^PV01" | sed 's/^PV01 //'); PV02_MATCHES=$(echo "$PV_MATCHES" | grep "^PV02" | sed 's/^PV02 //')
+COUNT=0; [ -n "$PV01_MATCHES" ] && COUNT=$(echo "$PV01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "PV01" "PASS" "pom and plugin descriptor carry the same version" 0
+else emit "PV01" "FAIL" "pom and plugin descriptor versions differ" "$COUNT" "$PV01_MATCHES"; fi
+COUNT=0; [ -n "$PV02_MATCHES" ] && COUNT=$(echo "$PV02_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "PV02" "PASS" "The version is above the last release" 0
+else emit "PV02" "FAIL" "Version not above the last release: the upgrade scripts are skipped on upgraded sites" "$COUNT" "$PV02_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 
