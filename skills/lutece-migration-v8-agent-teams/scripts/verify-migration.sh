@@ -705,8 +705,18 @@ else emit "TL01" "FAIL" "ThreadLocal not cleared with remove()" "$COUNT" "$TL01_
 CS01_MATCHES=""
 if [ -d "src/" ]; then
     CS01_MATCHES=$({ grep -rln 'extends PortletJspBean' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
-        grep -q 'SecurityTokenService' "$f" 2>/dev/null && grep -q '\.validate( *request' "$f" 2>/dev/null && continue
-        echo "$f: portlet JspBean mutations are not token-protected (no SecurityTokenService.validate)"
+        python3 - "$f" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8", errors="replace").read()
+for m in re.finditer(r"public\s+String\s+(do\w+)\s*\([^)]*\)[^{]*\{", text):
+    depth, i = 1, m.end()
+    while depth and i < len(text):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        i += 1
+    if not re.search(r"\.validate\s*\(\s*request", text[m.end():i]):
+        print("%s: %s() is public and validates no token (reachable or not, a public do* is a mutation entry)" % (path, m.group(1)))
+PY
     done) || CS01_MATCHES=""
 fi
 COUNT=0; [ -n "$CS01_MATCHES" ] && COUNT=$(echo "$CS01_MATCHES" | wc -l)
