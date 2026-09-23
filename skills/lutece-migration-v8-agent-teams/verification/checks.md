@@ -311,7 +311,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TS06 | FAIL | Test methods without @Test | (cross-line check) | *.java (test) |
 | TS07 | FAIL | SpringContextService in tests | `SpringContextService\.getBean` | *.java (test) |
 | TS08 | FAIL | Spring mock imports | `org\.springframework\.mock\.web` | *.java (test) |
-| TS09 | FAIL | Failing tests in the surefire reports (the parent POM sets `testFailureIgnore=true`, so `BUILD SUCCESS` proves nothing; WARN when no report, meaning the tests were never run) | `target/surefire-reports/*.txt` | test results |
+| TS09 | FAIL | Failing tests in the surefire reports (the parent POM sets `testFailureIgnore=true`, so `BUILD SUCCESS` proves nothing; FAIL too when no report: the tests were never run; the command is `mvn lutece:exploded antrun:run -Dlutece-test-hsql test`) | `target/surefire-reports/*.txt` | test results |
 
 ---
 

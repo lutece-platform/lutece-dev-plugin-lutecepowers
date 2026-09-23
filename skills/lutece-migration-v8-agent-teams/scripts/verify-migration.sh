@@ -968,13 +968,13 @@ else emit "TS06" "FAIL" "Test methods without @Test annotation" "$COUNT" "$TS06_
 check_grep "TS07" 'SpringContextService\.getBean' "src/test/" "FAIL" "SpringContextService.getBean in tests -> @Inject"
 check_grep "TS08" 'org\.springframework\.mock\.web' "src/test/" "FAIL" "Spring mock imports -> fr.paris.lutece.test.mocks"
 
-# TS09: the parent POM sets testFailureIgnore=true, so `mvn test` prints BUILD SUCCESS whatever the tests did.
+# TS09: the parent POM sets testFailureIgnore=true, so the test goal prints BUILD SUCCESS whatever the tests did.
 # The reports are the only evidence. No report means the tests were never run, which is not a pass.
 TS09_MATCHES=""
 if [ ! -d "src/test/" ]; then
     emit "TS09" "PASS" "Test results (no tests in this project)" 0
 elif [ ! -d "target/surefire-reports" ]; then
-    emit "TS09" "WARN" "Test results NOT EVALUATED: no target/surefire-reports, run mvn test (BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true)" 0
+    emit "TS09" "FAIL" "Test results NOT EVALUATED: no target/surefire-reports. Run mvn lutece:exploded antrun:run -Dlutece-test-hsql test (plain mvn test has no webapp config nor database: every CDI test fails to start); BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true" 1
 else
     TS09_TALLY=$(grep -h "Tests run" target/surefire-reports/*.txt 2>/dev/null | awk -F'[:,]' '{t+=$2; f+=$4; e+=$6} END {printf "%d %d %d", t, f, e}')
     TS09_RUN=$(echo "$TS09_TALLY" | cut -d' ' -f1)
