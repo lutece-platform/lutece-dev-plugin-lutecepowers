@@ -79,17 +79,14 @@ def observe(page):
             obs["subs"].append(resp.url[:200])
         if req.is_navigation_request() and req.frame == page.main_frame:
             t = req.timing
-            mvc = ""
+            mvcs = []
             try:
                 raw = req.post_data_buffer
                 body = raw.decode("latin-1") if raw else ""
-                m = (re.search(r"(?:^|&)(action|view)=([^&]+)", body) or re.search(r"(?:^|&)(action|view)_([^=&]+)=", body)
-                     or re.search(r'name="(action|view)(?:_([^"]+))?"\r?\n\r?\n([^\r\n]*)', body))
-                if m:
-                    mvc = "%s=%s" % (m.group(1), (m.group(2) or (m.group(3) if m.lastindex >= 3 else "")).strip())
+                mvcs = mvc_names(body)
             except Exception:  # noqa: BLE001 - binary body
                 pass
-            obs["nav"].append({"url": resp.url[:200], "status": resp.status, "mvc": mvc,
+            obs["nav"].append({"url": resp.url[:200], "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs,
                                "ttfb_ms": round(t["responseStart"] - t["requestStart"], 1) if t["responseStart"] >= 0 else None,
                                "server_us": _server_us(resp)})
 
@@ -279,14 +276,36 @@ def get_form_urls(page):
     }).filter(u => u)""")
 
 
+def mvc_names(body):
+    """Every MVC routing name a request body carries, as `action=x` / `view=x`, in body order: a field `action` or
+    `view` with its value, a control named `action_x` or `view_x` (urlencoded or multipart). A form often carries
+    several (a hidden `view_back` beside the `action_save` button); Lutece dispatches on the one its controller
+    declares, so each is a candidate and the inventory keeps the real one."""
+    names = []
+    for m in re.finditer(r"(?:^|&)(action|view)=([^&]+)", body):
+        names.append("%s=%s" % (m.group(1), urllib.parse.unquote_plus(m.group(2)).strip()))
+    for m in re.finditer(r"(?:^|&)(action|view)_([^=&]+)=", body):
+        names.append("%s=%s" % (m.group(1), m.group(2)))
+    for m in re.finditer(r'name="(action|view)(?:_([^"]+))?"\r?\n\r?\n([^\r\n]*)', body):
+        names.append("%s=%s" % (m.group(1), (m.group(2) or m.group(3)).strip()))
+    return [n for i, n in enumerate(names) if n.split("=", 1)[1] and n not in names[:i]]
+
+
+def nav_keys(n):
+    """Coverage keys of a recorded navigation: one per MVC name its body carried, or the url alone."""
+    keys = [nav_key(n["url"], m) for m in (n.get("mvcs") or [n.get("mvc", "")]) if m] + [nav_key(n["url"])]
+    return list(dict.fromkeys(keys))
+
+
 def nav_key(u, mvc=""):
-    """Coverage key of a navigated url: the path plus its routing parameters (page=, view=, action=) only; a form that
-    posts its action in a field instead of the url is keyed on that field (mvc, recorded from the request body)."""
+    """Coverage key of a navigated url: the path plus its routing parameters (page=, view=, action=) only; with an MVC
+    name recorded from the request body (a button `action_copy` of a form whose action url says `view=manage`), that
+    name replaces the routing of the url, since it is what the controller runs."""
     import urllib.parse
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)
     parts = ["%s=%s" % (k, q[k][0]) for k in ("page", "view", "action") if k in q]
-    if mvc and not any(p.startswith(("view=", "action=")) for p in parts):
-        parts.append(mvc)
+    if mvc:
+        parts = [p for p in parts if not p.startswith(("view=", "action="))] + [mvc]
     return normalize(u).split("?")[0] + ("?" + "&".join(parts) if parts else "")
 
 

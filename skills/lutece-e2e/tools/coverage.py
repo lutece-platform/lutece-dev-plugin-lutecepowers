@@ -70,6 +70,23 @@ def main():
     for v, t in bare_hits.items():
         bare_by_path.setdefault(v.split("?")[0], set()).update(t)
     out = {"screens": [], "actions": []}
+    routes = {}
+    for kind in ("screens", "actions"):
+        for e in inv[kind]:
+            path, _, query = key(e["url"]).partition("?")
+            if query:
+                routes.setdefault((path.rsplit("/", 1)[0], query), set()).add(path)
+
+    def sibling(table, k):
+        """Tests that reached the same MVC route through another JSP of the controller's folder (a download JSP that
+        calls processController without the admin header): credited when no other controller there declares it."""
+        path, _, query = k.partition("?")
+        folder = path.rsplit("/", 1)[0]
+        if not query or len(routes.get((folder, query), ())) != 1:
+            return set()
+        return set().union(*[t for v, t in table.items() if v.partition("?")[2] == query
+                             and v.split("?")[0].rsplit("/", 1)[0] == folder and v.split("?")[0] != path] or [set()])
+
     for kind in ("screens", "actions"):
         for e in inv[kind]:
             k = key(e["url"])
@@ -81,7 +98,7 @@ def main():
                 found = set(table.get(k, set()))
                 if e.get("default"):
                     found |= table.get(k.split("?")[0], set())
-                return found
+                return found or sibling(table, k)
             tests = sorted(lookup(hits, by_path))
             proven = sorted(lookup(proven_hits, proven_by_path))
             red = sorted(lookup(red_hits, red_by_path))

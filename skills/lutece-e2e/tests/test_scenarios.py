@@ -656,15 +656,18 @@ def test_scenario(bo, browser, request, record, sc):
 
 def _play(bo, sc, vars_, record):
     """Runs the steps of a scenario, credits the proven pages and checks how it ends."""
-    pending = []
+    pending, seen = [], len(bo.obs.get("nav", []))
     for i, step in enumerate(sc["steps"]):
         lutece.reset_obs(bo)
         step_started = time.time()
         try:
             run_step(bo, step, vars_, record)
-            pending += [lutece.nav_key(n["url"], n.get("mvc", "")) for n in bo.obs.get("nav", []) if n["status"] < 400]
+            navs = bo.obs.get("nav", [])
+            pending += [k for n in navs[seen:] if n["status"] < 400 for k in lutece.nav_keys(n)]
+            seen = len(navs)
             if list(step)[0] in ORACLE:
-                record.setdefault("proven", []).extend(pending)
+                proven = record.setdefault("proven", [])
+                proven.extend(k for k in dict.fromkeys(pending) if k not in proven)
                 pending = []
             if list(step)[0] in ("goto", "submit", "submit_novalidate", "confirm", "click"):
                 record.setdefault("screenshots", []).append(lutece.shot(bo, "%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots")))
