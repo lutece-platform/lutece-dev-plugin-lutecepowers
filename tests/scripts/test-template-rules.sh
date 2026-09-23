@@ -168,6 +168,8 @@ printf '@Controller( controllerJsp = "X.jsp", controllerPath = "jsp/admin/plugin
 expect "MV07: controller path without trailing slash" 1 "$(vm MV07 FAIL)"
 printf '@Controller( controllerJsp = "X.jsp", controllerPath = "jsp/admin/plugins/x/", right = "X" )\nclass XJspBean {}\n' > "$J/src/java/x/web/XCtl.java"
 expect "MV07: controller path with its slash" 1 "$(vm MV07 PASS)"
+printf '@Controller( controllerJsp = "X.jsp", controllerPath = XJspBean.CONTROLLER_PATH, right = "X" )\nclass XJspBean {\n    public static final String CONTROLLER_PATH = "jsp/admin/plugins/x";\n}\n' > "$J/src/java/x/web/XCtl.java"
+expect "MV07: controller path through a constant" 1 "$(vm MV07 FAIL)"
 rm -f "$J/src/java/x/web/XCtl.java"
 M="$T/module"
 mkdir -p "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources" "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/web"

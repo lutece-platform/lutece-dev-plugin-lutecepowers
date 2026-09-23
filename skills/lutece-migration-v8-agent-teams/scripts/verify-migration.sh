@@ -498,7 +498,21 @@ else emit "MV06" "WARN" "addError then redirect from an admin @View: the next pa
 # MV07: the core joins controllerPath and controllerJsp without a separator (view and action urls, the CSRF action
 # registry of SecurityTokenHandler): a path without its trailing slash names a JSP that does not exist.
 MV07_MATCHES=""
-[ -d "src/java" ] && MV07_MATCHES=$({ grep -rnE 'controllerPath *= *"[^"]*[^/"]"' src/java --include="*.java" 2>/dev/null || true; } | sed 's/$/  <- controllerPath must end with "\/"/')
+[ -d "src/java" ] && MV07_MATCHES=$(python3 - <<'PY'
+import glob, re
+files = {p: open(p, encoding="utf-8", errors="replace").read() for p in glob.glob("src/java/**/*.java", recursive=True)}
+consts = {}
+for text in files.values():
+    for m in re.finditer(r"\bString\s+(\w+)\s*=\s*\"([^\"]*)\"", text):
+        consts.setdefault(m.group(1), m.group(2))
+for path, text in files.items():
+    for m in re.finditer(r"controllerPath\s*=\s*(\"[^\"]*\"|[\w.]+)", text):
+        raw = m.group(1)
+        value = raw[1:-1] if raw.startswith('"') else consts.get(raw.split(".")[-1])
+        if value is not None and value and not value.endswith("/"):
+            print('%s:%d: controllerPath "%s" must end with "/"' % (path, text.count("\n", 0, m.start()) + 1, value))
+PY
+)
 COUNT=0; [ -n "$MV07_MATCHES" ] && COUNT=$(echo "$MV07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "MV07" "PASS" "Every @Controller path ends with a slash" 0
 else emit "MV07" "FAIL" "@Controller controllerPath without its trailing slash: urls and CSRF registry name a missing JSP" "$COUNT" "$MV07_MATCHES"; fi
