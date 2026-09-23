@@ -61,6 +61,10 @@ printf "<#macro richBox><@input type='textarea' name='c' richtext=true /></#macr
 printf "<#include \"commons.html\" />\n<@richBox />\n<@initEditor type='comment' />\n" > "$X/a.html"
 expect "TD59: rich textarea from a local macro" 0 "$(td TD59)"
 rm -f "$X/commons.html"
+printf "<@tform action='x'><@input name='a' /><!-- <@button type='submit' title='ok' /> --></@tform>\n" > "$X/a.html"
+expect "TD60: submit button inside an HTML comment" 1 "$(td TD60)"
+printf "<@tform action='x'><@input name='a' /><#-- <@button type='submit' title='ok' /> --><!-- a note --></@tform>\n" > "$X/a.html"
+expect "TD60: FreeMarker comment and plain HTML comment" 0 "$(td TD60)"
 
 mkdir -p "$W/webapp/WEB-INF/plugins" "$W/webapp/themes/admin/x/css"
 echo "<plug-in><admin-css-stylesheets><admin-css-stylesheet>themes/admin/x/css/x.css</admin-css-stylesheet></admin-css-stylesheets></plug-in>" > "$W/webapp/WEB-INF/plugins/x.xml"
@@ -113,5 +117,5 @@ printf 'name=X\nlabel=Second\nmissing.portlet=P\nmissing.right=R\n' > "$J/src/ja
 expect "I18N02: descriptor and right keys declared" 1 "$(vm I18N02 PASS)"
 rm -rf "$J/webapp/WEB-INF/plugins" "$J/src/sql"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, DA02, I18N02, I18N07, I18N10, JS04, JS07, fix-button-colours"
 exit $fail

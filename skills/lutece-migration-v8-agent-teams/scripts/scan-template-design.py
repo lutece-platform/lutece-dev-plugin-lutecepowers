@@ -69,6 +69,7 @@ Both sides
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
   TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
+  TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
   TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
              rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
   TD57 WARN  a stylesheet the plugin descriptor loads on every page (admin-css-stylesheet, css-stylesheet) targets a bare
@@ -133,6 +134,10 @@ def read(path):
 def line_of(text, index):
     """Return the 1-based line number of a character offset."""
     return text.count("\n", 0, index) + 1
+
+
+COMMENTED_CONTROL = re.compile(r"<@(?:cBtn|button|aButton|input|cInput|tform|cForm|select|cSelect|checkBox|cCheckbox|radio|cRadio)\b|<(?:button|input|select|form|textarea)\b")
+"""A form control or button, macro or tag, as found inside an HTML comment by TD60."""
 
 
 def strip_comments(text):
@@ -792,9 +797,14 @@ def check_sql(text, findings):
 
 def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
     """Scan one file and return its report entry."""
-    text = strip_comments(read(os.path.join(root, rel)))
+    raw = read(os.path.join(root, rel))
+    text = strip_comments(raw)
     kind = classify(text, scope)
     findings = []
+    if kind not in ("js", "sql", "email", "standalone"):
+        for comment in re.finditer(r"<!--(.*?)-->", raw, flags=re.S):
+            if COMMENTED_CONTROL.search(comment.group(1)):
+                add(findings, "TD60", "WARN", line_of(raw, comment.start()), "form control or button inside an HTML comment: FreeMarker still renders it and the browser hides it (a submit button commented out leaves the form without a way to send it) -> restore it, or drop it; dead template code goes in <#-- -->")
     if kind == "js":
         check_jquery(text, findings, jquery_declared)
         check_upload_widget(text, findings)
