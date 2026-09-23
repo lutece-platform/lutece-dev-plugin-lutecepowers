@@ -145,7 +145,7 @@ Tabular variant (data grid, no per-row CRUD):
             </@formGroup>
             <@formGroup rows=2>
                 <@button type='submit' buttonIcon='check' title='#i18n{portal.util.labelValidate}' color='primary' />
-                <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='x' title='#i18n{portal.util.labelCancel}' />
+                <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=manageTasks' buttonIcon='x' title='#i18n{portal.util.labelCancel}' color='light' />
             </@formGroup>
         </@tform>
     </@pageColumn>

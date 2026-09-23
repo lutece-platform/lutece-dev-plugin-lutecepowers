@@ -68,6 +68,8 @@ Both sides
              its header gives: nothing updates it, compare it with the latest upstream release
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
              interpolates ${} but not <#…>, so the directive is printed verbatim -> compute it with <#assign> first
+  TD56 WARN  cancel/back @aButton/@button (title labelCancel/labelBack, Annuler, Retour) without color='light': the macro
+             defaults to primary, so it looks like the main action
   TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
              which the assembled admin CSS does not define: an unstyled button -> color='light'
   TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
@@ -569,6 +571,11 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
                 if re.search(r"""\bcolor\s*=\s*['"](btn-)?(default|secondary)['"]""", call) or (name == "button" and re.search(r"\bcancel\s*=\s*true", call) and not re.search(r"\bcolor\s*=", call))]
         add_grouped(findings, "TD51", "WARN", sorted(hits), "button colour 'default'/'secondary' (or cancel=true): the macro renders btn-default, which the admin CSS does not define, so the button has no style; use color='light'")
+    hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
+            if re.search(r"""\btitle\s*=\s*['"][^'"]*(labelCancel|labelBack|[Cc]ancel\}|[Bb]ack\}|Annuler|Retour)""", call)
+            and not re.search(r"""\btype\s*=\s*['"]submit""", call)
+            and not re.search(r"""\bcolor\s*=\s*['"](light|link|outline-[a-z]+|btn-light|ghost-[a-z]+)['"]""", call)]
+    add_grouped(findings, "TD56", "WARN", sorted(hits), "cancel/back button without a neutral colour: the macro defaults to color='primary' (or it is danger), so it looks like the main action; use color='light'")
     for sel in re.finditer(r"""<@select\b((?:'[^']*'|"[^"]*"|[^>'"])*?)(?<!/)>(.*?)</@select>""", text, flags=re.S):
         offset, opening, body = sel.start(), sel.group(1), sel.group(2)
         if (re.search(r"""\bdefault_value\s*=\s*(?!['"]\s*['"])""", opening) and not re.search(r"\bitems\s*=", opening)
