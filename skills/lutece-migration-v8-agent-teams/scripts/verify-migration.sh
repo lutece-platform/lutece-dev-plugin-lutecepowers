@@ -955,6 +955,18 @@ if [ "$COUNT" -eq 0 ]; then emit "WB07" "PASS" "Admin feature icons survive a re
 else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url> (core inconsistency with the DTD, reported upstream)" "$COUNT" "$WB07_MATCHES"; fi
 echo ""
 
+# ST07: a production class whose name matches the surefire test patterns (Test*, *Test, *Tests, *TestCase).
+# `lutece:exploded … test` puts it in WEB-INF/classes, surefire collects it as a test and the fork fails
+# ("wrong name", "There was an error in the forked process").
+ST07_MATCHES=""
+if [ -d "src/java" ]; then
+    ST07_MATCHES=$(find src/java -name "*.java" 2>/dev/null | grep -E "/(Test[^/]*|[^/]*Test|[^/]*Tests|[^/]*TestCase)\.java$") || ST07_MATCHES=""
+fi
+COUNT=0; [ -n "$ST07_MATCHES" ] && COUNT=$(echo "$ST07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "ST07" "PASS" "No production class named like a test" 0
+else emit "ST07" "FAIL" "Production class named like a test: surefire collects it from WEB-INF/classes and the test run breaks" "$COUNT" "$ST07_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 
