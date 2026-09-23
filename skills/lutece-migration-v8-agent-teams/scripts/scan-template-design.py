@@ -60,6 +60,9 @@ Both sides
              @cModal, content loaded from another page (targetUrl, useIframe) -> a plain link to that page
   TD49 WARN  front-office form that is not a @cForm, or @cForm foValidation=false: no core form validation
   TD50 WARN  inline form (fields side by side): @tform type inline/flex, formStyle inline, form-inline, d-flex on a form
+  TD54 WARN  @select default_value=… with nested <@option>/<option>: the macro applies default_value to items= only, so
+             the nested options ignore it and the first one is always selected -> mark the option selected
+  TD55 INFO  @empty without subtitle: it prints "Add a first element", wrong on a search or a selection list
   TD53 INFO  third-party bundle shipped under webapp/ (a .min.js, a *-bundle.js, or a .js over 100 KB), with the version
              its header gives: nothing updates it, compare it with the latest upstream release
   TD52 WARN  FreeMarker directive written inside a quoted macro argument (class='<#if …>…</#if>'): a string literal
@@ -562,6 +565,13 @@ def check_admin(text, findings, kind, opened_in_iframe, know):
         hits = [line_of(text, offset) for name in ("button", "aButton") for offset, call in macro_calls(text, name)
                 if re.search(r"""\bcolor\s*=\s*['"](btn-)?(default|secondary)['"]""", call) or (name == "button" and re.search(r"\bcancel\s*=\s*true", call) and not re.search(r"\bcolor\s*=", call))]
         add_grouped(findings, "TD51", "WARN", sorted(hits), "button colour 'default'/'secondary' (or cancel=true): the macro renders btn-default, which the admin CSS does not define, so the button has no style; use color='light'")
+    for sel in re.finditer(r"""<@select\b((?:'[^']*'|"[^"]*"|[^>'"])*?)(?<!/)>(.*?)</@select>""", text, flags=re.S):
+        offset, opening, body = sel.start(), sel.group(1), sel.group(2)
+        if (re.search(r"""\bdefault_value\s*=\s*(?!['"]\s*['"])""", opening) and not re.search(r"\bitems\s*=", opening)
+                and re.search(r"<@option\b|<option\b", body) and not re.search(r"\bselected\b", body)):
+            add(findings, "TD54", "WARN", line_of(text, offset), "@select default_value with nested options: the macro only applies it to items=, the first option stays selected; mark the chosen option selected")
+    hits = [line_of(text, offset) for offset, call in macro_calls(text, "empty") if not re.search(r"\bsubtitle\s*=", call)]
+    add_grouped(findings, "TD55", "INFO", hits, "@empty without subtitle: it prints the generic \"add a first element\"; give a contextual subtitle, or subtitle=' ' on a search or selection list")
     no_script = strip_scripts(text)
     for tag in RAW_BO_TAGS:
         hits = [line_of(text, m.start()) for m in re.finditer(r"<%s\b" % tag, no_script)]
