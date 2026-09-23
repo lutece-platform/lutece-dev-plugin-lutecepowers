@@ -72,9 +72,11 @@ E2E="$DIR/e2e"
 mkdir -p "$E2E"/{harness,tools,tests,scenarios,baselines/aria,artifacts}
 
 # The harness is refreshed from the skill, except what a bench owns and fills in itself: the application
-# environment (app.env), its seeds, the organisation's stand-ins and the v7 webapp overlay.
+# environment (app.env), its seeds, its allow-listed server errors, the organisation's stand-ins and the v7 webapp
+# overlay.
 rsync -a --exclude app.env --exclude 'db/seed*.sql' --exclude 'db/post-init.sql' --exclude 'fakes/extra' \
-      --exclude 'v7-overlay' "$SKILL/harness/" "$E2E/harness/"
+      --exclude 'v7-overlay' --exclude server-errors-allow.txt "$SKILL/harness/" "$E2E/harness/"
+[ -f "$E2E/harness/server-errors-allow.txt" ] || cp "$SKILL/harness/server-errors-allow.txt" "$E2E/harness/server-errors-allow.txt"
 [ -f "$E2E/harness/app.env" ] || cp "$SKILL/harness/app.env" "$E2E/harness/app.env"
 [ -f "$E2E/harness/db/post-init.sql" ] || cp "$SKILL/harness/db/post-init.sql" "$E2E/harness/db/post-init.sql"
 cp -a "$SKILL/tools/." "$E2E/tools/"
