@@ -25,6 +25,12 @@ eval_pom() { $MVN7 -q -f "$1" help:evaluate -Dexpression="$2" -DforceStdout 2>/d
 [ "$E2E_TARGET" = plugin ] || { echo "gen-site7.sh: only a plugin target has a v7 before; E2E_TARGET=$E2E_TARGET" >&2; exit 2; }
 
 # -- the v7 sources, in a worktree that never touches the migrated tree ---------------------------------------------
+# A worktree left by a bench copied from another clone points at that clone's .git: reusing it fails with "not a git
+# repository", or builds the other clone's sources. Keep it only when it belongs to $SRC.
+if [ -e "$WT/.git" ] && [ "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" != "$(git -C "$SRC" rev-parse --path-format=absolute --git-common-dir)" ]; then
+  echo ">> $WT is a worktree of another clone: removed and re-added from $SRC"
+  rm -rf "$WT"; git -C "$SRC" worktree prune
+fi
 if [ -d "$WT/.git" ] || [ -f "$WT/.git" ]; then
   # --force: a previous run may have pinned a dependency in this pom, and the worktree is disposable.
   git -C "$WT" checkout -q --force --detach "$(git -C "$SRC" rev-parse "$REF")"
