@@ -219,6 +219,8 @@ without the column does not count. Rules and model in `rules/sql-liquibase.md`.
 | TL01 | FAIL | ThreadLocal not cleared with remove() | (cross-file check) | *.java |
 | CS01 | FAIL | portlet JspBean mutations without a CSRF token | (cross-file check) | *.java |
 | I18N01 | FAIL | i18n key repeating the plugin prefix | (cross-file check) | *_messages*.properties |
+| I18N03 | FAIL | i18n key in the default bundle and not in `_fr`, or the reverse (the two languages the core ships) | (cross-file check) | *_messages*.properties |
+| I18N04 | WARN | the other languages of a bundle lack keys of the default bundle | (cross-file check) | *_messages_*.properties |
 | I18N02 | WARN | i18n key asked for by a template or a message constant, declared in no bundle | (cross-file check) | webapp, src/java |
 
 **XS01** — **An XSL portlet must be ported to HTML during the migration; there is no second

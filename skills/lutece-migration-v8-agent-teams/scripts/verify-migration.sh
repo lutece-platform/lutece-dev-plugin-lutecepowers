@@ -775,6 +775,57 @@ if [ "$COUNT" -eq 0 ]; then emit "SQ04" "PASS" "INSERTs into core tables name th
 else emit "SQ04" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column" "$COUNT" "$SQ04_MATCHES"; fi
 echo ""
 
+# I18N03: a key the default bundle carries and _fr does not, or the reverse (the two languages the core ships): the
+# missing language falls back, a French user reads the English text, nothing logs it. I18N04: the other languages.
+I18N03_MATCHES=""
+if [ -d "src/java" ]; then
+    I18N03_MATCHES=$(python3 - <<'PY'
+import glob, os, re
+def keys(path):
+    out = set()
+    for line in open(path, encoding="latin-1"):
+        m = re.match(r"\s*([^#!\s=:][^=:\s]*)\s*[=:]", line)
+        if m:
+            out.add(m.group(1))
+    return out
+for base in glob.glob("src/java/**/*_messages.properties", recursive=True):
+    stem = base[:-len(".properties")]
+    variants = [base] + sorted(glob.glob(stem + "_*.properties"))
+    if len(variants) < 2:
+        continue
+    fr = stem + "_fr.properties"
+    if os.path.isfile(fr):
+        dk, fk = keys(base), keys(fr)
+        for k in sorted(fk - dk):
+            print("%s: %s missing (present in %s)" % (base, k, os.path.basename(fr)))
+        for k in sorted(dk - fk):
+            print("%s: %s missing (present in %s)" % (fr, k, os.path.basename(base)))
+PY
+) || I18N03_MATCHES=""
+    I18N03_OTHERS=$(python3 - <<'PY'
+import glob, os, re
+def keys(path):
+    return {m.group(1) for line in open(path, encoding="latin-1") for m in [re.match(r"\s*([^#!\s=:][^=:\s]*)\s*[=:]", line)] if m}
+for base in glob.glob("src/java/**/*_messages.properties", recursive=True):
+    stem = base[:-len(".properties")]
+    ref = keys(base)
+    for v in sorted(glob.glob(stem + "_*.properties")):
+        if v.endswith("_fr.properties"):
+            continue
+        missing = len(ref - keys(v))
+        if missing:
+            print("%s: %d key(s) of the default bundle not translated" % (v, missing))
+PY
+) || I18N03_OTHERS=""
+fi
+COUNT=0; [ -n "$I18N03_MATCHES" ] && COUNT=$(echo "$I18N03_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N03" "PASS" "Every bundle key exists in every language of the bundle" 0
+else emit "I18N03" "FAIL" "i18n key in the default bundle and not in _fr, or the reverse: that language shows the fallback text" "$COUNT" "$I18N03_MATCHES"; fi
+COUNT=0; [ -n "${I18N03_OTHERS:-}" ] && COUNT=$(echo "$I18N03_OTHERS" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "I18N04" "PASS" "The other languages of the bundles carry every key" 0
+else emit "I18N04" "WARN" "Other languages (beyond the default bundle and _fr, the two the core ships) lack keys: they show the default text" "$COUNT" "$I18N03_OTHERS"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 
