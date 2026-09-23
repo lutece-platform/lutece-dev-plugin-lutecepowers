@@ -62,6 +62,19 @@ def state(r):
     return {"passed": "ok", "skipped": "skip"}.get(r["status"], "ko")
 
 
+INTERACTION = ("goto", "wait", "click", "click_if", "dblclick", "drag", "fill", "fill_form", "type", "select", "upload",
+               "submit", "submit_novalidate", "confirm", "confirm_if", "login", "login_fo")
+"""Steps that drive the parcours without checking anything: a v7 scenario stopped on one never reached its oracle."""
+
+
+def blocked(r):
+    """True when a failed scenario stopped on a parcours step, before any of its oracles judged the function."""
+    if r.get("suite") != "scenarios":
+        return False
+    kind = r.get("failed_step_kind")
+    return kind in INTERACTION if kind else "playwright._impl._errors" in (r.get("reason") or "")
+
+
 def verdict(r7, r8):
     if r7 is None:
         return "nouveau"
@@ -77,13 +90,13 @@ def verdict(r7, r8):
             return "rendu différent"
         return "inchangé"
     if s8 == "ok":
-        return "corrigé"
+        return "v7 bloqué" if blocked(r7) else "corrigé"
     if s7 == "ok":
         return "régression"
     return "changé"
 
 
-ORDER = {"régression": 0, "disparu": 1, "changé": 2, "rendu différent": 3, "corrigé": 4, "nouveau": 5, "v8 seulement": 6, "v7 seulement": 7, "inchangé": 8}
+ORDER = {"régression": 0, "disparu": 1, "changé": 2, "v7 bloqué": 3, "rendu différent": 4, "corrigé": 5, "nouveau": 6, "v8 seulement": 7, "v7 seulement": 8, "inchangé": 9}
 
 
 def index(rows):
@@ -177,7 +190,9 @@ def md(gs, unjudged=0):
     for g, pairs in gs:
         ids, r7, r8 = pairs[0]
         v = verdict(r7, r8)
-        detail = ("v8 : " + reason(r8)[:140]) if reason(r8) else ("v7 : " + reason(r7)[:140]) if reason(r7) else (
+        at = ("à l'étape %s %s" % (r7.get("failed_step"), r7.get("failed_step_kind"))) if r7 and r7.get("failed_step_kind") else "sur une étape du parcours"
+        detail = ("v7 arrêté %s, avant toute vérification : la fonction n'est pas comparée (écran v7 cassé en amont, ou "
+                  "sélecteur propre à v8 à écrire {v7: …, v8: …}) — %s" % (at, reason(r7)[:120])) if v == "v7 bloqué" else ("v8 : " + reason(r8)[:140]) if reason(r8) else ("v7 : " + reason(r7)[:140]) if reason(r7) else (
             "type de page %s → %s" % (r7.get("kind"), r8.get("kind")) if v == "rendu différent" else
             "v7 non jugé : " + skip_note(r7)[:140] if v == "v8 seulement" else
             "v8 non jugé : " + skip_note(r8)[:140] if v == "v7 seulement" else "")
@@ -203,7 +218,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 .pair h3{margin:0;font-size:15px;flex:1 1 auto}
 .tag{font-size:12px;padding:2px 9px;border-radius:99px;background:#eef2ff;color:#3730a3;font-weight:600;white-space:nowrap}
 .tag.régression,.tag.disparu{background:#fef2f2;color:#b91c1c}.tag.corrigé,.tag.nouveau{background:#ecfdf5;color:#047857}
-.tag.changé,.tag.rendu{background:#fffbeb;color:#b45309}.tag.v8,.tag.v7,.tag.inchangé{background:var(--soft);color:var(--mute)}
+.tag.changé,.tag.rendu,.tag.bloqué{background:#fffbeb;color:#b45309}.tag.v8,.tag.v7,.tag.inchangé{background:var(--soft);color:var(--mute)}
 .kind{font-size:12px;color:var(--mute)}
 .side{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
 .side>div{padding:10px 16px;border-right:1px solid var(--line);min-width:0}.side>div:last-child{border-right:0}

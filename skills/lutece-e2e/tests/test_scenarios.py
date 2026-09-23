@@ -697,12 +697,13 @@ def _play(bo, sc, vars_, record):
                 pending = []
             if list(step)[0] in ("goto", "submit", "submit_novalidate", "confirm", "click"):
                 record.setdefault("screenshots", []).append(lutece.shot(bo, "%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots")))
-        except AssertionError as e:
+        except Exception as e:
             record["screenshot"] = lutece.shot(bo, "fail_%s_%d" % (sc["id"], i), "jpg", full_page=not sc.get("viewport_shots"))
             record["failed_step"] = i
             record["failed_step_kind"] = list(step)[0]
             record["failed_step_window"] = [step_started, time.time()]
-            raise AssertionError("step %d %s: %s" % (i, list(step)[0], e)) from None
+            what = e if isinstance(e, AssertionError) else "%s: %s" % (type(e).__name__, str(e).strip().splitlines()[0] if str(e).strip() else "")
+            raise AssertionError("step %d %s: %s" % (i, list(step)[0], what)) from None
     final = lutece.classify(bo)
     record["kind"] = final
     navigated = any(list(st)[0] in ("goto", "submit", "submit_novalidate", "confirm", "confirm_if", "click", "click_if", "login", "login_fo") for st in sc["steps"])
