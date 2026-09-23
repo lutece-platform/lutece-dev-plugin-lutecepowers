@@ -134,6 +134,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | MV04 | FAIL | FileItem (not MultipartItem) | `import.*FileItem[^P]` | *.java |
 | MV05 | WARN | `@View` calling an `@Action` method of its bean: the write runs on a GET, which the token filter never checks | body of each `@View` method naming an `@Action` method of the same file | *.java |
 | MV06 | WARN | `addError` then a redirect from an admin `@View`: the message is lost on the next page | body of each `@View` of an `MVCAdminJspBean`: `addError(` followed by `redirect(`/`redirectView(` | *.java |
+| MV07 | FAIL | `@Controller` `controllerPath` without its trailing slash: the core joins it to `controllerJsp` as is (urls, CSRF registry) | `controllerPath = "…"` not ending with `/` | *.java |
 
 ## Web / Config (WB)
 

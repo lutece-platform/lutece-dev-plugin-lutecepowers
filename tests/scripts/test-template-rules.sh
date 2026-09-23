@@ -164,6 +164,11 @@ expect "CD06: sync observer of an event fired async only" 1 "$(vm CD06 FAIL)"
 printf 'class P {\n    void f( ) { CDI.current( ).getBeanManager( ).getEvent( ).select( XEvent.class ).fireAsync( new XEvent( ) ); }\n}\nclass L {\n    public void on( @ObservesAsync XEvent event ) { }\n    public void init( @Observes @Initialized( ApplicationScoped.class ) ServletContext context ) { }\n}\n' > "$J/src/java/x/web/XListener.java"
 expect "CD06: async observer, startup observer" 1 "$(vm CD06 PASS)"
 rm -f "$J/src/java/x/web/XListener.java"
+printf '@Controller( controllerJsp = "X.jsp", controllerPath = "jsp/admin/plugins/x", right = "X" )\nclass XJspBean {}\n' > "$J/src/java/x/web/XCtl.java"
+expect "MV07: controller path without trailing slash" 1 "$(vm MV07 FAIL)"
+printf '@Controller( controllerJsp = "X.jsp", controllerPath = "jsp/admin/plugins/x/", right = "X" )\nclass XJspBean {}\n' > "$J/src/java/x/web/XCtl.java"
+expect "MV07: controller path with its slash" 1 "$(vm MV07 PASS)"
+rm -f "$J/src/java/x/web/XCtl.java"
 M="$T/module"
 mkdir -p "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources" "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/web"
 printf 'task.title=Task\n' > "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources/x_messages.properties"
@@ -171,5 +176,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, CD06, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, CD06, JS04, JS07, fix-button-colours"
 exit $fail

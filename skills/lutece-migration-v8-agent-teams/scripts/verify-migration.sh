@@ -495,6 +495,13 @@ else emit "MV05" "WARN" "@View calling an @Action: the write runs on a GET witho
 COUNT=0; [ -n "$MV06_MATCHES" ] && COUNT=$(echo "$MV06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "MV06" "PASS" "No admin @View loses an error on a redirect" 0
 else emit "MV06" "WARN" "addError then redirect from an admin @View: the next page shows no error (answer an AdminMessage TYPE_STOP)" "$COUNT" "$MV06_MATCHES"; fi
+# MV07: the core joins controllerPath and controllerJsp without a separator (view and action urls, the CSRF action
+# registry of SecurityTokenHandler): a path without its trailing slash names a JSP that does not exist.
+MV07_MATCHES=""
+[ -d "src/java" ] && MV07_MATCHES=$({ grep -rnE 'controllerPath *= *"[^"]*[^/"]"' src/java --include="*.java" 2>/dev/null || true; } | sed 's/$/  <- controllerPath must end with "\/"/')
+COUNT=0; [ -n "$MV07_MATCHES" ] && COUNT=$(echo "$MV07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "MV07" "PASS" "Every @Controller path ends with a slash" 0
+else emit "MV07" "FAIL" "@Controller controllerPath without its trailing slash: urls and CSRF registry name a missing JSP" "$COUNT" "$MV07_MATCHES"; fi
 # MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
 # token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
 # must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.
