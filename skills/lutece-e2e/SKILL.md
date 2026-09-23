@@ -252,7 +252,9 @@ until the agent has looked at every screen.
 `./run.sh all` runs `tools/review.py todo`, which deduplicates the captures into groups — one group per
 (url path, DOM kind), whatever the data — and writes `artifacts/review-todo.md`. The gate then calls
 `tools/review.py check` and **fails with rc=7** until `artifacts/review.md` carries a verdict for every group.
-`REVIEW=skip ./run.sh all` bypasses it; use that only to iterate, never to hand over.
+`REVIEW=skip ./run.sh all` bypasses it; use that only to iterate, never to hand over. A full run always ends rc=7 the first time: it renumbers
+the groups and writes the war hash, so the review is written after it, on its captures, and `./run.sh review` then
+gives rc=0. That pair (full run, then `review`) is the hand-over.
 
 How the agent does it:
 
