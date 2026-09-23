@@ -11,7 +11,8 @@ Step vocabulary (one key per step):
   fill_form: <form selector>       auto-fill every visible field of a form (values: {name: v} overrides)
   submit: <form selector>          submit a form and wait for the navigation; {form: ..., button: <selector>} names the
                                    submit control when the form has several (reset buttons, per-row actions)
-  submit_novalidate: <form>        same, bypassing the HTML5 client validation (to exercise the server-side checks)
+  submit_novalidate: <form>        same, bypassing the HTML5 client validation (to exercise the server-side checks);
+                                   {form: ..., button: <selector>} as for submit
   expect_url: <substring|[..]>     the current url must contain it (one of the list)
   confirm:                         click the validate button of a Lutece confirmation message
   confirm_if:                      same, only when a confirmation is displayed (some toggles ask only one way)
@@ -489,8 +490,9 @@ def run_step(page, step, vars_, record):
         else:
             lutece.submit(page, arg)
     elif key == "submit_novalidate":
-        page.evaluate("(sel) => { const f = document.querySelector(sel); if (f) f.noValidate = true; }", arg)
-        lutece.submit(page, arg)
+        form, button = (arg["form"], arg.get("button")) if isinstance(arg, dict) else (arg, None)
+        page.evaluate("(sel) => { const f = document.querySelector(sel); if (f) f.noValidate = true; }", form)
+        lutece.submit(page, form, button)
     elif key == "expect_url":
         wanted = arg if isinstance(arg, list) else [arg]
         assert any(w in page.url for w in wanted), "url %s contains none of %s" % (page.url, wanted)
