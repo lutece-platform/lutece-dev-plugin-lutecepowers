@@ -755,6 +755,18 @@ else emit "I18N02" "WARN" "i18n key asked for but declared nowhere: the raw key 
 echo ""
 
 # ─── JSP ─────────────────────────────────────────────────
+# SQ01: an INSERT into a core table without its column list. The core adds columns across 8.0.x (core_portlet gained
+# id_template in 8.0.2): a positional VALUES list then fails with "Column count doesn't match value count", Liquibase
+# stops and the site never starts. Name the columns.
+SQ01_MATCHES=""
+if [ -d "src/sql" ]; then
+    SQ01_MATCHES=$(grep -rniE "INSERT +INTO +core_[a-z0-9_]+ +VALUES" src/sql --include="*.sql" 2>/dev/null) || SQ01_MATCHES=""
+fi
+COUNT=0; [ -n "$SQ01_MATCHES" ] && COUNT=$(echo "$SQ01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ01" "PASS" "INSERTs into core tables name their columns" 0
+else emit "SQ01" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column" "$COUNT" "$SQ01_MATCHES"; fi
+echo ""
+
 echo "CATEGORY: JSP"
 check_grep "JS01" 'jsp:useBean' "webapp/" "FAIL" "jsp:useBean -> CDI-managed beans"
 

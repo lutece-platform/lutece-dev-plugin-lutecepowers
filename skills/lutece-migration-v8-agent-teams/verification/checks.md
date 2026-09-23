@@ -271,6 +271,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 |----|----------|-------------|---------|-------|
 | JS01 | FAIL | jsp:useBean | `jsp:useBean` | *.jsp |
 | JS02 | FAIL | JSP scriptlets | `<%[^@-]` | *.jsp |
+| SQ01 | FAIL | `INSERT INTO core_x VALUES (…)` without a column list: fails as soon as the core adds a column (core_portlet.id_template in 8.0.2) | `INSERT +INTO +core_[a-z0-9_]+ +VALUES` | src/sql |
 | JS04 | FAIL | admin JSP driving a bean that is not a `@Controller` (legacy `DoXxx.jsp`, portlets excepted): no v8 dispatch, no automatic CSRF | (cross-file check) | *.jsp, *.java |
 
 ## Templates (TM)
