@@ -13,6 +13,8 @@
 #   ./run.sh report       artifacts/summary.md + report.html from the run artifacts
 #   ./run.sh down         stop everything and drop the database volume
 #   ./run.sh logs|status|sh   compose shortcuts
+#   ./run.sh py <script> [args]  a Python script in the test runner, with the bench's own environment (a hand-made
+#                        `docker compose run` with another environment recreates the running app and db)
 #
 # Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n, RUNNER=local (host venv instead of the container),
 # KEEP=1 (do not stop the stack after a full run). Everything else lives in e2e.conf.
@@ -512,6 +514,7 @@ case "${1:-all}" in
   external)  cmd_external ;;
   down)      cmd_down ;;
   logs)      shift; docker logs "${@:---tail 100}" "$APP" ;;
+  py)        shift; runner "$@" ;;
   status)    "${COMPOSE[@]}" ps ;;
   sh)        docker exec -it "$APP" sh ;;
   all)
