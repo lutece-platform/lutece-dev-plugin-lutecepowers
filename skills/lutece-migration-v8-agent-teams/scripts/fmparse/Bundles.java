@@ -131,7 +131,7 @@ class Bundles
                 if ( d < bestDistance ) { bestDistance = d; best = candidate; }
             }
         }
-        return best != null && bestDistance <= Math.max( 2, key.length( ) / 8 ) ? " (did you mean '" + best + "'?)" : "";
+        return best != null && bestDistance <= Math.max( 2, key.length( ) / 8 ) ? " (nearest key by spelling: '" + best + "', check it means the same before using it)" : "";
     }
 
     /** Levenshtein distance, to tell a typo from an absent key. */
