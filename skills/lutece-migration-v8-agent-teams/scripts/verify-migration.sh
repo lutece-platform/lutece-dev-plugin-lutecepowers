@@ -1092,7 +1092,11 @@ check_grep "TS08" 'org\.springframework\.mock\.web' "src/test/" "FAIL" "Spring m
 # The reports are the only evidence. No report means the tests were never run, which is not a pass.
 TS09_MATCHES=""
 if [ ! -d "src/test/" ]; then
-    emit "TS09" "PASS" "Test results (no tests in this project)" 0
+    if [ -n "$(find src/java src/main/java -name '*.java' 2>/dev/null | head -1)" ]; then
+        emit "TS09" "WARN" "No unit test at all: nothing proves the Java of this project outside a bench (a library has no bench)" 1
+    else
+        emit "TS09" "PASS" "Test results (no Java, no tests)" 0
+    fi
 elif [ ! -d "target/surefire-reports" ]; then
     emit "TS09" "FAIL" "Test results NOT EVALUATED: no target/surefire-reports. Run mvn lutece:exploded antrun:run -Dlutece-test-hsql test (plain mvn test has no webapp config nor database: every CDI test fails to start); BUILD SUCCESS alone proves nothing, the parent POM sets testFailureIgnore=true" 1
 else
