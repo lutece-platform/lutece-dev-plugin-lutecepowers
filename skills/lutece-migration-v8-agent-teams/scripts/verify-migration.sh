@@ -784,7 +784,7 @@ if [ -d "webapp/" ]; then
 fi
 COUNT=0; [ -n "$JS02_MATCHES" ] && COUNT=$(echo "$JS02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS02" "PASS" "No JSP scriptlets" 0
-else emit "JS02" "FAIL" "Old JSP scriptlets -> EL expressions" "$COUNT" "$JS02_MATCHES"; fi
+else emit "JS02" "FAIL" "Old JSP scriptlets -> EL expressions; a JSP writing its own <head> gets the base href from AdminHeader.jsp, not from a scriptlet" "$COUNT" "$JS02_MATCHES"; fi
 
 # JS03: an EL call written with the class name resolves only static methods (StaticFieldELResolver), so an
 # instance method fails at runtime with MethodNotFoundException while everything compiled. A JspBean called
@@ -796,6 +796,17 @@ fi
 COUNT=0; [ -n "$JS03_MATCHES" ] && COUNT=$(echo "$JS03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "JS03" "PASS" "EL calls a bean by its CDI name" 0
 else emit "JS03" "FAIL" "EL call by class name resolves only static methods (use the bean name)" "$COUNT" "$JS03_MATCHES"; fi
+
+# JS05: an admin JSP writing its own HTML. A v8 admin JSP is an entry point (errorPage, header, processController,
+# footer); the screen is a template the bean renders, where the macros, the i18n, the token and the scanner apply.
+# Markup written in a JSP escapes all of them (labels pointing at missing ids, v5 classes, no token).
+JS05_MATCHES=""
+if [ -d "webapp/jsp/admin" ]; then
+    JS05_MATCHES=$(grep -rnE "<(form|table|div|input|select|textarea|html|body|button|label|ul|p|h[1-6])[ >]" webapp/jsp/admin --include="*.jsp" 2>/dev/null | awk -F: '!seen[$1]++ {print $1": writes its own HTML (line "$2"): move the markup to a template rendered by a @View"}') || JS05_MATCHES=""
+fi
+COUNT=0; [ -n "$JS05_MATCHES" ] && COUNT=$(echo "$JS05_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JS05" "PASS" "Admin JSPs are entry points, the markup lives in templates" 0
+else emit "JS05" "FAIL" "Admin JSP writing its own HTML: move it to a template rendered by the bean" "$COUNT" "$JS05_MATCHES"; fi
 
 # JS04: an admin JSP driving a bean that is not a @Controller. v8 dispatches views and actions through
 # processController() on one JSP per controller, and the automatic CSRF filter only covers those actions: a legacy
