@@ -53,7 +53,7 @@ Both sides
   TD30 WARN  macro defined nowhere in the assembled webapp (INFO only in the --no-exploded fallback)
   TD32 WARN  icon name neither in tabler-icons.min.css nor an alias of the theme icon macro (BO icon.ftl aliases 40 FontAwesome names, FO cIcon none)
   TD35 WARN  stray text '" />' between tags (broken copy-paste)
-  TD36 INFO  literal words in title=/label=/home= or in a cTitle/cText/cInline body without #i18n{}
+  TD36 INFO  literal words in title=/label=/labelKey=/helpKey=/modalTitle=/home= or in a cTitle/cText/cInline body without #i18n{}
   TD43 WARN  a <script> looks up an element the template only emits under a condition: null, and the block dies
   TD44 WARN  link or form action to a jsp/ page the assembled webapp does not carry: a 404 on click
   TD48 WARN  offcanvas (@offcanvas, @cOffcanvas, class/data-bs-toggle offcanvas): content of the page -> @modal /
@@ -748,7 +748,7 @@ def check_common(text, findings, kind, know):
     no_script = strip_scripts(text)
     hits = [line_of(text, m.start()) for m in re.finditer(r"\"\s*/>", strip_markup(no_script))]
     add_grouped(findings, "TD35", "WARN", hits, "stray '\" />' after visible text between tags: broken copy-paste, the quote and slash show in the page")
-    hits = [line_of(text, m.start()) for m in re.finditer(r"\b(title|label|btnTitle|subtitle|legend|placeHolder)='([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ'?!.]+)+)'", text) if "#i18n" not in m.group(2) and "${" not in m.group(2)]
+    hits = [line_of(text, m.start()) for m in re.finditer(r"\b(title|label|labelKey|helpKey|modalTitle|btnTitle|subtitle|legend|placeHolder)='([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ']+(?:\s+[A-Za-zÀ-ÿ'?!.]+)+)'", text) if "#i18n" not in m.group(2) and "${" not in m.group(2)]
     hits += [line_of(text, m.start()) for m in re.finditer(r"\bhome='([A-Za-zÀ-ÿ][^'$#]*)'", text)]
     add_grouped(findings, "TD36", "INFO", hits, "literal words in a label attribute without #i18n{}")
     hits = [line_of(text, m.start()) for m in re.finditer(r"params='[^']*style=", text)]
