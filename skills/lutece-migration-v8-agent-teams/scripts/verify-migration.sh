@@ -793,6 +793,11 @@ I18N02_MATCHES=""
 if [ -d "src/java" ]; then
     BUNDLE=$(find src/java -name "*_messages.properties" 2>/dev/null | head -1)
     PLUGIN=$(basename "${BUNDLE:-}" 2>/dev/null | sed 's/_messages.properties//')
+    # A module's keys are module.<plugin>.<module>.*: I18nService reads them from plugins/<plugin>/modules/<module>/resources.
+    # Its bare <module>.* keys belong to the plugin of that name, whose bundle this project does not carry.
+    if [[ "${BUNDLE:-}" =~ /plugins/([a-z0-9]+)/modules/([a-z0-9]+)/resources/ ]]; then
+        PLUGIN="module\.${BASH_REMATCH[1]}\.${BASH_REMATCH[2]}"
+    fi
     if [ -n "$PLUGIN" ] && [ -n "$BUNDLE" ]; then
         DECLARED=$(mktemp); ASKED=$(mktemp)
         SCRIPT_DIR="$SCRIPT_DIR" python3 -c 'import glob, os, sys; sys.path.insert(0, os.environ["SCRIPT_DIR"]); from bundles import keys; print("\n".join(k for f in glob.glob("src/java/**/*_messages*.properties", recursive=True) for k in keys(f)))' | LC_ALL=C sort -u > "$DECLARED"
@@ -805,7 +810,7 @@ if [ -d "src/java" ]; then
             | grep -oE "'$PLUGIN\.[A-Za-z0-9_.-]+'" | tr -d "'" | sed -E "s/^$PLUGIN\.//" >> "$ASKED"
         I18N02_MATCHES=$(sort -u "$ASKED" | while read -r k; do
             [ -n "$k" ] || continue
-            grep -qxF "$k" "$DECLARED" || echo "$PLUGIN.$k: asked for by a template, a message constant, the plugin descriptor or a right/portlet type row, declared in no bundle"
+            grep -qxF "$k" "$DECLARED" || echo "${PLUGIN//\\/}.$k: asked for by a template, a message constant, the plugin descriptor or a right/portlet type row, declared in no bundle"
         done)
         rm -f "$DECLARED" "$ASKED"
     fi
