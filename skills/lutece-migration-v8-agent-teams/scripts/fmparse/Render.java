@@ -247,7 +247,7 @@ public class Render
         {
             ws( );
             char c = s.charAt( i );
-            if ( c == '{' ) return object( );
+            if ( c == '{' ) return typed( object( ) );
             if ( c == '[' ) return array( );
             if ( c == '"' ) return string( );
             if ( s.startsWith( "true", i ) ) { i += 4; return Boolean.TRUE; }
@@ -257,6 +257,18 @@ public class Render
             while ( i < s.length( ) && "+-0123456789.eE".indexOf( s.charAt( i ) ) >= 0 ) i++;
             String num = s.substring( start, i );
             return num.contains( "." ) || num.contains( "e" ) || num.contains( "E" ) ? (Object) Double.parseDouble( num ) : (Object) Long.parseLong( num );
+        }
+
+        /** A {"$date": "yyyy-MM-dd[THH:mm:ss]"} object becomes a java.util.Date, so a template's ?date / ?is_date branch renders offline. */
+        static Object typed( Map<String, Object> m )
+        {
+            if ( m.size( ) == 1 && m.get( "$date" ) instanceof String )
+            {
+                String v = (String) m.get( "$date" );
+                java.time.LocalDateTime t = v.contains( "T" ) ? java.time.LocalDateTime.parse( v ) : java.time.LocalDate.parse( v ).atStartOfDay( );
+                return java.util.Date.from( t.atZone( java.time.ZoneId.systemDefault( ) ).toInstant( ) );
+            }
+            return m;
         }
 
         Map<String, Object> object( )

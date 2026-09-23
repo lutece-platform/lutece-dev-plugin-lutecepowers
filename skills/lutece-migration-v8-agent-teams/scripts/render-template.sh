@@ -3,6 +3,7 @@
 # Usage: render-template.sh [project_root] [template ...]
 #   template  path relative to webapp/WEB-INF/templates (default: every admin and skin template of the project)
 # Model: every variable a template reads is empty unless .migration/render/<path with / as _>.json defines it
+# ({"$date": "yyyy-MM-dd"} is a date, so ?date and ?is_date branches render)
 # (a JSON object: strings, numbers, booleans, lists, nested objects). Output goes to .migration/render/.
 # Proves the macro calls resolve, their arguments are declared (the core macros print an HTML warning comment
 # for a wrong argument, counted as wrongArguments) and the empty branches render. The #i18n keys of the output are
