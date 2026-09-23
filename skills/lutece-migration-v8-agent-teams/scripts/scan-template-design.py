@@ -513,7 +513,9 @@ def vendored_libraries(root):
 def check_admin(text, findings, kind, opened_in_iframe, know):
     """Back-office rules on a screen template (not an e-mail body)."""
     for offset, body in blocks(text, "table"):
-        if re.search(ACTION_ICONS, body):
+        rows = [m.group(0) for m in re.finditer(r"<#list\b.*?</#list>", body, flags=re.S)]
+        per_row = any(len(re.findall(r"<@(aButton|button)\b", row)) >= 2 or re.search(r"<@aButton\b[^>]*href=['\"]\$\{", row) for row in rows)
+        if re.search(ACTION_ICONS, body) or per_row:
             add(findings, "TD01", "WARN", line_of(text, offset), "entity rows with edit/delete actions rendered in a @table: @manageFeature is the list layout")
     if "<@empty" not in text:
         local = defined_names(text)
