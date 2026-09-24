@@ -155,6 +155,28 @@ if [ -f "$FINAL/WEB-INF/conf/plugins/search-solr.properties" ] && [ ! -f "$FINAL
     "${E2E_SOLR_CORE:-lutece}" > "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties"
   echo ">> solr address overridden on the v7 leg: http://solr:8983/solr/${E2E_SOLR_CORE:-lutece}"
 fi
+# The v7 image runs Java 11 (class files up to version 55). A version range of the v7 artefact can resolve to a v8
+# release built for Java 17: the site then fails to start on UnsupportedClassVersionError, far from the cause. Named
+# here with the pin to add (E2E_V7_DEP_PINS), before any container starts.
+NEWER=$(python3 - "$FINAL/WEB-INF/lib" <<'PYJVM'
+import glob, os, struct, sys, zipfile
+for jar in sorted(glob.glob(os.path.join(sys.argv[1], "*.jar"))):
+    try:
+        with zipfile.ZipFile(jar) as z:
+            names = [n for n in z.namelist() if n.endswith(".class") and not n.startswith("META-INF/") and not n.endswith("module-info.class")]
+            major = max((struct.unpack(">H", z.read(n)[6:8])[0] for n in names[:20]), default=0)
+    except (zipfile.BadZipFile, OSError):
+        continue
+    if major > 55:
+        print("%s (class version %d, Java %d)" % (os.path.basename(jar), major, major - 44))
+PYJVM
+)
+if [ -n "$NEWER" ]; then
+  echo "gen-site7.sh: the v7 site carries artefacts built for a newer Java than its Java 11 image, it cannot start:" >&2
+  echo "$NEWER" | sed 's/^/  /' >&2
+  echo "  pin their v7 versions in e2e.conf, E2E_V7_DEP_PINS=groupId:artifactId:version,... (the versions the v7 site of the parent plugin runs)" >&2
+  exit 1
+fi
 ( cd "$FINAL" && jar -cf ../lutece.war . )
 echo ">> $(du -h "$SITE/target/lutece.war" | cut -f1) $SITE/target/lutece.war"
 # What run.sh compare needs to hand the v7 database to the v8 site: the component names and versions the v7 site
