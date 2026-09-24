@@ -405,6 +405,11 @@ class Knowledge:
                 self.plugins.update(collect_macros(repo))
         self.local = collect_macros(os.path.join(root, "webapp/WEB-INF/templates"))
         self.rich_macros, self.rich_files = rich_templates(os.path.join(root, "webapp/WEB-INF/templates"))
+        core_macros = set(collect_macros(os.path.join(REFERENCES, "lutece-core", "webapp/WEB-INF/templates"))) | set(self.bo) | set(self.fo)
+        for base in [os.path.join(w, "WEB-INF/templates") for w in self.webapps] + glob.glob(os.path.join(REFERENCES, "*", "webapp/WEB-INF/templates")):
+            if os.path.isdir(base) and os.path.realpath(base) != os.path.realpath(os.path.join(root, "webapp/WEB-INF/templates")):
+                macros, _ = rich_templates(base)
+                self.rich_macros |= macros - core_macros
         self.uncloned = uncloned_dependencies(root)
         self.icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", read(TABLER_CSS))) if os.path.isfile(TABLER_CSS) else set()
         self.bo_icons = self.icons | icon_aliases(os.path.join(BO_MACRO_DIR, "components/icon/icon.ftl"))
