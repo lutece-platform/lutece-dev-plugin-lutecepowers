@@ -26,9 +26,11 @@ Step vocabulary (one key per step):
                                    stored variable), not_expect_var: name, min: n (numeric lower bound),
                                    contains/not_contains: text (a substring of the stored value)
   expect_dom: {selector: ..., count: n | min: n | contains: text | not_contains: text | attr: name, var: v | not_var: v
-               | visible: true|false}
+               | visible: true|false | on_top: true}
                                    state read on the screen (attr compares an attribute of the first match with a variable;
-                                   visible judges whether the user sees the first match, whatever hides it)
+                                   visible judges whether the user sees the first match, whatever hides it;
+                                   on_top: the browser paints the first match itself at its centre, no header,
+                                   overlay or other layer drawn over it, shadow roots included)
   dom_set: {var: name, selector: ..., attr: name | text}   store an attribute (or the text) of the first match
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
                                    {subject: text} restricts to a subject, {contains: text} to a text of the message,
@@ -578,6 +580,20 @@ def run_step(page, step, vars_, record):
             except AssertionError:
                 raise AssertionError("%s: %s, expected %s" % (arg["selector"], "hidden" if arg["visible"] else "visible",
                                                              "visible" if arg["visible"] else "hidden")) from None
+        if arg.get("on_top"):
+            assert n, "%s: no element" % arg["selector"]
+            cover = loc.first.evaluate("""e => {
+                const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+                let hit = document.elementFromPoint(x, y);
+                while (hit && hit.shadowRoot) {
+                    const inner = hit.shadowRoot.elementFromPoint(x, y);
+                    if (!inner || inner === hit) break;
+                    hit = inner;
+                }
+                if (hit && (hit === e || e.contains(hit))) return '';
+                return hit ? hit.tagName.toLowerCase() + (hit.id ? '#' + hit.id : '') + '.' + String(hit.className).split(' ').join('.') : 'nothing';
+            }""")
+            assert not cover, "%s: covered by %s at its centre, the user does not see it" % (arg["selector"], cover)
         if "count" in arg:
             assert n == int(arg["count"]), "%s: %d element(s), expected %s" % (arg["selector"], n, arg["count"])
         if "min" in arg:
