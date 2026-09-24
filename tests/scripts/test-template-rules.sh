@@ -198,6 +198,15 @@ expect "JX10: both the return type and the entity are reported" 2 "$(cd "$J" && 
 printf 'import jakarta.ws.rs.GET;\n@Path( "x" )\npublic class XRest\n{\n    @GET\n    public Response one( ) throws Exception\n    {\n        return Response.ok( MAPPER.writeValueAsString( new Point( ) ) ).build( );\n    }\n}\n' > "$J/src/java/x/rs/XRest.java"
 expect "JX10: the object written with an ObjectMapper passes" 1 "$(vm JX10 PASS)"
 rm -rf "$J/src/java/x/rs"
+mkdir -p "$J/src/java/x/service"
+printf 'import fr.paris.lutece.plugins.workflowcore.service.state.IStateService;\npublic class XIndexer\n{\n    @Inject\n    private IStateService _stateService;\n}\n' > "$J/src/java/x/service/XIndexer.java"
+[ -f "$J/pom.xml" ] && cp "$J/pom.xml" "$T/pom.saved"
+printf '<project><artifactId>module-x</artifactId><dependencies><dependency><artifactId>plugin-appointment</artifactId></dependency></dependencies></project>\n' > "$J/pom.xml"
+expect "CD07: workflow service injected, plugin-workflow absent from the pom" 1 "$(vm CD07 FAIL)"
+printf '<project><artifactId>module-x</artifactId><dependencies><dependency><artifactId>plugin-workflow</artifactId></dependency></dependencies></project>\n' > "$J/pom.xml"
+expect "CD07: plugin-workflow declared" 1 "$(vm CD07 PASS)"
+rm -f "$J/pom.xml"; [ -f "$T/pom.saved" ] && mv "$T/pom.saved" "$J/pom.xml"
+rm -rf "$J/src/java/x/service"
 rm -rf "$J/webapp"
 rm -f "$J/src/java/x/web/XCtl.java"
 M="$T/module"
@@ -207,5 +216,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
 exit $fail

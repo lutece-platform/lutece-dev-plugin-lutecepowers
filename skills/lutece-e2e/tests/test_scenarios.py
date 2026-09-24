@@ -25,8 +25,10 @@ Step vocabulary (one key per step):
   sql: {query: ..., expect: v}     the first cell must equal expect; variants: not_expect: v, expect_var: name (equals a
                                    stored variable), not_expect_var: name, min: n (numeric lower bound),
                                    contains/not_contains: text (a substring of the stored value)
-  expect_dom: {selector: ..., count: n | min: n | contains: text | not_contains: text | attr: name, var: v | not_var: v}
-                                   state read on the screen (attr compares an attribute of the first match with a variable)
+  expect_dom: {selector: ..., count: n | min: n | contains: text | not_contains: text | attr: name, var: v | not_var: v
+               | visible: true|false}
+                                   state read on the screen (attr compares an attribute of the first match with a variable;
+                                   visible judges whether the user sees the first match, whatever hides it)
   dom_set: {var: name, selector: ..., attr: name | text}   store an attribute (or the text) of the first match
   mail: {to: addr, min: n}         at least n mails to that address reached the bench's SMTP sink (Mailpit);
                                    {subject: text} restricts to a subject, {contains: text} to a text of the message,
@@ -106,6 +108,7 @@ import string
 
 import pytest
 import yaml
+from playwright.sync_api import expect
 
 import lutece
 
@@ -122,6 +125,8 @@ ORACLE = STATE_ORACLE + WEAK_ORACLE
 NEUTRAL = ("goto", "expect_ok", "shot", "expect_url", "sql_set", "set", "wait", "dom_set")
 CLICK_MUTATION = re.compile(r"Do[A-Z]|action|button|submit|Unassign|Remove|Move", re.I)
 URL_LIKE = re.compile(r"\.jsp\b|https?://|[?&][a-z_]+=", re.I)
+HIDING_MARKUP = re.compile(r"\[hidden\]|\[style\*?=[^\]]*(display|none|block)", re.I)
+"""A selector that reads how the markup hides an element: v7 hides with a style, v8 with the hidden attribute."""
 
 
 def validate(sc):
@@ -132,6 +137,10 @@ def validate(sc):
     for i, (k, arg) in enumerate(steps):
         if k == "expect_text" and isinstance(arg, str) and URL_LIKE.search(arg):
             errors.append("step %d expect_text asserts on a url or a JSP name (%r): assert on what the page says, not where it is" % (i, arg))
+        if k == "expect_dom" and isinstance(arg, dict):
+            sel = arg.get("selector")
+            if any(HIDING_MARKUP.search(str(v)) for v in (sel.values() if isinstance(sel, dict) else [sel])):
+                errors.append("step %d expect_dom reads how the markup hides an element (%r): judge what the user sees with visible: true|false" % (i, sel))
         if k in STATE_ORACLE:
             unproven = False
         if k == "sql_exec" and unproven:
@@ -555,6 +564,19 @@ def run_step(page, step, vars_, record):
     elif key == "expect_dom":
         loc = page.locator(arg["selector"])
         n = loc.count()
+        # `visible` judges what the user sees, whatever hides it (a hidden attribute, a display:none style, a
+        # collapsed parent): an oracle on the markup that hides would pass or fail with the markup, not the screen.
+        # It waits for an animation (a jQuery fadeIn) to end; the element has to exist either way.
+        if "visible" in arg:
+            assert n, "%s: no element" % arg["selector"]
+            try:
+                if arg["visible"]:
+                    expect(loc.first).to_be_visible(timeout=5000)
+                else:
+                    expect(loc.first).to_be_hidden(timeout=5000)
+            except AssertionError:
+                raise AssertionError("%s: %s, expected %s" % (arg["selector"], "hidden" if arg["visible"] else "visible",
+                                                             "visible" if arg["visible"] else "hidden")) from None
         if "count" in arg:
             assert n == int(arg["count"]), "%s: %d element(s), expected %s" % (arg["selector"], n, arg["count"])
         if "min" in arg:

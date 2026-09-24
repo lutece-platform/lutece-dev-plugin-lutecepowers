@@ -124,6 +124,7 @@ Rules in `patterns/persistence-patterns.md`: the API only, the provider of the c
 | CD04 | FAIL | commons.fileupload | `org\.apache\.commons\.fileupload` | *.java |
 | CD05 | WARN | Constructor self-registration (lazy CDI bean) | `registerIndexer\|registerCacheableService\|registerProvider` in files without `@Observes @Initialized` | *.java |
 | CD06 | FAIL | `@Observes` on an event the publishers fire only with `fireAsync()`: the observer is never called | firing sites (`select( X.class ).fireAsync(`, `Event<X>` fields) in the project and the reference clones vs `@Observes X` | *.java |
+| CD07 | FAIL | `@Inject` of a library interface whose only implementation is in a plugin the pom does not declare (workflowcore services → plugin-workflow): v8 resolves it at deployment, the site does not start (WELD-001408) | `import fr.paris.lutece.plugins.workflowcore.service.*` + `@Inject` of that type, no `plugin-workflow`/`module-workflow-*` in pom.xml | *.java |
 
 ## MVC / New Patterns (MV) — v2 additions
 

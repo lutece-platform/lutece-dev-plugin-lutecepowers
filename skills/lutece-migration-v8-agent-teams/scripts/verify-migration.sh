@@ -468,6 +468,33 @@ fi
 COUNT=0; [ -n "$CD06_MATCHES" ] && COUNT=$(echo "$CD06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "CD06" "PASS" "No synchronous observer of an event only fired asynchronously" 0
 else emit "CD06" "FAIL" "@Observes on an event only fired with fireAsync(): never called (use @ObservesAsync)" "$COUNT" "$CD06_MATCHES"; fi
+
+# CD07: an @Inject of a library interface whose only implementation lives in a plugin the pom does not bring. v7
+# looked the bean up by name when used; v8 resolves every injection point at deployment, so a site without that
+# plugin does not start at all (WELD-001408 Unsatisfied dependencies).
+CD07_MATCHES=""
+if [ -d src/java ] && [ -f pom.xml ]; then
+    CD07_MATCHES=$(python3 - <<'PY'
+import glob, re
+PROVIDERS = {"fr.paris.lutece.plugins.workflowcore.service.": ("plugin-workflow", r"<artifactId>(plugin-workflow|module-workflow-[\w-]+)</artifactId>")}
+pom = open("pom.xml", encoding="utf-8", errors="replace").read()
+own = (re.search(r"</parent>.*?<artifactId>([^<]+)</artifactId>", pom, re.S) or re.search(r"<artifactId>([^<]+)</artifactId>", pom)).group(1)
+for f in sorted(glob.glob("src/java/**/*.java", recursive=True)):
+    t = open(f, encoding="utf-8", errors="replace").read()
+    for package, (plugin, brought) in PROVIDERS.items():
+        if own == plugin or re.search(brought, pom) or glob.glob("src/java/" + package.rsplit(".service.", 1)[0].replace(".", "/") + "/**/*.java", recursive=True):
+            continue
+        for m in re.finditer(r"^import\s+(%s[\w.]*\.([A-Z]\w*))\s*;" % re.escape(package), t, re.M):
+            simple = m.group(2)
+            use = re.search(r"@Inject\b(?:\s+@\w+(?:\([^)]*\))?)*\s+(?:(?:private|protected|public|final)\s+)*%s\s+\w+" % simple, t)
+            if use:
+                print("%s:%d: @Inject %s, implemented by %s, which the pom does not declare" % (f, t[:use.start()].count("\n") + 1, simple, plugin))
+PY
+) || CD07_MATCHES=""
+fi
+COUNT=0; [ -n "$CD07_MATCHES" ] && COUNT=$(echo "$CD07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "CD07" "PASS" "Every injected library service comes with the plugin that implements it" 0
+else emit "CD07" "FAIL" "@Inject of a service only a plugin absent from the pom implements: without it the site does not deploy (declare the plugin, or Instance<>)" "$COUNT" "$CD07_MATCHES"; fi
 echo ""
 
 # ─── MVC / New Patterns (v2 additions) ──────────────────
