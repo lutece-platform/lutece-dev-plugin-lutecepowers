@@ -400,6 +400,14 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/token"):
             return self.send(200, json.dumps({"access_token": "e2e-token", "token_type": "Bearer",
                                               "expires_in": 3600}), "application/json")
+        # The v3 referential of the attribute keys (AttributeSearchResponse of library-identitybusiness): what an
+        # identity picker offers the agent to choose from.
+        if path.endswith("/referential/attributes"):
+            keys = [("family_name", "Nom de famille"), ("first_name", "Prénom"), ("birthdate", "Date de naissance"),
+                    ("email", "Email"), ("mobile_phone", "Téléphone portable")]
+            return self.send(200, json.dumps({"status": {"http_code": 200, "status": "OK"},
+                                              "attributeKeys": [{"name": n, "keyName": k, "description": n}
+                                                                for k, n in keys]}), "application/json")
         guid = self.query().get("connection_id") or self.query().get("customer_id") or PRO_GUID
         return self.send(200, json.dumps({
             "identity": {"connection_id": guid, "customer_id": guid,
