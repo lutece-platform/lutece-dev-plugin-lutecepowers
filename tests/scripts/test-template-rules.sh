@@ -174,6 +174,13 @@ printf '@Controller( controllerJsp = "X.jsp", controllerPath = "jsp/admin/plugin
 expect "MV07: controller path with its slash" 1 "$(vm MV07 PASS)"
 printf '@Controller( controllerJsp = "X.jsp", controllerPath = XJspBean.CONTROLLER_PATH, right = "X" )\nclass XJspBean {\n    public static final String CONTROLLER_PATH = "jsp/admin/plugins/x";\n}\n' > "$J/src/java/x/web/XCtl.java"
 expect "MV07: controller path through a constant" 1 "$(vm MV07 FAIL)"
+mkdir -p "$J/webapp/WEB-INF/plugins" "$J/webapp/themes/shared/plugins/x/images"
+touch "$J/webapp/themes/shared/plugins/x/images/x.svg"
+printf '<plug-in><icon-url>themes/shared/plugins/x/iamges/x.svg</icon-url></plug-in>\n' > "$J/webapp/WEB-INF/plugins/x.xml"
+expect "WB08: descriptor icon path mistyped, image shipped elsewhere" 1 "$(vm WB08 WARN)"
+printf '<plug-in><icon-url>themes/shared/plugins/x/images/x.svg</icon-url><icon-url>images/admin/skin/feature_default_icon_e2e.png</icon-url></plug-in>\n' > "$J/webapp/WEB-INF/plugins/x.xml"
+expect "WB08: icon shipped at its path" 1 "$(vm WB08 PASS)"
+rm -rf "$J/webapp"
 rm -f "$J/src/java/x/web/XCtl.java"
 M="$T/module"
 mkdir -p "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/resources" "$M/src/java/fr/paris/lutece/plugins/wf/modules/x/web"
@@ -182,5 +189,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, CD06, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, CD06, JS04, JS07, fix-button-colours"
 exit $fail

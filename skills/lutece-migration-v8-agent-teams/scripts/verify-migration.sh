@@ -1138,12 +1138,38 @@ for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
 PY
 ) || WB07_MATCHES=""
 fi
+# WB08: an <icon-url> of the descriptor naming an image no webapp carries (the project, the assembled site, the core)
+# while the project ships an image of that name elsewhere: a mistyped path, the plugin shows the generic icon. An icon
+# no webapp carries at all (a v7 default) is left alone: the core falls back to apps.svg.
+WB08_MATCHES=""
+if [ -d "webapp/WEB-INF/plugins" ]; then
+    WB08_MATCHES=$(python3 - <<'PY'
+import glob, os, re
+roots = ["webapp"] + [d for d in glob.glob("target/*/") if os.path.isdir(os.path.join(d, "WEB-INF"))]
+roots.append(os.path.expanduser("~/.lutece-references/lutece-core/webapp"))
+for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
+    text = open(f, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"<(?:feature-)?icon-url>\s*([^<\s]+)\s*</", text):
+        path = m.group(1)
+        if "/" not in path or not re.search(r"\.(png|svg|gif|jpe?g|ico|webp)$", path, re.I):
+            continue
+        if not any(os.path.isfile(os.path.join(r, path.lstrip("/"))) for r in roots):
+            shipped = [os.path.relpath(p, "webapp") for p in glob.glob("webapp/**/" + os.path.basename(path), recursive=True)]
+            if shipped:
+                print("SHIPPED %s:%d: icon %s is carried by no webapp: the project ships it at %s" % (f, text[:m.start()].count("\n") + 1, path, shipped[0]))
+PY
+) || WB08_MATCHES=""
+fi
 COUNT=0; [ -n "$WB06_MATCHES" ] && COUNT=$(echo "$WB06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB06" "PASS" "Every admin feature declares its menu group" 0
 else emit "WB06" "FAIL" "admin-feature whose descriptor group differs from its install SQL: a reinstall moves it" "$COUNT" "$WB06_MATCHES"; fi
 COUNT=0; [ -n "$WB07_MATCHES" ] && COUNT=$(echo "$WB07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB07" "PASS" "Admin feature icons survive a reinstall" 0
 else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url> (core inconsistency with the DTD, reported upstream)" "$COUNT" "$WB07_MATCHES"; fi
+WB08_WARN=$(echo "$WB08_MATCHES" | sed -n 's/^SHIPPED //p')
+COUNT=0; [ -n "$WB08_WARN" ] && COUNT=$(echo "$WB08_WARN" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "WB08" "PASS" "Every descriptor icon the project ships is named by its path" 0
+else emit "WB08" "WARN" "Descriptor icon path the project does not ship while it ships that image elsewhere (a typo): the plugin shows the generic icon" "$COUNT" "$WB08_WARN"; fi
 echo ""
 
 # ST07: a production class whose name matches the surefire test patterns (Test*, *Test, *Tests, *TestCase).

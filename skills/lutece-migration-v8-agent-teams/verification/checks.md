@@ -292,6 +292,7 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | JS05 | FAIL | admin JSP writing its own HTML (`<form>`, `<table>`, `<div>`…): the screen belongs in a template rendered by a `@View` | markup tags in webapp/jsp/admin | *.jsp |
 | WB06 | FAIL | `<admin-feature>` whose `<feature-group>` differs from the group its install SQL gives: a reinstall rebuilds the right from the descriptor and moves it | (cross-file check) | plugins/*.xml |
 | WB07 | WARN | admin feature icon in `<feature-icon-url>`, which the core digester ignores (it reads `<icon-url>`): a reinstall loses the icon | (cross-file check) | plugins/*.xml |
+| WB08 | WARN | descriptor `<icon-url>` naming a path no webapp carries while the project ships that image elsewhere (a typo such as `iamges/`): the plugin shows the generic icon | (cross-file check) | plugins/*.xml |
 | ST07 | FAIL | production class named like a test (`Test*`, `*Test`, `*Tests`, `*TestCase`) under src/java: surefire collects it from WEB-INF/classes | file names | src/java |
 | PV01 | FAIL | pom version and plugin descriptor `<version>` differ | (cross-file check) | pom.xml, plugins/*.xml |
 | PV02 | FAIL | version not above the last released git tag: an upgraded site never runs the new upgrade scripts | `git tag` | pom.xml |
