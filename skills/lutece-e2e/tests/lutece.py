@@ -571,6 +571,9 @@ SERVER_ENTRY = re.compile(r"^\[\d+/\d+/\d+, [\d:]+ \w+\] \w+ \S+\s+([A-Z]) ")
 CORE_LOG_NOISE = tuple(re.compile(p) for p in (
     r'"this\._cache" is null',
     r"BaseUserPreferencesCacheService",
+    # The browser left the page while the server was still writing it (the next step navigated): the client closed
+    # the connection, nothing failed on the server's side.
+    r"java\.io\.IOException: Broken pipe",
 ))
 
 
