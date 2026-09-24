@@ -72,6 +72,8 @@ Both sides
   TD61 WARN  script or stylesheet (js/, css/, themes/, images/) the assembled webapp does not carry: a 404 on load
   TD63 WARN  text value (title, name, label, description, comment, message...) interpolated into a JS string literal
              without ?js_string: an apostrophe ends the string, the script dies, and the value is injected
+  TD65 WARN  default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 gives
+             the right side of ! a very low precedence, the expression reads x!(1 == 1) and fails at render time
   TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
              with another control of the template: the picker binds every match, a ghost input appears
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
@@ -162,6 +164,28 @@ def block_depth(text, index):
 
 
 JS_TEXT_FIELD = re.compile(r"^(?!id[A-Z_])(?:(?:title|name|label|description|comment|message|text|address|subject)|[a-z0-9]+(?:Title|Name|Label|Description|Comment|Message|Text|Address|Subject))$")
+
+
+DEFAULT_THEN_OPERATOR = re.compile(r"""[\w)\]]!(?!=)(?:\d+(?:\.\d+)?|'[^']*'|"[^"]*"|\[\]|\{\}|[A-Za-z_]\w*)\s*(?:==|!=|&&|\|\||<=|>=|[-+*/%<>]|\s(?:gt|gte|lt|lte)\b)""")
+"""A default value followed by an operator without parentheses: FreeMarker 2.3 gives the right side of `!` a very low
+precedence, so `x!1 == 1` reads `x!(1 == 1)` and `a && x!0 > 1` reads `a && x!(0 > 1)`."""
+
+
+def default_precedence(text):
+    """Line of each FreeMarker expression where a default value (x!d) is followed by an operator outside parentheses."""
+    hits = []
+    for region in re.finditer(r"\$\{[^}]*\}|<[#@][^>]*>", strip_scripts_js(text)):
+        expr = re.sub(r"\s*/?>$", "", region.group(0)) if region.group(0).startswith("<") else region.group(0)
+        for match in DEFAULT_THEN_OPERATOR.finditer(expr):
+            hits.append(line_of(text, region.start() + match.start()))
+    return hits
+
+
+def strip_scripts_js(text):
+    """Blank the JavaScript of inline scripts, keep the FreeMarker interpolations they carry, with offsets unchanged."""
+    def blank(match):
+        return re.sub(r"(\$\{[^}]*\})|[^\n]", lambda m: m.group(1) or " ", match.group(0))
+    return re.sub(r"<script\b[^>]*>.*?</script>", blank, text, flags=re.S | re.I)
 
 
 PICKER_TYPES = re.compile(r"\btype='(date|time|datetime|daterange|datetimerange)'")
@@ -803,6 +827,7 @@ def check_common(text, findings, kind, know):
         check_legacy_markup(text, findings, know, kind)
     for ident, line in picker_id_clashes(text):
         add(findings, "TD64", "WARN", line, "date/time field '%s' shares its id with another control of the template (@input and @select default the id to the name): the picker binds both and a ghost input appears -> give each control its own id" % ident)
+    add_grouped(findings, "TD65", "WARN", default_precedence(text), "default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 reads x!(1 == 1), the condition gets a number and the page fails with NonBooleanException -> (x!1) == 1, or <#assign> the value first")
     for expr, line in unescaped_js_strings(text):
         add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
