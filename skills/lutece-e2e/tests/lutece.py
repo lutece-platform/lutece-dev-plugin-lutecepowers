@@ -553,6 +553,9 @@ CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
     r"themes/shared/css/tabler-icons-filled\.min\.css",
     # _theme.ftl (LUT-33522) falls back to images/logo-footer.png for the header logo, a file the core does not ship.
     r"themes/skin/lutece/images/logo-footer\.png",
+    # The theme loads theme.js on every front page, which reads the global xssChars; page_frameset.html declares it,
+    # the minimal page of a site message (page_site_message.html) does not: every SiteMessage page logs it.
+    r"^xssChars is not defined$",
 ))
 
 
