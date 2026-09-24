@@ -23,12 +23,17 @@ NOISE_PARAMS = {"view", "action", "plugin_name", "token", "page_id", "portlet_ty
 
 
 def load(version):
+    """The results of one leg, each with the server-side causes causes.py found for it in that leg's own log."""
     rows = []
     d = A / version / "results"
+    f = A / version / "causes.json"
+    causes = json.loads(f.read_text()) if f.exists() else {}
     for f in sorted(d.glob("*.jsonl")) if d.exists() else []:
         for line in f.read_text().splitlines():
             if line.strip():
-                rows.append(json.loads(line))
+                r = json.loads(line)
+                r["causes"] = (causes.get(r["id"]) or {}).get("causes") or []
+                rows.append(r)
     return rows
 
 
@@ -67,10 +72,25 @@ INTERACTION = ("goto", "wait", "click", "click_if", "dblclick", "drag", "fill", 
 """Steps that drive the parcours without checking anything: a v7 scenario stopped on one never reached its oracle."""
 
 
+MISSING_PARAM = re.compile(r'required parameter "[^"]+" .*null/missing|was specified, but had null|NumberFormatException: null')
+"""A v7 failure caused by a request parameter the page needs and did not get."""
+
+
+def missing_param(r):
+    """The v7 cause of a failed scenario when it is a request parameter the page did not get: the scenario's url is
+    then not the one the real navigation sends (a tab link carries a context, an id...), or v7 had that defect."""
+    if r.get("suite") != "scenarios":
+        return ""
+    return next((c for c in r.get("causes") or [] if MISSING_PARAM.search(c)), "")
+
+
 def blocked(r):
-    """True when a failed scenario stopped on a parcours step, before any of its oracles judged the function."""
+    """True when a failed scenario stopped on a parcours step, before any of its oracles judged the function, or on
+    a request parameter the v7 page did not get."""
     if r.get("suite") != "scenarios":
         return False
+    if missing_param(r):
+        return True
     kind = r.get("failed_step_kind")
     return kind in INTERACTION if kind else "playwright._impl._errors" in (r.get("reason") or "")
 
@@ -191,7 +211,8 @@ def md(gs, unjudged=0):
         ids, r7, r8 = pairs[0]
         v = verdict(r7, r8)
         at = ("à l'étape %s %s" % (r7.get("failed_step"), r7.get("failed_step_kind"))) if r7 and r7.get("failed_step_kind") else "sur une étape du parcours"
-        detail = ("v7 arrêté %s, avant toute vérification : la fonction n'est pas comparée (écran v7 cassé en amont, ou "
+        detail = ("v7 en erreur faute d'un paramètre de requête (%s) : l'URL du scénario n'est pas celle de la navigation "
+                  "réelle, ou v7 avait ce défaut — la fonction n'est pas comparée" % missing_param(r7)[:120]) if v == "v7 bloqué" and missing_param(r7) else ("v7 arrêté %s, avant toute vérification : la fonction n'est pas comparée (écran v7 cassé en amont, ou "
                   "sélecteur propre à v8 à écrire {v7: …, v8: …}) — %s" % (at, reason(r7)[:120])) if v == "v7 bloqué" else ("v8 : " + reason(r8)[:140]) if reason(r8) else ("v7 : " + reason(r7)[:140]) if reason(r7) else (
             "type de page %s → %s" % (r7.get("kind"), r8.get("kind")) if v == "rendu différent" else
             "v7 non jugé : " + skip_note(r7)[:140] if v == "v8 seulement" else

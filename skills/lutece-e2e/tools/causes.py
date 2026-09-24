@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Server-side cause of each failed test: the exception lines logged in artifacts/logs/messages.log during the
-failed step's time window (the whole test's for a suite that does not record its steps) (workers run in parallel, so a cause is a candidate, not a proof; the JSP name, when
+"""Server-side cause of each failed test: the exception lines logged in artifacts/logs/messages.log (on the v7 leg
+of a comparison, E2E_VERSION=v7: the Tomcat log artifacts/logs7/catalina.out) during the failed step's time window (the whole test's for a suite that does not record its steps) (workers run in parallel, so a cause is a candidate, not a proof; the JSP name, when
 present in the block, confirms it). Prints one line per failed test and writes artifacts/causes.json."""
 import datetime
 import json
+import os
 import pathlib
 import re
 
@@ -11,6 +12,9 @@ E2E = pathlib.Path(__file__).resolve().parents[1]
 A = E2E / "artifacts"
 EXC = re.compile(r"((?:[a-zA-Z_$][\w$]*\.)+[A-Z]\w*(?:Exception|Error)\b[^\n]{0,160}|Error \d{3} : [^\n]{0,160})")
 TS = re.compile(r"^\[(\d+)/(\d+)/(\d+), (\d+):(\d+):(\d+):(\d+) UTC\]")
+ROOT = re.compile(r"root cause: ([^\n]{0,200})")
+"""The root cause the v7 core writes in the header of a Critical AppException, more telling than the wrapper."""
+TS7 = re.compile(r"^ ?(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) ")
 
 
 def block_time(b):
@@ -22,10 +26,28 @@ def block_time(b):
     return datetime.datetime(2000 + y, mo, d, h, mi, se, ms * 1000, tzinfo=datetime.timezone.utc).timestamp()
 
 
-def main():
+def block_time7(b):
+    """Epoch seconds of a catalina.out block of the v7 site (YYYY-MM-DD HH:MM:SS, the container's UTC clock)."""
+    m = TS7.match(b)
+    if not m:
+        return None
+    return datetime.datetime(*map(int, m.groups()), tzinfo=datetime.timezone.utc).timestamp()
+
+
+def server_blocks():
+    """(epoch, text) of each error block of the log of the server the suites just ran against."""
+    if os.environ.get("E2E_VERSION") == "v7":
+        f = A / "logs7" / "catalina.out"
+        log = f.read_text(errors="replace") if f.exists() else ""
+        blocks = [(block_time7(b), b) for b in re.split(r"\n(?= ?\d{4}-\d\d-\d\d \d\d:\d\d:\d\d )", log)]
+        return [(t, b) for t, b in blocks if t and (" ERROR " in b[:80] or "Exception" in b[:400])]
     log = (A / "logs" / "messages.log").read_text(errors="replace") if (A / "logs" / "messages.log").exists() else ""
     blocks = [(block_time(b), b) for b in re.split(r"\n(?=\[\d+/\d+/\d+, )", log)]
-    blocks = [(t, b) for t, b in blocks if t and (" E " in b[:140] or "Exception" in b[:400])]
+    return [(t, b) for t, b in blocks if t and (" E " in b[:140] or "Exception" in b[:400])]
+
+
+def main():
+    blocks = server_blocks()
     rows = []
     for f in sorted((A / "results").glob("*.jsonl")) if (A / "results").exists() else []:
         rows += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
@@ -54,7 +76,7 @@ def main():
         causes = []
         for t, b in blocks:
             if t0 <= t <= t1:
-                m = EXC.search(b)
+                m = ROOT.search(b[:600]) or EXC.search(b)
                 if m:
                     tag = "[confirmed] " if any(k in b for k in marks) else ("[candidate] " if (not art or any(a in b for a in art)) else "[hors périmètre] ")
                     causes.append(tag + m.group(1).strip())
