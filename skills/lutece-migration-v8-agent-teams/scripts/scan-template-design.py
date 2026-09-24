@@ -74,6 +74,8 @@ Both sides
              without ?js_string: an apostrophe ends the string, the script dies, and the value is injected
   TD65 WARN  default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 gives
              the right side of ! a very low precedence, the expression reads x!(1 == 1) and fails at render time
+  TD66 WARN  ?url or ?url_path without a charset: Lutece sets no url_escaping_charset, the page fails at render time
+             -> ?url('UTF-8'), unless the template declares <#setting url_escaping_charset=...>
   TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
              with another control of the template: the picker binds every match, a ghost input appears
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
@@ -833,6 +835,8 @@ def check_common(text, findings, kind, know):
     for ident, line in picker_id_clashes(text):
         add(findings, "TD64", "WARN", line, "date/time field '%s' shares its id with another control of the template (@input and @select default the id to the name): the picker binds both and a ghost input appears -> give each control its own id" % ident)
     add_grouped(findings, "TD65", "WARN", default_precedence(text), "default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 reads x!(1 == 1), the condition gets a number and the page fails with NonBooleanException -> (x!1) == 1, or <#assign> the value first")
+    hits = [] if re.search(r"<#setting\s+url_escaping_charset", text) else [line_of(text, m.start()) for m in re.finditer(r"\?url(?:_path)?\b(?!\s*\()", re.sub(r"<#--.*?-->", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text, flags=re.S))]
+    add_grouped(findings, "TD66", "WARN", hits, "?url without a charset: Lutece's FreeMarker configuration sets no url_escaping_charset, so the built-in throws and the page fails -> ?url('UTF-8')")
     for expr, line in unescaped_js_strings(text):
         add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
