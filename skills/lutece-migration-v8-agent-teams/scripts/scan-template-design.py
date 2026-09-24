@@ -169,7 +169,7 @@ def block_depth(text, index):
     return opened - closed
 
 
-JS_TEXT_FIELD = re.compile(r"^(?!id[A-Z_])(?:(?:title|name|label|description|comment|message|text|address|subject)|[a-z0-9]+(?:Title|Name|Label|Description|Comment|Message|Text|Address|Subject))$")
+JS_TEXT_FIELD = re.compile(r"^(?!id[A-Z_])(?:(?:title|name|label|description|comment|message|text|address|subject|email|mail|login|cuid|guid|reference)|[a-z0-9]+(?:Title|Name|Label|Description|Comment|Message|Text|Address|Subject|Email|Mail|Login|Cuid|Guid|Reference))$")
 
 
 DEFAULT_THEN_OPERATOR = re.compile(r"""[\w)\]]!(?!=)(?:\d+(?:\.\d+)?|'[^']*'|"[^"]*"|\[\]|\{\}|[A-Za-z_]\w*)\s*(?:==|!=|&&|\|\||<=|>=|[-+*/%<>]|\s(?:gt|gte|lt|lte)\b)""")
@@ -1081,8 +1081,8 @@ def main():
             return 2
     pom = os.path.join(root, "pom.xml")
     jquery_declared = "library-theme-jquery" in read(pom) if os.path.isfile(pom) else False
-    admin_files = walk(root, ADMIN, ".html")
-    skin_files = walk(root, SKIN, ".html")
+    admin_files = walk(root, ADMIN, ".html") + walk(root, ADMIN, ".ftl")
+    skin_files = walk(root, SKIN, ".html") + walk(root, SKIN, ".ftl")
     iframe_targets = set()
     for rel in admin_files:
         for match in CALL.finditer(strip_comments(read(os.path.join(root, rel)))):
