@@ -83,7 +83,7 @@ Step vocabulary (one key per step):
 File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
 scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
 fragments, and the mechanical oracle rule applies to the expanded steps.
-Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), server_log_allow (regexes of server log errors the scenario provokes on purpose, reason in a comment: any other error the server logs during the scenario fails it), steps.
+Scenario keys: id, title (shown by the report), description (optional, `>-` block), req (Lutece right), anonymous, versions (optional, e.g. [v8]: skipped on the v7 leg of run.sh compare), locale (an Accept-Language such as de-DE, sent on every request of the scenario, http steps included: a locale-dependent defect is proven through the UI), viewport_shots (true: captures of the viewport only, for a scenario driving a responsive widget that a full-page capture resizes), ends_on (blank | error-page | truncated: the last screen is that on purpose, say why in description; otherwise such an ending fails the scenario), server_log_allow (regexes of server log errors the scenario provokes on purpose, reason in a comment: any other error the server logs during the scenario fails it), steps.
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
 Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for numeric keys), {{base}} and anything set by set/sql_set/dom_set.
@@ -346,6 +346,8 @@ def run_step(page, step, vars_, record):
         # negotiate a representation nobody asked for. This step issues the request the client would.
         method = (arg.get("method") or "GET").upper()
         headers = dict(arg.get("headers") or {})
+        if vars_.get("__locale"):
+            headers.setdefault("Accept-Language", vars_["__locale"])
         if arg.get("accept"):
             headers["Accept"] = arg["accept"]
         # `fresh` issues the request as a brand-new visitor: its own cookie jar, so the server opens a new
@@ -658,7 +660,7 @@ def test_scenario(bo, browser, request, record, sc):
         pytest.skip(lutece.DECLARED_SKIP + "not for %s: scenario declares versions %s" % (version, sc["versions"]))
     assert not sc.get("_invalid"), "scenario rejected by the oracle rule: " + "; ".join(sc["_invalid"])
     vars_ = {"rand": "".join(random.choices(string.ascii_lowercase + string.digits, k=6)), "rand_int": str(random.randint(10000, 999999)),
-             "base": lutece.BASE}
+             "base": lutece.BASE, "__locale": sc.get("locale") or ""}
     # Every page the scenario lands on is photographed: the before/after report puts the v7 and v8 pictures of
     # the same parcours side by side, and a green scenario without a picture proves nothing to a reader.
     # Coverage counts as proven only the pages an oracle stood behind: the navigations made since the last
