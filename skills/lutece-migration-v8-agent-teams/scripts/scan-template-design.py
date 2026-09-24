@@ -76,6 +76,8 @@ Both sides
              the right side of ! a very low precedence, the expression reads x!(1 == 1) and fails at render time
   TD66 WARN  ?url or ?url_path without a charset: Lutece sets no url_escaping_charset, the page fails at render time
              -> ?url('UTF-8'), unless the template declares <#setting url_escaping_charset=...>
+  TD67 WARN  an id the template's script looks up is emitted twice (explicit, or defaulted to the name by @cInput,
+             @cSelect, @input, @select): getElementById returns the first one, often a hidden field
   TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
              with another control of the template: the picker binds every match, a ghost input appears
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
@@ -206,6 +208,58 @@ def picker_id_clashes(text):
             seen.setdefault(ident.group(1), []).append((line_of(text, m.start()), bool(PICKER_TYPES.search(attrs))))
     return sorted(((ident, min(line for line, picker in hits if picker)) for ident, hits in seen.items()
                    if len(hits) > 1 and any(picker for _, picker in hits)), key=lambda kv: kv[1])
+
+
+REFERENCE_ID_MACROS = {"noScriptMessage"}
+
+
+def branch_path(text, offset):
+    """The <#if> branches enclosing an offset, as (offset of the <#if>, index of the branch) from the outermost."""
+    stack = []
+    for tag in re.finditer(r"<#(if|elseif|else)\b|</#if>", text[:offset]):
+        if tag.group(0) == "</#if>":
+            if stack:
+                stack.pop()
+        elif tag.group(1) == "if":
+            stack.append([tag.start(), 0])
+        elif stack:
+            stack[-1][1] += 1
+    return [tuple(branch) for branch in stack]
+
+
+def exclusive(path_a, path_b):
+    """True when two branch paths sit in different branches of one <#if>: both never render together."""
+    branches = dict(path_a)
+    return any(start in branches and branches[start] != index for start, index in path_b)
+
+
+def looked_up_id_clashes(text):
+    """(id, line of the lookup) of each id an inline script looks up by getElementById or querySelector('#id') while
+    the template emits it twice in branches that render together, explicitly or through the id @cInput, @cSelect,
+    @input and @select default to their name: the lookup gets the first element, which is not the one the script
+    means. The id of a macro that only references an element (@noScriptMessage) is not an emission."""
+    body = re.sub(r"<#--.*?-->", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text, flags=re.S)
+    emitted = {}
+    for m in re.finditer(r"""<(@?)([\w.]+)\b([^>]*?)\bid\s*=\s*(["'])([A-Za-z_][\w-]*)\4""", body):
+        if m.group(1) and m.group(2) in REFERENCE_ID_MACROS:
+            continue
+        emitted.setdefault(m.group(5), []).append(branch_path(body, m.start()))
+    for m in re.finditer(r"<@(cInput|cSelect|input|select)\b([^>]*)>", body):
+        attrs = m.group(2)
+        if re.search(r"\bid\s*=", attrs) or re.search(r"\btype='(radio|checkbox)'", attrs):
+            continue
+        name = re.search(r"\bname\s*=\s*'([A-Za-z_][\w-]*)'", attrs)
+        if name:
+            emitted.setdefault(name.group(1), []).append(branch_path(body, m.start()))
+    hits = {}
+    for script in re.finditer(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", body, flags=re.S | re.I):
+        for use in re.finditer(r"""(getElementById|querySelector)\s*\(\s*(["'])(#?)([A-Za-z_][\w-]*)\2""", script.group(1)):
+            if use.group(1) == "querySelector" and not use.group(3):
+                continue
+            paths = emitted.get(use.group(4), [])
+            if any(not exclusive(paths[i], paths[j]) for i in range(len(paths)) for j in range(i + 1, len(paths))):
+                hits.setdefault(use.group(4), line_of(text, script.start(1) + use.start()))
+    return sorted(hits.items(), key=lambda kv: kv[1])
 
 
 def unescaped_js_strings(text):
@@ -837,6 +891,10 @@ def check_common(text, findings, kind, know):
     add_grouped(findings, "TD65", "WARN", default_precedence(text), "default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 reads x!(1 == 1), the condition gets a number and the page fails with NonBooleanException -> (x!1) == 1, or <#assign> the value first")
     hits = [] if re.search(r"<#setting\s+url_escaping_charset", text) else [line_of(text, m.start()) for m in re.finditer(r"\?url(?:_path)?\b(?!\s*\()", re.sub(r"<#--.*?-->", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text, flags=re.S))]
     add_grouped(findings, "TD66", "WARN", hits, "?url without a charset: Lutece's FreeMarker configuration sets no url_escaping_charset, so the built-in throws and the page fails -> ?url('UTF-8')")
+    pickers = {ident for ident, _ in picker_id_clashes(text)}
+    for ident, line in looked_up_id_clashes(text):
+        if ident not in pickers:
+            add(findings, "TD67", "WARN", line, "the script looks up '%s', which the template emits twice (an explicit id, or the id @cInput/@cSelect/@input/@select default to the name, hidden fields included): the lookup gets the first one -> give each control its own id" % ident)
     for expr, line in unescaped_js_strings(text):
         add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
