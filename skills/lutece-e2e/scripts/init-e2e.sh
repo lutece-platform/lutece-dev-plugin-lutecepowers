@@ -86,10 +86,14 @@ cp "$SKILL/reference/DESIGN.md" "$E2E/DESIGN.md"
 echo "$SKILL" > "$E2E/.toolkit"
 [ -f "$E2E/README.md" ] || sed "s/@@NAME@@/$ARTIFACT/g" "$SKILL/templates/README.md.tpl" > "$E2E/README.md"
 # The bench is a local tool, never committed with the plugin: ignore the whole folder at the project root
-# (idempotent; a .gitignore that does not end with a newline would glue the entry to its last line).
+# (idempotent; a .gitignore that does not end with a newline would glue the entry to its last line). Same for
+# java.io.tmpdir/: the unit tests of a v8 project create it at the project root, the core's ehcache default
+# persistence directory being the literal relative path java.io.tmpdir/ehcache/.
 if [ -d "$DIR/.git" ] || git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
   [ -s "$DIR/.gitignore" ] && [ -n "$(tail -c1 "$DIR/.gitignore")" ] && echo >> "$DIR/.gitignore"
-  grep -qxF "e2e/" "$DIR/.gitignore" 2>/dev/null || echo "e2e/" >> "$DIR/.gitignore"
+  for entry in "e2e/" "java.io.tmpdir/"; do
+    grep -qxF "$entry" "$DIR/.gitignore" 2>/dev/null || echo "$entry" >> "$DIR/.gitignore"
+  done
 fi
 # Inside the bench too, for a checkout where the root rule is missing.
 [ -f "$E2E/.gitignore" ] || printf '.venv/\n__pycache__/\n*.pyc\nartifacts/\nharness/site/target/\nharness/site/pom.xml\nharness/site/webapp/WEB-INF/plugins/plugins.dat\n' > "$E2E/.gitignore"
