@@ -77,7 +77,8 @@ Step vocabulary (one key per step):
   click_if: <selector>             click when the element exists, else no-op (optional links)
   wait: <selector>                 wait for an element (off-canvas / ajax-loaded form) before filling it
   drag: {from: <selector>, to: <selector>}   press the mouse on the first match of `from`, move over `to`, release:
-                                   a selection made by dragging (several calendar slots at once)
+                                   a selection made by dragging (several calendar slots at once); an element drawn
+                                   with pointer-events: none (a calendar background event) is dragged over by position
   dblclick: <selector>             double-click the first match (a helper bound to dblclick: insert a marker)
 File keys: scenarios, and fragments (name: [steps]) that a step `use: <name>` inlines, for a parcours several
 scenarios share. Fragments are visible from every file of scenarios/ (the file's own win on a name clash), may use
@@ -305,7 +306,8 @@ def run_step(page, step, vars_, record):
     elif key == "drag":
         src, dst = page.locator(arg["from"]).first, page.locator(arg["to"]).first
         assert src.count() and dst.count(), "drag: nothing matches %s or %s on %s" % (arg["from"], arg["to"], lutece.normalize(page.url))
-        src.drag_to(dst)
+        inert = "e => getComputedStyle(e).pointerEvents === 'none'"
+        src.drag_to(dst, force=src.evaluate(inert) or dst.evaluate(inert))
     elif key == "type":
         for sel, val in arg.items():
             loc = page.locator(sel).first
