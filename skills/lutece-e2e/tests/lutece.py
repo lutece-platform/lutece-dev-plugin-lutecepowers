@@ -62,8 +62,9 @@ def url(path):
 
 def observe(page):
     """Attaches the observability collectors to a page: console errors and warnings, uncaught exceptions,
-    failed or 4xx/5xx requests, and server timing of navigations. Read them in page.obs."""
-    obs = {"console": [], "errors": [], "requests": [], "nav": [], "subs": []}
+    failed or 4xx/5xx requests, server timing of navigations, and the fetch/XHR calls that run an MVC view or action
+    (a screen that posts its action from a script). Read them in page.obs."""
+    obs = {"console": [], "errors": [], "requests": [], "nav": [], "subs": [], "xhr": []}
     page.obs = obs
 
     def on_console(msg):
@@ -77,6 +78,14 @@ def observe(page):
         req = resp.request
         if not req.is_navigation_request() and "/jsp/" in resp.url and resp.status < 400 and len(obs["subs"]) < 200:
             obs["subs"].append(resp.url[:200])
+        if req.resource_type in ("fetch", "xhr") and "/jsp/" in resp.url and resp.status < 400 and len(obs["xhr"]) < 200:
+            try:
+                raw = req.post_data_buffer
+                mvcs = mvc_names(raw.decode("latin-1") if raw else "")
+            except Exception:  # noqa: BLE001 - binary body
+                mvcs = []
+            if mvcs or re.search(r"[?&](action|view)=", resp.url):
+                obs["xhr"].append({"url": resp.url[:200], "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs})
         if req.is_navigation_request() and req.frame == page.main_frame:
             t = req.timing
             mvcs = []

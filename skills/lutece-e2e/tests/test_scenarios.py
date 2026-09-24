@@ -684,15 +684,16 @@ def test_scenario(bo, browser, request, record, sc):
 
 def _play(bo, sc, vars_, record):
     """Runs the steps of a scenario, credits the proven pages and checks how it ends."""
-    pending, seen = [], len(bo.obs.get("nav", []))
+    pending, seen, seen_xhr = [], len(bo.obs.get("nav", [])), len(bo.obs.get("xhr", []))
     for i, step in enumerate(sc["steps"]):
         lutece.reset_obs(bo)
         step_started = time.time()
         try:
             run_step(bo, step, vars_, record)
             navs = bo.obs.get("nav", [])
-            pending += [k for n in navs[seen:] if n["status"] < 400 for k in lutece.nav_keys(n)]
-            seen = len(navs)
+            xhrs = bo.obs.get("xhr", [])
+            pending += [k for n in navs[seen:] + xhrs[seen_xhr:] if n["status"] < 400 for k in lutece.nav_keys(n)]
+            seen, seen_xhr = len(navs), len(xhrs)
             if list(step)[0] in ORACLE:
                 proven = record.setdefault("proven", [])
                 proven.extend(k for k in dict.fromkeys(pending) if k not in proven)
