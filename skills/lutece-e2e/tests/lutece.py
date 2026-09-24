@@ -357,8 +357,8 @@ def aria(page):
 
 def fill_form(page, form, values=None, seed="e2e"):
     """Fills every visible field of a form with plausible values (overridable with values={name: value}), date and
-    time pickers (flatpickr, whose own input is hidden) through their API,
-    returns the names filled. Hidden fields, submit buttons and CSRF tokens are left untouched."""
+    time pickers (flatpickr, whose own input is hidden) and rich textareas (TinyMCE hides the textarea) through their
+    API, returns the names filled. Hidden fields, submit buttons and CSRF tokens are left untouched."""
     values = values or {}
     loc = page.locator(form).first
     assert loc.count(), "no form matches %s on %s" % (form, normalize(page.url))
@@ -375,6 +375,13 @@ def fill_form(page, form, values=None, seed="e2e"):
                 continue;
             }
             if (!el.name || el.disabled || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') continue;
+            const editor = el.tagName === 'TEXTAREA' && window.tinymce && el.id ? tinymce.get(el.id) : null;
+            if (editor) {
+                editor.setContent(values[el.name] !== undefined ? String(values[el.name]) : '<p>Description ' + stamp + '</p>');
+                editor.save();
+                done.push(el.name);
+                continue;
+            }
             if (el.offsetParent === null && el.type !== 'checkbox' && el.type !== 'radio') continue;
             const v = values[el.name];
             if (el.tagName === 'SELECT') {
