@@ -355,6 +355,19 @@ def aria(page):
     return ""
 
 
+def wait_editors(page, timeout=10000):
+    """Waits until every rich textarea of the page has a TinyMCE editor that finished starting: a value written while
+    the editor still starts is replaced by the empty content it loads. A page without TinyMCE returns at once; an
+    editor that never starts is left to the step, which then reports the field it could not fill."""
+    try:
+        page.wait_for_function("""() => !window.tinymce || [...document.querySelectorAll('textarea.richtext')].every(t => {
+            const ed = t.id ? tinymce.get(t.id) : null;
+            return ed && ed.initialized; })""", timeout=timeout)
+    except Exception as e:  # noqa: BLE001 - Playwright's TimeoutError, without importing Playwright here
+        if type(e).__name__ != "TimeoutError":
+            raise
+
+
 def fill_form(page, form, values=None, seed="e2e"):
     """Fills every visible field of a form with plausible values (overridable with values={name: value}), date and
     time pickers (flatpickr, whose own input is hidden) and rich textareas (TinyMCE hides the textarea) through their
@@ -362,6 +375,7 @@ def fill_form(page, form, values=None, seed="e2e"):
     values = values or {}
     loc = page.locator(form).first
     assert loc.count(), "no form matches %s on %s" % (form, normalize(page.url))
+    wait_editors(page)
     return loc.evaluate("""(form, [values, seed]) => {
         const done = [];
         const stamp = seed + '_' + Date.now().toString(36);

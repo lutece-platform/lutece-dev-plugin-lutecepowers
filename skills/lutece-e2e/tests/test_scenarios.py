@@ -325,6 +325,7 @@ def run_step(page, step, vars_, record):
             loc.click()
             loc.press_sequentially(str(val), delay=50)
     elif key == "fill":
+        lutece.wait_editors(page)
         for sel, val in arg.items():
             loc = page.locator(sel).first
             assert loc.count(), "nothing matches %s on %s" % (sel, lutece.normalize(page.url))
