@@ -354,7 +354,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith("/token"):
             return self.send(200, json.dumps({"access_token": "e2e-token", "token_type": "Bearer",
                                               "expires_in": 3600}), "application/json")
-        return self.send(200, json.dumps({"status": "OK", "id": _next("crm")}), "application/json")
+        # The acknowledgement of the notification store, as library-grubusiness reads it (NotifyGruResponse,
+        # @JsonRootName "acknowledge"): anything else fails the parsing and the task logs an error.
+        return self.send(200, json.dumps({"acknowledge": {"status": "received", "errors": [], "warnings": []}}), "application/json")
 
     # -- ANTS (rendez-vous passeport / CNI) -------------------------------
     def ants(self, method, path, body):
