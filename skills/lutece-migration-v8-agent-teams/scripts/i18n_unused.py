@@ -8,7 +8,8 @@ when there is one. A key counts as used when any tracked text file other than th
 XML, SQL, configuration .properties…) contains `<prefix>.<key>` or `"<key>"`, when a string literal or a `${`
 template interpolation ends a stem the key starts with (`PREFIX = "demo.type."` then `PREFIX + name`), or when a
 repository under --refs (default ~/.lutece-references) names `<prefix>.<key>`. Keys read by the core at runtime
-(model.entity.*, validation.*, site_property.*, plugin.*, adminFeature.*) are never reported.
+(model.entity.*, validation.*, site_property.*, plugin.*) are never reported. An adminFeature.* key is not one of
+them: the plugin descriptor and the core_admin_right SQL name it in full, so a key neither names is dead.
 """
 import glob
 import os
@@ -18,7 +19,7 @@ import sys
 
 import bundles
 
-RUNTIME = ("model.entity.", "validation.", "site_property.", "plugin.", "adminFeature.")
+RUNTIME = ("model.entity.", "validation.", "site_property.", "plugin.")
 BUNDLE = re.compile(r"_messages(_\w+)?\.properties$")
 SKIP_DIRS = ("target/", "e2e/", ".migration/", "node_modules/")
 

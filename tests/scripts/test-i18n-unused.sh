@@ -23,6 +23,8 @@ quoted.key=looked up by its bare key
 parent.label=used by another repository
 model.entity.demo.attribute.name=read by the validation at runtime
 site_property.demo.help=read by the site properties screen
+adminFeature.used.name=named by the descriptor
+adminFeature.gone.name=a feature no descriptor declares
 dead.label=nobody uses it
 EOF
 cp "$P/src/java/fr/paris/lutece/plugins/demo/resources/demo_messages.properties" "$P/src/java/fr/paris/lutece/plugins/demo/resources/demo_messages_fr.properties"
@@ -37,17 +39,17 @@ class DemoJspBean {
 EOF
 echo "demo.list=1,#i18n{demo.conf.label}" > "$P/webapp/WEB-INF/conf/plugins/demo.properties"
 echo "INSERT INTO demo_type (label) VALUES ('demo.sql.label');" > "$P/src/sql/plugins/demo/core/init_core_demo.sql"
-echo "<plugin><admin-feature><feature-description>demo.xml.label</feature-description></admin-feature></plugin>" > "$P/webapp/WEB-INF/plugins/demo.xml"
+echo "<plugin><admin-feature><feature-title>demo.adminFeature.used.name</feature-title><feature-description>demo.xml.label</feature-description></admin-feature></plugin>" > "$P/webapp/WEB-INF/plugins/demo.xml"
 echo "const k = 'demo.js.label';" > "$P/webapp/js/plugins/demo/demo.js"
 echo "#i18n{demo.parent.label}" > "$R/plugin-parent/webapp/WEB-INF/templates/view.html"
 OUT=$(python3 "$SCRIPT" "$P" --refs "$R")
 RC=$?
 fail=0
-if [ "$RC" -ne 1 ] || [ "$(echo "$OUT" | wc -l)" -ne 1 ] || ! echo "$OUT" | grep -q ": dead.label$"; then
-    echo "FAIL: expected only dead.label, rc=1; got rc=$RC:"; echo "$OUT"; fail=1
+if [ "$RC" -ne 1 ] || [ "$(echo "$OUT" | wc -l)" -ne 2 ] || ! echo "$OUT" | grep -q ": dead.label$" || ! echo "$OUT" | grep -q ": adminFeature.gone.name$"; then
+    echo "FAIL: expected only dead.label and adminFeature.gone.name, rc=1; got rc=$RC:"; echo "$OUT"; fail=1
 fi
-sed -i '/^dead.label=/d' "$P/src/java/fr/paris/lutece/plugins/demo/resources/demo_messages.properties"
+sed -i '/^dead.label=/d; /^adminFeature.gone.name=/d' "$P/src/java/fr/paris/lutece/plugins/demo/resources/demo_messages.properties"
 OUT=$(python3 "$SCRIPT" "$P" --refs "$R"); RC=$?
 if [ "$RC" -ne 0 ] || [ -n "$OUT" ]; then echo "FAIL: expected nothing once dead.label is gone; got rc=$RC: $OUT"; fail=1; fi
-[ "$fail" -eq 0 ] && echo "PASS: i18n_unused keeps every used key and reports the dead one"
+[ "$fail" -eq 0 ] && echo "PASS: i18n_unused keeps every used key and reports the dead ones, adminFeature keys included"
 exit $fail
