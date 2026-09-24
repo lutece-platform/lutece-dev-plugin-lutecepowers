@@ -227,7 +227,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/notifygru/"):
             return self.notifygru(path, body)
         if path.startswith("/identitystore/"):
-            return self.identitystore(path, body)
+            return self.identitystore(method, path, body)
         if path.startswith("/ants/"):
             return self.ants(method, path, body)
         if path.startswith("/ban/"):
@@ -395,19 +395,48 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, json.dumps({"rowcount": n}), "application/json")
         return self.send(405, "method not supported by the ANTS fake: " + method)
 
-    def identitystore(self, path, body):
+    def identitystore(self, method, path, body):
         log("identitystore", {"path": path, "body": body[:4000]})
         if path.endswith("/token"):
             return self.send(200, json.dumps({"access_token": "e2e-token", "token_type": "Bearer",
                                               "expires_in": 3600}), "application/json")
+        ok = {"http_code": 200, "status": "OK"}
+        level = {"name": "Déclaratif", "description": "Déclaré par l'usager", "level": "100"}
         # The v3 referential of the attribute keys (AttributeSearchResponse of library-identitybusiness): what an
         # identity picker offers the agent to choose from.
         if path.endswith("/referential/attributes"):
-            keys = [("family_name", "Nom de famille"), ("first_name", "Prénom"), ("birthdate", "Date de naissance"),
-                    ("email", "Email"), ("mobile_phone", "Téléphone portable")]
-            return self.send(200, json.dumps({"status": {"http_code": 200, "status": "OK"},
-                                              "attributeKeys": [{"name": n, "keyName": k, "description": n}
-                                                                for k, n in keys]}), "application/json")
+            return self.send(200, json.dumps({"status": ok, "attributeKeys": [{"name": n, "keyName": k, "description": n}
+                                                                                for k, n, _ in IDENTITY_ATTRIBUTES]}),
+                             "application/json")
+        if path.endswith("/identity/v3/referential/level"):
+            return self.send(200, json.dumps({"status": ok, "levels": [level]}), "application/json")
+        if path.endswith("/identity/v3/referential/processus"):
+            return self.send(200, json.dumps({"status": ok, "processus": [{
+                "code": "DEC", "label": "Déclaratif",
+                "attributeCertificationLevels": [{"attributeKey": k, "level": level} for k, _, _ in IDENTITY_ATTRIBUTES]}]}),
+                "application/json")
+        # The active service contract of a client (ServiceContractSearchResponse): the widget of plugin-identitypicker
+        # stays disabled while it is null, and shows the attributes it declares readable.
+        active = re.search(r"/identity/v3/contract/active/([^/?]+)$", path)
+        if active:
+            return self.send(200, json.dumps({"status": ok, "serviceContract": {
+                "id": 1, "clientCode": active.group(1), "name": "Contrat E2E", "serviceType": "E2E",
+                "startingDate": 1577836800000, "authorizedSearch": True, "authorizedCreation": True, "authorizedUpdate": True,
+                "attributeDefinitions": [{
+                    "name": n, "keyName": k, "pivot": k != "email", "certifiable": True,
+                    "attributeRight": {"mandatory": False, "searchable": True, "readable": True, "writable": True},
+                    "attributeRequirement": level, "attributeCertifications": [{"code": "DEC", "label": "Déclaratif",
+                                                                                "level": "100"}]}
+                    for k, n, _ in IDENTITY_ATTRIBUTES]}}), "application/json")
+        # v3 search and read by customer id (IdentitySearchResponse): attributes are a list, status.status says success.
+        if method == "POST" and path.endswith("/identity/v3/identity/search"):
+            return self.send(200, json.dumps({"status": {"http_code": 200, "status": "SUCCESS"},
+                                              "identities": [v3_identity(IDENTITY_CUID)]}), "application/json")
+        read = re.search(r"/identity/v3/identity/([^/?]+)$", path)
+        if method == "GET" and read:
+            return self.send(200, json.dumps({"status": {"http_code": 200, "status": "SUCCESS"},
+                                              "identities": [v3_identity(urllib.parse.unquote(read.group(1)))]}),
+                             "application/json")
         guid = self.query().get("connection_id") or self.query().get("customer_id") or PRO_GUID
         return self.send(200, json.dumps({
             "identity": {"connection_id": guid, "customer_id": guid,
@@ -416,6 +445,24 @@ class Handler(BaseHTTPRequestHandler):
                              "first_name": {"key": "first_name", "value": "Test"},
                              "email": {"key": "email", "value": "pro@e2e.local"}}},
             "status": {"http_code": 200, "message": "OK"}}), "application/json")
+
+IDENTITY_CUID = os.environ.get("IDENTITY_CUID", "e2e-cuid-0001")
+"""Customer id of the identity the fake identitystore finds."""
+
+IDENTITY_ATTRIBUTES = [("gender", "Genre", "1"), ("family_name", "Nom de famille", "DUPONT"),
+                       ("first_name", "Prénom", "Jean"), ("birthdate", "Date de naissance", "01/01/1980"),
+                       ("email", "Email", "jean.dupont@example.org"), ("mobile_phone", "Téléphone portable", "0600000000")]
+"""Attribute keys of the fake identitystore: its referential, the readable attributes of its contract, the identity."""
+
+
+def v3_identity(cuid):
+    """The one identity of the fake identitystore under the given customer id, in the v3 form (IdentityDto)."""
+    return {"customer_id": cuid, "connection_id": "e2e-guid-0001", "mon_paris_active": False,
+            "creation_date": 1704067200000, "last_update_date": 1704067200000,
+            "quality": {"quality": 0.8, "coverage": 1, "scoring": 0.9},
+            "attributes": [{"key": k, "value": v, "certificationLevel": 100, "certProcess": "DEC",
+                            "certDate": 1704067200000} for k, _, v in IDENTITY_ATTRIBUTES]}
+
 
 EXTRAS = {}
 """URL prefix → handler, from the organisation's extra/*.py modules."""
