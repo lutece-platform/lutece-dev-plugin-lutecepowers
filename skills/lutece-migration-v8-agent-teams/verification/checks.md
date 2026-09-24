@@ -44,6 +44,7 @@
 | JX07 | FAIL | javax.xml.bind | `javax\.xml\.bind` | *.java |
 | JX08 | FAIL | javax.transaction | `javax\.transaction` (non-cache) | *.java |
 | JX09 | FAIL | javax.persistence | `javax\.persistence` | *.java |
+| JX10 | WARN | JAX-RS answer relying on Jackson annotations: the v8 server writes it with JSON-B, which ignores `@JsonProperty`/`@JsonFormat` (api field names and dates change, a non-public nested class 500s) | a `@GET/@POST...` method returning, or a `Response.ok( x )`/`.entity( x )` of, a type whose class imports `com.fasterxml.jackson.annotation`; none when a Jackson provider is registered | *.java |
 
 ## Spring Residues (SP)
 

@@ -180,6 +180,14 @@ printf '<plug-in><icon-url>themes/shared/plugins/x/iamges/x.svg</icon-url></plug
 expect "WB08: descriptor icon path mistyped, image shipped elsewhere" 1 "$(vm WB08 WARN)"
 printf '<plug-in><icon-url>themes/shared/plugins/x/images/x.svg</icon-url><icon-url>images/admin/skin/feature_default_icon_e2e.png</icon-url></plug-in>\n' > "$J/webapp/WEB-INF/plugins/x.xml"
 expect "WB08: icon shipped at its path" 1 "$(vm WB08 PASS)"
+mkdir -p "$J/src/java/x/rs"
+printf 'import com.fasterxml.jackson.annotation.JsonProperty;\npublic class Point\n{\n    @JsonProperty( "zip_code" )\n    private String _strZip;\n}\n' > "$J/src/java/x/rs/Point.java"
+printf 'import jakarta.ws.rs.GET;\n@Path( "x" )\npublic class XRest\n{\n    @GET\n    @Produces( "application/json" )\n    public List<Point> points( )\n    {\n        return null;\n    }\n    @GET\n    public Response one( )\n    {\n        Point point = new Point( );\n        return Response.ok( point ).build( );\n    }\n}\n' > "$J/src/java/x/rs/XRest.java"
+expect "JX10: REST answers with Jackson-annotated objects written by JSON-B" 1 "$(vm JX10 WARN)"
+expect "JX10: both the return type and the entity are reported" 2 "$(cd "$J" && bash "$S/verify-migration.sh" . 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -A3 '\[JX10\]' | grep -c 'XRest.java')"
+printf 'import jakarta.ws.rs.GET;\n@Path( "x" )\npublic class XRest\n{\n    @GET\n    public Response one( ) throws Exception\n    {\n        return Response.ok( MAPPER.writeValueAsString( new Point( ) ) ).build( );\n    }\n}\n' > "$J/src/java/x/rs/XRest.java"
+expect "JX10: the object written with an ObjectMapper passes" 1 "$(vm JX10 PASS)"
+rm -rf "$J/src/java/x/rs"
 rm -rf "$J/webapp"
 rm -f "$J/src/java/x/web/XCtl.java"
 M="$T/module"
@@ -189,5 +197,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, CD06, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, JS04, JS07, fix-button-colours"
 exit $fail

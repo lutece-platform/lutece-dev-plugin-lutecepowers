@@ -16,6 +16,17 @@ code that builds an **absolute** url by hand — a WADL is the usual one. Both a
 class built against the v7 artefact keeps the old value inlined: a doubled `/rest/rest/` means a stale build, a
 missing separator means `BASE_PATH` where `APP_PATH` was needed.
 
+## JSON is written by JSON-B, not Jackson
+
+The v8 server (`restfulWS` + `jsonb`, no Jackson provider in the site) writes a returned object with JSON-B. It
+ignores Jackson annotations: `@JsonProperty( "zip_code" )` comes out as `zipCode`, `@JsonFormat` is dropped, a
+non-public nested class fails with a 500 (`Error accessing getter`). Under v7 the same object went through Jackson,
+so the api's field names change for every client without a compile error. When the api objects carry Jackson
+annotations, write the answer yourself with one shared `ObjectMapper` (plus `JavaTimeModule` for `java.time`) and
+return `Response.status( n ).type( APPLICATION_JSON ).entity( json )`. Verify-migration reports the pattern as JX10.
+Answer a refusal (401, 422) with a built `Response`, not a thrown `WebApplicationException`: plugin-rest logs every
+thrown one as an error.
+
 ## Securing endpoints
 
 Three mechanisms exist and only two work per resource:

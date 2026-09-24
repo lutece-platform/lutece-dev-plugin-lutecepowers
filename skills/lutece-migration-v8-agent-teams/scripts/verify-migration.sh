@@ -253,6 +253,40 @@ check_grep "JX06" 'javax\.ws\.rs' "src/" "FAIL" "javax.ws.rs -> jakarta.ws.rs"
 check_grep "JX07" 'javax\.xml\.bind' "src/" "FAIL" "javax.xml.bind -> jakarta.xml.bind"
 check_grep "JX09" 'javax\.persistence' "src/" "FAIL" "javax.persistence -> jakarta.persistence"
 check_grep "JX08" 'javax\.transaction\.Transactional\|import javax\.transaction\.[^x]' "src/" "FAIL" "javax.transaction -> jakarta.transaction"
+
+# JX10: a JAX-RS resource handing the container an object whose class carries Jackson annotations. v7 sites wrote
+# JSON with Jackson; the v8 server (restfulWS + jsonb) writes it with JSON-B, which ignores @JsonProperty/@JsonFormat/
+# @JsonIgnore: field names and date formats of the api change, a non-public nested class fails with a 500.
+JX10_MATCHES=""
+if [ -d src/java ]; then
+    JX10_MATCHES=$(python3 - <<'PY'
+import glob, re
+files = {f: open(f, encoding="utf-8", errors="replace").read() for f in glob.glob("src/java/**/*.java", recursive=True)}
+if any(re.search(r"JacksonJsonProvider|JacksonFeature|ContextResolver\s*<\s*ObjectMapper", t) for t in files.values()):
+    raise SystemExit
+jackson = set()
+for t in files.values():
+    if "com.fasterxml.jackson.annotation" in t:
+        jackson.update(re.findall(r"\b(?:class|record|enum)\s+(\w+)", t))
+if not jackson:
+    raise SystemExit
+names = r"\b(?:%s)\b" % "|".join(sorted(jackson))
+for f, t in files.items():
+    if not re.search(r"import jakarta\.ws\.rs\.", t) or not re.search(r"^\s*@Path\b", t, re.M):
+        continue
+    for m in re.finditer(r"@(?:GET|POST|PUT|DELETE|PATCH)\b[^{;]*?\bpublic\s+([\w<>\[\], ?]+?)\s+\w+\s*\(", t, re.S):
+        if re.search(names, m.group(1)):
+            print("%s:%d: returns %s" % (f, t[:m.start(1)].count("\n") + 1, m.group(1).strip()))
+    for m in re.finditer(r"(?:Response\s*\.\s*ok|\.\s*entity)\s*\(\s*(\w+)\s*\)", t):
+        decl = re.search(r"([\w<>\[\], ?]+?)\s+%s\s*[;=]" % re.escape(m.group(1)), t)
+        if decl and re.search(names, decl.group(1)):
+            print("%s:%d: entity %s of type %s" % (f, t[:m.start()].count("\n") + 1, m.group(1), decl.group(1).strip()))
+PY
+) || JX10_MATCHES=""
+fi
+COUNT=0; [ -n "$JX10_MATCHES" ] && COUNT=$(echo "$JX10_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "JX10" "PASS" "No REST answer relies on Jackson annotations the server ignores" 0
+else emit "JX10" "WARN" "REST resource hands the server a Jackson-annotated object: JSON-B writes it, the annotations are ignored (write it with an ObjectMapper)" "$COUNT" "$JX10_MATCHES"; fi
 echo ""
 
 # ─── Spring Residues ─────────────────────────────────────
