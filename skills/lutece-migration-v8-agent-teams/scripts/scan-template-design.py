@@ -76,6 +76,8 @@ Both sides
              the right side of ! a very low precedence, the expression reads x!(1 == 1) and fails at render time
   TD66 WARN  ?url or ?url_path without a charset: Lutece sets no url_escaping_charset, the page fails at render time
              -> ?url('UTF-8'), unless the template declares <#setting url_escaping_charset=...>
+  TD68 WARN  a quoted argument to a core macro parameter the macro compares to a number (@input maxlength='${x}'):
+             FreeMarker cannot compare a string with a number, the page fails -> x?number or a bare number
   TD67 WARN  an id the template's script looks up is emitted twice (explicit, or defaulted to the name by @cInput,
              @cSelect, @input, @select): getElementById returns the first one, often a hidden field
   TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
@@ -382,6 +384,21 @@ def collect_macros(directory):
     return found
 
 
+def numeric_params(directory):
+    """Map macro name -> parameters whose default is a number and which the body compares to a number, for every
+    <#macro> under a directory. A quoted argument reaches such a comparison as a string and the page fails."""
+    found = {}
+    for path in glob.glob(os.path.join(directory, "**", "*.*"), recursive=True):
+        if not path.endswith((".ftl", ".html")):
+            continue
+        for match in re.finditer(r"<#macro\s+([A-Za-z_][A-Za-z0-9_]*)((?:'[^']*'|\"[^\"]*\"|[^>'\"])*)>(.*?)</#macro>", read(path), flags=re.S):
+            body = match.group(3)
+            for param in re.findall(r"(?<![\w.])([A-Za-z_][A-Za-z0-9_]*)=-?[0-9]", strip_strings(match.group(2))):
+                if re.search(r"(?<![\w.])%s\s*(&gt;|&lt;|>=?|<=?|\bgte?\b|\blte?\b)\s*-?[0-9]" % param, body):
+                    found.setdefault(match.group(1), set()).add(param)
+    return found
+
+
 def rich_templates(directory):
     """(names of the macros whose body renders a rich textarea, base names of the files holding one) under a directory."""
     macros, files = set(), set()
@@ -452,6 +469,7 @@ class Knowledge:
         self.available = os.path.isdir(BO_MACRO_DIR) and os.path.isdir(FO_MACRO_DIR)
         self.bo = collect_macros(BO_MACRO_DIR) if self.available else {}
         self.fo = collect_macros(FO_MACRO_DIR) if self.available else {}
+        self.numeric = {**numeric_params(FO_MACRO_DIR), **numeric_params(BO_MACRO_DIR)} if self.available else {}
         self.core_other = collect_macros(templates_root) if self.available else {}
         self.plugins = {}
         if self.available:
@@ -895,6 +913,13 @@ def check_common(text, findings, kind, know):
     for ident, line in looked_up_id_clashes(text):
         if ident not in pickers:
             add(findings, "TD67", "WARN", line, "the script looks up '%s', which the template emits twice (an explicit id, or the id @cInput/@cSelect/@input/@select default to the name, hidden fields included): the lookup gets the first one -> give each control its own id" % ident)
+    for name, params in know.numeric.items():
+        if name in know.local:
+            continue
+        for offset, call in macro_calls(text, name):
+            for param in sorted(params):
+                if re.search(r"(?<![\w.])%s\s*=\s*['\"]" % param, call):
+                    add(findings, "TD68", "WARN", line_of(text, offset), "@%s %s= passed as a quoted string: the macro compares %s to a number, FreeMarker cannot compare a string with a number and the page fails -> %s=value?number, or a bare number" % (name, param, param, param))
     for expr, line in unescaped_js_strings(text):
         add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):

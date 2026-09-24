@@ -91,6 +91,10 @@ printf '%s\n' "<@cInput type='hidden' name='to_date' value='' />" "<@cInput name
 expect "TD67: looked-up id also defaulted by a hidden @cInput" 1 "$(td TD67)"
 printf '%s\n' "<#if a><@cInput type='hidden' name='c' id='c' value='' /><#else><@cInput name='c' id='c' value='' /></#if>" "<@noScriptMessage id='f' />" "<form id='f'></form>" "<script>document.getElementById( 'c' ); document.querySelector( '#f' );</script>" > "$X/a.html"
 expect "TD67: exclusive branches and a referencing macro" 0 "$(td TD67)"
+printf '%s\n' "<@input type='textarea' name='a' maxlength='\${f.value}' />" > "$X/a.html"
+expect "TD68: quoted argument to a parameter the macro compares to a number" 1 "$(td TD68)"
+printf '%s\n' "<@input type='textarea' name='a' maxlength=f.value?number />" "<@cInput name='b' maxlength=255 value='\${v}' />" > "$X/a.html"
+expect "TD68: number arguments, quoted text parameter" 0 "$(td TD68)"
 mkdir -p "$W/src/sql/plugins/x/plugin"
 printf "INSERT INTO genatt_entry_type (id_type,title,is_group,class_name,icon_name,plugin) VALUES (131,'Regroupement, bloc',1,'x.entryTypeGroup','indent','x');\n" > "$W/src/sql/plugins/x/plugin/init_db_x.sql"
 expect "TD62: entry type icon unknown to the theme" 1 "$(td TD62)"
@@ -216,5 +220,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
 exit $fail
