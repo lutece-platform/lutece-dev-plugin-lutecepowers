@@ -89,7 +89,7 @@ Scenario keys: id, title (shown by the report), description (optional, `>-` bloc
 Any step value may be a per-version mapping, {v7: ..., v8: ...}: the value for E2E_VERSION is used. Preferred over
 `versions:` when the function exists on both sides and only its url or selector changed (a JSP turned MVC view).
 Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for numeric keys), {{base}} and anything set by set/sql_set/dom_set.
-A scenario with `serial: true` changes global settings and runs alone after the parallel pass. A scenario with `anonymous: true` runs without any session (public screens). A scenario with `isolated: true` logs in on its own session (mandatory when it logs out or changes the password),
+A scenario with `serial: true` changes global settings and runs alone after the parallel pass; a scenario declaring `server_log_allow` runs there too, so the errors it provokes cannot fail its neighbours. A scenario with `anonymous: true` runs without any session (public screens). A scenario with `isolated: true` logs in on its own session (mandatory when it logs out or changes the password),
 so it never invalidates the session shared by the other tests of the worker.
 
 Mechanical rule (checked at collection, before any browser starts): every mutation step (submit, confirm,
@@ -654,10 +654,12 @@ def run_step(page, step, vars_, record):
 
 def _params():
     """One pytest param per scenario; scenarios flagged `serial: true` carry the marker run.sh executes alone
-    (they change settings shared by every session: security parameters, e-mail pattern, feature groups...)."""
+    (they change settings shared by every session: security parameters, e-mail pattern, feature groups...). So do
+    scenarios declaring `server_log_allow`: the errors they provoke land in the log every running scenario reads,
+    and would fail a scenario running beside them."""
     out = []
     for sc in _load():
-        marks = [pytest.mark.serial] if sc.get("serial") else []
+        marks = [pytest.mark.serial] if sc.get("serial") or sc.get("server_log_allow") else []
         out.append(pytest.param(sc, id="%s.%s" % (sc["_file"], sc["id"]), marks=marks))
     return out
 
