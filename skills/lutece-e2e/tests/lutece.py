@@ -586,14 +586,9 @@ SERVER_LOG = ARTIFACTS / "logs" / "messages.log"
 SERVER_ENTRY = re.compile(r"^\[\d+/\d+/\d+, [\d:]+ \w+\] \w+ \S+\s+([A-Z]) ")
 """Header line of a Liberty log entry; the group is its level (E is an error)."""
 
-# The core's own errors, logged on every bench of every artefact by the released 8.0.2 core, that no artefact can
-# fix: the cache of a service asked before its creation (AbstractCacheableService, the admin preferences behind
-# the dashboard). Reported upstream; kept here so benches do not each rediscover it as a defect of their artefact.
+# Log entries that are no failure of the application, logged on every bench whatever the artefact: the browser left
+# the page while the server was still writing it (the next step navigated), the client closed the connection.
 CORE_LOG_NOISE = tuple(re.compile(p) for p in (
-    r'"this\._cache" is null',
-    r"BaseUserPreferencesCacheService",
-    # The browser left the page while the server was still writing it (the next step navigated): the client closed
-    # the connection, nothing failed on the server's side.
     r"java\.io\.IOException: Broken pipe",
 ))
 

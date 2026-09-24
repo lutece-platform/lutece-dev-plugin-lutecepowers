@@ -1,6 +1,6 @@
 # Cache Migration Patterns (to v8)
 
-cache migration to v8 (EhCache 2.x → JCache/JSR-107). This file holds the before/after transformations only; the target shape (guards, key builders, CDI access, invalidation) is described once in the `lutece-cache` skill.
+cache migration to v8 (EhCache 2.x → JCache/JSR-107). This file holds the before/after transformations only; the target shape (key builders, CDI access, invalidation) is described once in the `lutece-cache` skill.
 
 > **Reference-First Principle:** Before writing any cache service, **search `~/.lutece-references/` for existing `AbstractCacheableService` implementations** (e.g., `Grep AbstractCacheableService ~/.lutece-references/`). Reproduce the reference structure exactly.
 
@@ -51,7 +51,6 @@ public class MyCacheService extends AbstractCacheableService<String, Object> {
 }
 ```
 
-Then apply the target shape from `lutece-cache` Step 1: override `put`/`get`/`remove` with `isCacheEnable()` guards (the inherited methods dereference `_cache`, which is `null` while the cache is disabled).
 
 ## 4. Cache Method Renames
 

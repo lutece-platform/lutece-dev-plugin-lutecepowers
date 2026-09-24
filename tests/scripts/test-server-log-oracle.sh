@@ -24,7 +24,7 @@ with open(sys.argv[2], "a") as f:
     f.write("[9/23/26, 15:01:00:000 UTC] 0000002 com.ibm.ws.webcontainer.util.ApplicationErrorUtils   E SRVE0777E: Exception thrown by application class\n")
     f.write("java.lang.IllegalStateException: SRVE0199E: OutputStream already obtained\n\tat x.y(Z.java:1)\n")
     f.write("[9/23/26, 15:01:01:000 UTC] 0000003 lutece.application   E Error execution 'service' method\n")
-    f.write('java.lang.NullPointerException: Cannot invoke "javax.cache.Cache.get(Object)" because "this._cache" is null\n')
+    f.write('java.io.IOException: Broken pipe\n')
     f.write("[9/23/26, 15:01:02:000 UTC] 0000004 lutece.application   E Declared failure of the scenario\n")
     f.write("[9/23/26, 15:01:03:000 UTC] 0000005 lutece.application   I Action : createAppointmentForm\n")
     f.write("[9/23/26, 15:01:04:000 UTC] 0000006 lutece.application   E Scenario specific\n")

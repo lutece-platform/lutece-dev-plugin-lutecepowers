@@ -59,7 +59,7 @@ Read `${PATTERNS}/events-patterns.md` and apply all relevant transformations.
 
 **Only if your files have `cachePatterns: true`.**
 
-Read `${PATTERNS}/cache-patterns.md` and apply. Key: override `put`/`get`/`remove` with `isCacheEnable()` guards.
+Read `${PATTERNS}/cache-patterns.md` and apply.
 
 ## Step 6b: JPA (conditional)
 

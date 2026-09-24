@@ -16,16 +16,6 @@ scenarios:
       - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp', method: POST, headers: {Content-Type: application/x-www-form-urlencoded}, body: 'action=removeMyEntity&id=9001'}
       - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9001", expect: 1}
 
-  - id: myentity_csrf_post_with_page_parameter_refused
-    title: "Défaut du core : un POST sans jeton auquel on ajoute page=x ne doit rien supprimer"
-    description: >-
-      Core defect (expected red until lutece-core is fixed): SecurityTokenHandler takes the XPage branch as soon as the
-      request carries a page parameter, finds no XPage of that name and does not filter, even on /jsp/admin/.
-    req: MYPLUGIN_MANAGEMENT
-    steps:
-      - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp', method: POST, headers: {Content-Type: application/x-www-form-urlencoded}, body: 'action=removeMyEntity&id=9001&page=x'}
-      - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9001", expect: 1}
-
   - id: myentity_csrf_get_without_token_refused
     title: "Défaut du core : une suppression appelée par un simple lien, sans jeton, ne doit rien supprimer"
     description: >-

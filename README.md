@@ -92,7 +92,7 @@ Coding agents without a usable session hook load the bootstrap another way: Open
 
 | Agent | Description |
 |-------|-------------|
-| `lutece-v8-reviewer` | Read-only compliance reviewer. Runs `scan-project.sh` and `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers, cache guards), then a full build with tests read from the surefire reports. Structured PASS/WARN/FAIL report. Frontmatter limited to `name` and `description` so any coding agent that reads `agents/` loads it; the `lutece-v8-review` skill drives it elsewhere. |
+| `lutece-v8-reviewer` | Read-only compliance reviewer. Runs `scan-project.sh` and `verify-migration.sh`, then semantic analysis (CDI scopes, singletons, producers), then a full build with tests read from the surefire reports. Structured PASS/WARN/FAIL report. Frontmatter limited to `name` and `description` so any coding agent that reads `agents/` loads it; the `lutece-v8-review` skill drives it elsewhere. |
 
 ## Rules
 

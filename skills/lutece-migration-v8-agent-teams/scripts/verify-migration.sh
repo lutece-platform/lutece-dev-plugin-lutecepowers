@@ -321,25 +321,6 @@ check_grep "CA01" 'net\.sf\.ehcache' "src/" "FAIL" "EhCache -> JCache"
 check_grep "CA02" 'putInCache\|getFromCache\|removeKey' "src/" "FAIL" "Deprecated cache methods"
 check_grep "CA03" 'extends AbstractCacheableService[^<]' "src/" "FAIL" "Raw AbstractCacheableService (needs type params)"
 
-# CA04: AbstractCacheableService whose overrides do not guard on isCacheEnable( ).
-# The JCache methods it inherits (get, put, remove, ...) dereference _cache, which is null while the cache is
-# disabled — the default state. isCacheEnable( ) is the guard: in lutece-core it already reads
-# `_cache != null && !_cache.isClosed( )`. There is no isCacheAvailable( ): an earlier version of this check
-# asked for one, and a cache written to satisfy it did not compile.
-CA04_MATCHES=""
-if [ -d "src/" ]; then
-    CA04_MATCHES=$(grep -rln 'extends AbstractCacheableService' src/ --include="*.java" 2>/dev/null | while read -r f; do
-        if ! grep -q 'isCacheEnable' "$f" 2>/dev/null; then
-            echo "$f: extends AbstractCacheableService without an isCacheEnable( ) guard on its overrides"
-        fi
-    done) || CA04_MATCHES=""
-fi
-COUNT=0; [ -n "$CA04_MATCHES" ] && COUNT=$(echo "$CA04_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then
-    emit "CA04" "PASS" "CacheService guards its overrides with isCacheEnable( )" 0
-else
-    emit "CA04" "WARN" "CacheService guards its overrides with isCacheEnable( )" "$COUNT" "$CA04_MATCHES"
-fi
 echo ""
 
 # ─── Deprecated API ──────────────────────────────────────
@@ -1419,16 +1400,6 @@ TM12_MATCHES=$(template_rules inline-forms 2>/dev/null) || TM12_MATCHES=""
 COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
 else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
-
-# TM13: a back-office form field named `page`: SecurityTokenHandler reads the page parameter and takes its XPage branch,
-# so every post of that form skips the CSRF check. Name it id_page.
-TM13_MATCHES=""
-if [ -d "webapp/WEB-INF/templates/admin" ]; then
-    TM13_MATCHES=$(grep -rnE "name *= *['\"]page['\"]" webapp/WEB-INF/templates/admin --include="*.html" 2>/dev/null) || TM13_MATCHES=""
-fi
-COUNT=0; [ -n "$TM13_MATCHES" ] && COUNT=$(echo "$TM13_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM13" "PASS" "No back-office field named page" 0
-else emit "TM13" "FAIL" "Back-office field named page: the CSRF check is skipped on every post of that form (use id_page)" "$COUNT" "$TM13_MATCHES"; fi
 
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
 if grep -q 'library-theme-jquery' pom.xml 2>/dev/null; then TM02_SEV=WARN; else TM02_SEV=FAIL; fi

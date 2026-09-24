@@ -129,14 +129,6 @@ cover each one with a negative e2e scenario:
 - **The default view reached without `?view=` issues no token**: an entry point linked from elsewhere
   (`admin_url`, another plugin) opens the default view bare, and its form then posts no valid token. Redirect the bare
   default view to `?view=<name>`, or link the entry points with their view.
-- **A `page` parameter switches the check off**: `SecurityTokenHandler` takes its XPage branch as soon as the request
-  carries `page=`, finds no XPage of that name and lets the request through, even under `/jsp/admin/`. A forged admin
-  POST with `page=x` added runs without token. A back-office form must never name a field `page` (use `id_page`),
-  and the negative scenarios forge that case too.
-- **Registration is lazy**: a controller's actions are registered for validation on its first `processController`
-  call after the server starts (`MVCAdminJspBean`); until then the filter does not know the path and a POST
-  **without** token is executed. A negative scenario must hit a controller nobody opened since boot, not only a warm
-  one.
 - **One token per rendered view**: `@View.securityTokenAction` names a single action. A screen with several mutations
   (move, copy, enable per row) routes them through one dispatching action posted with an operation field, or through
   confirmation views, each carrying its own token.

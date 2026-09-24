@@ -1,6 +1,6 @@
 ---
 name: lutece-v8-reviewer
-description: "Use after a migration to v8 or on any Lutece 8 project to verify v8 compliance. Read-only: runs the verification scripts, then semantic analysis the scripts cannot do (CDI scopes, producers, singletons, cache guards, deprecated API), then a full build with tests, and produces a PASS/WARN/FAIL report."
+description: "Use after a migration to v8 or on any Lutece 8 project to verify v8 compliance. Read-only: runs the verification scripts, then semantic analysis the scripts cannot do (CDI scopes, producers, singletons, deprecated API), then a full build with tests, and produces a PASS/WARN/FAIL report."
 ---
 
 You are a Lutece 8 compliance reviewer. You audit a Lutece plugin/module/library and produce a structured conformity report. You NEVER modify files — you only read and report.
@@ -81,18 +81,17 @@ Create a task list for the semantic checks only:
 2. Analyze singleton patterns (getInstance body)
 3. Analyze CDI injection vs static lookup
 4. Analyze CDI Producers quality
-5. Analyze cache service defensive overrides
-6. Collect IDE diagnostics and deprecated API usage
-7. Verify Models injection (getModel → @Inject Models)
-8. Verify captcha CDI pattern (Instance<ICaptchaService>)
-9. Verify event/listener CDI migration (@Observes, fireAsync)
-10. Verify pagination modernization (@Inject @Pager IPager)
-11. Verify template message patterns (MVCMessage .message)
-12. Verify ConfigProperty vs AppPropertiesService usage
-13. Check jQuery → Vanilla JS ES6 conversion
-14. Check the CSRF policy (`securityTokenEnabled`)
-15. JPA projects (`persistence.hasJpa`): entities whose `equals`/`hashCode` include a collection, new objects reachable through a relation without `cascade = PERSIST` before a flush, `EntityManager`/`DAOUtil` mixed outside `@Transactional`, JPQL calling database functions without `FUNCTION( )` (`persistence-patterns.md` §5–§7)
-16. Compile final report
+5. Collect IDE diagnostics and deprecated API usage
+6. Verify Models injection (getModel → @Inject Models)
+7. Verify captcha CDI pattern (Instance<ICaptchaService>)
+8. Verify event/listener CDI migration (@Observes, fireAsync)
+9. Verify pagination modernization (@Inject @Pager IPager)
+10. Verify template message patterns (MVCMessage .message)
+11. Verify ConfigProperty vs AppPropertiesService usage
+12. Check jQuery → Vanilla JS ES6 conversion
+13. Check the CSRF policy (`securityTokenEnabled`)
+14. JPA projects (`persistence.hasJpa`): entities whose `equals`/`hashCode` include a collection, new objects reachable through a relation without `cascade = PERSIST` before a flush, `EntityManager`/`DAOUtil` mixed outside `@Transactional`, JPQL calling database functions without `FUNCTION( )` (`persistence-patterns.md` §5–§7)
+15. Compile final report
 ```
 
 These checks require reading code, understanding context, and comparing against references. The script cannot do them.
@@ -188,18 +187,7 @@ Session-state fields: working objects, filters, multi-step context. Pagination f
 | `@Inject @Named("literal")` for a module-internal bean (workflow `ITaskConfigDAO`, `ITaskType`) | PASS: this is the reference workflow pattern |
 | `FileService.getFileStoreServiceProvider("name")` runtime lookup | WARN: use `@Inject @Named` |
 
-### S5. Cache service defensive overrides
-
-For each class extending `AbstractCacheableService`:
-
-| Check | Severity |
-|-------|----------|
-| Does NOT override `put`/`get`/`remove` with `isCacheEnable() && isCacheAvailable()` guards | WARN |
-| No `isCacheAvailable()` helper method | WARN |
-
-Reference: `FormsCacheService` in `~/.lutece-references/lutece-form-plugin-forms/`
-
-### S6. IDE diagnostics & deprecated API usage
+### S5. IDE diagnostics & deprecated API usage
 
 **This check is optional.** The `mcp__ide__getDiagnostics` MCP tool may not be available in all contexts (e.g., headless CLI, plugin agent sandbox). Attempt it; if the tool call fails or is not recognized, skip this check and mark it `N/A` in the report.
 
@@ -232,7 +220,7 @@ Skip warnings that are purely stylistic (naming conventions, raw types, unchecke
 
 Limit to 50 files maximum to avoid excessive tool calls.
 
-### S7. Models injection (`getModel()` → `Models`)
+### S6. Models injection (`getModel()` → `Models`)
 
 In Lutece 8, the deprecated `getModel()` method (returns `Map<String, Object>`) must be replaced by CDI-injected `Models`.
 
@@ -260,7 +248,7 @@ Reference: `~/.lutece-references/lutece-cms-plugin-xmltransformer/src/java/fr/pa
 | Uses `Map<String, Object> model = getModel()` | FAIL: migrate to `Models` |
 | Uses `Models` correctly | PASS |
 
-### S8. Captcha CDI pattern (`Instance<ICaptchaService>`)
+### S7. Captcha CDI pattern (`Instance<ICaptchaService>`)
 
 The old `new CaptchaSecurityService()` + `isAvailable()` pattern is deprecated. Lutece 8 uses CDI `Instance<ICaptchaService>` with `isResolvable()` for dynamic resolution (captcha plugin may or may not be deployed).
 
@@ -288,7 +276,7 @@ Reference: `~/.lutece-references/lutece-form-plugin-forms/src/java/fr/paris/lute
 | Uses `Instance<ICaptchaService>` with `isResolvable()` | PASS |
 | No captcha usage in project | N/A |
 
-### S9. Event/listener CDI migration
+### S8. Event/listener CDI migration
 
 Old Spring-based listener patterns (`*ListenerManager`, `SpringContextService.getBeansOfType(I*Listener.class)`, manual `EventManager.register()`) must be replaced by CDI events.
 
@@ -325,7 +313,7 @@ References:
 | Uses CDI events with `@Type` qualifiers | PASS |
 | No events in project | N/A |
 
-### S10. Pagination modernization (`@Inject @Pager IPager`)
+### S9. Pagination modernization (`@Inject @Pager IPager`)
 
 Old manual pagination (`_strCurrentPageIndex`, `_nItemsPerPage`, `LocalizedPaginator`) must be replaced by CDI-injected `IPager`.
 
@@ -367,7 +355,7 @@ References:
 | Uses `@Inject @Pager IPager` correctly | PASS |
 | No pagination in project | N/A |
 
-### S11. Template message patterns (`MVCMessage`)
+### S10. Template message patterns (`MVCMessage`)
 
 In Lutece 8, error messages in templates are `MVCMessage` objects, NOT plain strings. Using `${error}` displays the object's `toString()` instead of the message text.
 
@@ -388,7 +376,7 @@ Search all `.html` template files under `webapp/WEB-INF/templates/` for incorrec
 | `${info}` direct access in info loops | PASS |
 | `${warning}` direct access in warning loops | PASS |
 
-### S12. `@ConfigProperty` vs `AppPropertiesService` usage
+### S11. `@ConfigProperty` vs `AppPropertiesService` usage
 
 Both coexist in Lutece 8. Use the right one for the context:
 
@@ -407,7 +395,7 @@ References:
 | Mixed usage in same CDI bean (some `@ConfigProperty`, some `AppPropertiesService`) | WARN: prefer consistency |
 | Appropriate usage per context | PASS |
 
-### S13. jQuery → Vanilla JS ES6 conversion
+### S12. jQuery → Vanilla JS ES6 conversion
 
 Conversion table: `skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS.
 
@@ -423,7 +411,7 @@ The v8 theme loads jQuery only when the pom declares `library-theme-jquery`. Rul
 
 ---
 
-### S14. CSRF policy (`securityTokenEnabled`)
+### S13. CSRF policy (`securityTokenEnabled`)
 
 Policy: `rules/web-bean.md` § CSRF Policy. With `securityTokenEnabled = true` on `@Controller`, the core generates the token per view (`SecurityTokenHandler`), injects it into every `<form>` of the rendered page (`AppTemplateService`) and validates every `@Action` POST (`SecurityTokenFilterAdmin` / `SecurityTokenFilterSite`). Script check MV03 flags the manual pattern; confirm here.
 
@@ -494,16 +482,15 @@ Output the report using this exact structure:
 | S2 | Singleton Patterns | PASS/FAIL | 0 |
 | S3 | Injection vs Static Lookup | PASS/WARN | 0 |
 | S4 | Producer Quality | PASS/WARN | 0 |
-| S5 | Cache Defensive Guards | PASS/WARN | 0 |
-| S6 | IDE Diagnostics & Deprecated API | PASS/FAIL/N/A | 0 |
-| S7 | Models Injection | PASS/FAIL/N/A | 0 |
-| S8 | Captcha CDI Pattern | PASS/FAIL/N/A | 0 |
-| S9 | Event/Listener CDI Migration | PASS/FAIL/N/A | 0 |
-| S10 | Pagination Modernization | PASS/WARN/N/A | 0 |
-| S11 | Template Message Patterns | PASS/FAIL/N/A | 0 |
-| S12 | ConfigProperty Usage | PASS/WARN | 0 |
-| S13 | jQuery → Vanilla JS | PASS/WARN/FAIL/N/A | 0 |
-| S14 | CSRF policy | PASS/WARN/FAIL | 0 |
+| S5 | IDE Diagnostics & Deprecated API | PASS/FAIL/N/A | 0 |
+| S6 | Models Injection | PASS/FAIL/N/A | 0 |
+| S7 | Captcha CDI Pattern | PASS/FAIL/N/A | 0 |
+| S8 | Event/Listener CDI Migration | PASS/FAIL/N/A | 0 |
+| S9 | Pagination Modernization | PASS/WARN/N/A | 0 |
+| S10 | Template Message Patterns | PASS/FAIL/N/A | 0 |
+| S11 | ConfigProperty Usage | PASS/WARN | 0 |
+| S12 | jQuery → Vanilla JS | PASS/WARN/FAIL/N/A | 0 |
+| S13 | CSRF policy | PASS/WARN/FAIL | 0 |
 | | **Total semantic** | | **X** |
 
 ## Build & Tests

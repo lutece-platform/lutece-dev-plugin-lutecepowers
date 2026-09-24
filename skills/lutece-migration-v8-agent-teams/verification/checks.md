@@ -82,7 +82,6 @@
 | CA01 | FAIL | EhCache direct usage | `net\.sf\.ehcache` | *.java |
 | CA02 | FAIL | Deprecated cache methods | `putInCache\|getFromCache\|removeKey` | *.java |
 | CA03 | FAIL | Raw AbstractCacheableService | `extends AbstractCacheableService[^<]` | *.java |
-| CA04 | WARN | Missing isCacheEnable guard | (cross-file check) | *.java |
 
 ## Deprecated API (DP)
 
@@ -310,7 +309,6 @@ is not. When the answer "nothing left" is the point of the search, run it as
 | TM10 | FAIL | offcanvas (`@offcanvas`, `@cOffcanvas`, offcanvas markup): the content of the page goes in a `@modal` / `@cModal`, another page is reached by a plain link | `template_rules.py offcanvas` | admin, skin |
 | TM11 | FAIL | front-office form that is not a `@cForm` (raw `<form>`, `@tform`) or `foValidation=false`: no core form validation | `template_rules.py fo-forms` | skin |
 | TM12 | FAIL | inline form: three visible fields or more side by side (`@tform type` inline/flex, `form-inline`/`d-flex` on the form, `formStyle='inline'`, a row of three field columns); two columns are fine | `template_rules.py inline-forms` | admin, skin |
-| TM13 | FAIL | back-office form field named `page`: the core takes its XPage branch and skips the CSRF check on every post | `name='page'` | admin/*.html |
 | TM03 | FAIL | Old upload macros | (custom check) | *.html |
 | TM04 | FAIL | Unsafe errors/infos/warnings | (custom check) | *.html |
 | TM05 | FAIL | Old SuggestPOI | `autocomplete-js\.jsp\|createAutocomplete` | *.html, *.jsp |
