@@ -72,7 +72,10 @@ t2, n = pat.subn(lambda m: m.group(1) + v + m.group(3), t)
 if not n:
     # Not declared: the version comes through another dependency's range, and the top of that range has moved on.
     # A direct dependency wins over a transitive one, so declaring it here is what pins it.
-    dep = "        <dependency>\n            <groupId>%s</groupId>\n            <artifactId>%s</artifactId>\n            <version>%s</version>\n        </dependency>\n" % (g, a, v)
+    # A Lutece plugin or module comes as a lutece-plugin: declared as a plain jar it would shadow that dependency
+    # and the site would lose the plugin's webapp (descriptor, Spring context, templates).
+    kind = "\n            <type>lutece-plugin</type>" if re.match(r"(plugin|module)-", a) else ""
+    dep = "        <dependency>\n            <groupId>%s</groupId>\n            <artifactId>%s</artifactId>\n            <version>%s</version>%s\n        </dependency>\n" % (g, a, v, kind)
     if "</dependencies>" not in t:
         sys.exit("gen-site7.sh: the v7 pom has no <dependencies> to add %s:%s to" % (g, a))
     t2 = t.replace("</dependencies>", dep + "    </dependencies>", 1)
