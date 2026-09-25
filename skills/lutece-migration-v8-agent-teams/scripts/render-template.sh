@@ -8,8 +8,8 @@
 # Proves the macro calls resolve, their arguments are declared (the core macros print an HTML warning comment
 # for a wrong argument, counted as wrongArguments) and the empty branches render. The #i18n keys of the output are
 # then resolved the way AppTemplateService does, in French, against the bundles of the assembled webapp: a key that
-# resolves to nothing is named, because the core swallows the failure and writes an empty string, so the label is
-# simply absent from the page with nothing in the logs. A macro defined in a template
+# resolves to nothing is named, because the core catches the failure, logs a WARN and writes an empty string, so the
+# label is simply absent from the page. A macro defined in a template
 # that is not auto-included (adminHeader, page blocks) renders a marker, counted as unresolvedMacros: check it
 # exists before calling it a defect. A macro a descriptor declares as a freemarker-macro-file is known and left
 # alone, and a template whose rendering needs a real boolean (?boolean accepts only "true" and "false") is counted

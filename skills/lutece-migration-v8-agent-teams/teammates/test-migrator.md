@@ -166,7 +166,7 @@ IMyService service = SpringContextService.getBean("myPlugin.myService");
 private IMyService _service;
 ```
 
-**Important:** Always inject the **interface** (e.g., `IMyService`), not the concrete class (e.g., `MyService`). The wiki explicitly states that "using concrete classes when an interface exists" is deprecated.
+**Important:** Always inject the **interface** (e.g., `IMyService`), not the concrete class (e.g., `MyService`).
 
 Tests extending `LuteceTestCase` support `@Inject` in v8 (via Weld-testing integration in `library-lutece-unit-testing`). The CDI container is initialized automatically — `LuteceTestCase` activates `@ApplicationScoped`, `@SessionScoped`, and `@RequestScoped` contexts.
 
@@ -195,7 +195,7 @@ The `library-lutece-unit-testing` provides helper classes — use them:
 |-------|---------|
 | `fr.paris.lutece.test.AdminUserUtils` | Register admin user with rights on `MockHttpServletRequest` for JspBean tests |
 | `fr.paris.lutece.test.ReflectionTestUtils` | Set private fields via reflection (replaces Spring's `ReflectionTestUtils`) |
-| `fr.paris.lutece.test.Utils` | `getRandomName()` for unique test data, `getFileContent()` to load a test resource. `validateHtmlFragment()` disappears in 5.0.2 (parent 8.0.2), do not introduce it |
+| `fr.paris.lutece.test.Utils` | `getRandomName()` for unique test data, `getFileContent()` to load a test resource. `Utils` has no `validateHtmlFragment()` |
 
 Example — JspBean test with admin user:
 ```java
@@ -211,7 +211,7 @@ ReflectionTestUtils.setField(myService, "_fieldName", mockValue);
 ## Step 8: Additional Test Dependencies (if needed)
 
 If tests use bean validation, JAXB, or Jakarta EL, these dependencies may be needed (Config Migrator should have added them, verify).
-The EL implementation depends on the parent: `org.glassfish.expressly:expressly` from `8.0.2`, `org.glassfish:jakarta.el` with `8.0.0` / `8.0.1` (each parent manages only one of them):
+The EL implementation is `org.glassfish.expressly:expressly`, the one the parent manages:
 
 ```xml
 <!-- jakarta bean validation, for tests that need it -->
@@ -251,7 +251,7 @@ lutece.defaultFileServiceProvider.rbacService=defaultFileNoRBACService
 ```
 
 Add any other key the deployment exceptions name. This file is new, so it must be staged with
-`git add`; `ST05` fails while it is untracked.
+`git add`; `ST05` fails when .gitignore excludes it.
 
 **Each value is a CDI bean name and has to be one that exists**, because the core's
 `DefaultFileStoreServiceProviderProducer` only checks the three keys are non-blank at deployment
@@ -326,19 +326,6 @@ Keep the explanation in the field's javadoc so the next reader does not "fix" it
 private final Plugin _plugin = null;
 ```
 
-## Step 9: No build
-
-You never run Maven. The project does not compile until every teammate is done, and only the Verifier builds (Phase 4 of `verifier.md`). When the Verifier reports a failing test in your files, fix it (most common issues: missing `@Inject`, wrong assertion order, missing import) and mark the task for a new run. A test that fails because of production code goes back to the Lead.
-
-## Step 10: Verification
-
-After each test file:
-```bash
-bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
-```
-
-Mark each file task as **completed** when verification passes.
-
 ## Step 8f: a JspBean test that renders a v8 admin template needs two things the pom does not give it
 
 `processController` on a `@Controller` bean renders the screen, and a v8 admin template opens on
@@ -363,7 +350,7 @@ protected void setUp( ) throws Exception
 ```xml
 <dependency><groupId>org.glassfish.jaxb</groupId><artifactId>jaxb-runtime</artifactId><scope>test</scope></dependency>
 <dependency><groupId>org.hibernate.validator</groupId><artifactId>hibernate-validator</artifactId><scope>test</scope></dependency>
-<dependency><groupId>org.glassfish</groupId><artifactId>jakarta.el</artifactId><scope>test</scope></dependency>
+<dependency><groupId>org.glassfish.expressly</groupId><artifactId>expressly</artifactId><scope>test</scope></dependency>
 ```
 
 The parent manages the versions; `library-lutece-unit-testing` in `test` scope is needed too.
@@ -375,6 +362,19 @@ The parent manages the versions; `library-lutece-unit-testing` in `test` scope i
 through no filter. A v7 test that forged a token with `SecurityTokenService.getInstance( ).getToken( … )` has
 nothing to replace it with — **delete the line**. What the token protects is proven by the e2e bench, which
 does go through the filter.
+
+## Step 9: No build
+
+You never run Maven. The project does not compile until every teammate is done, and only the Verifier builds (Phase 4 of `verifier.md`). When the Verifier reports a failing test in your files, fix it (most common issues: missing `@Inject`, wrong assertion order, missing import) and mark the task for a new run. A test that fails because of production code goes back to the Lead.
+
+## Step 10: Verification
+
+After each test file:
+```bash
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh <file_path>
+```
+
+Mark each file task as **completed** when verification passes.
 
 ## Before you finish
 

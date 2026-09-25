@@ -20,7 +20,7 @@ Confirm the current directory is a Lutece project (pom.xml with lutece-plugin/mo
 
 ### A.2 — Run scanner
 ```bash
-mkdir -p .migration
+mkdir -p .migration && touch .migration/gate-required
 bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh . > .migration/scan.json
 ```
 
@@ -50,7 +50,7 @@ For every Lutece dependency in `scan.json`:
 2. If `v8Status: "published"` → the artefact exists in the Lutece repositories at the versions listed; clone its sources into `~/.lutece-references/` as the `dependency-references` rule says (the clone, not an edit of the hook)
 3. If `v8Status: "to-resolve"` → nothing found locally nor published: find the repository and check its v8 branch (`dependency-references` rule; v8 lives on `develop`, the pom parent must be `8.x`)
 4. If a dependency has NO v8 version → **STOP**. Do not proceed. Report to user.
-5. **Clone missing dependencies** — for each dependency confirmed v8 but not yet in `~/.lutece-references/`, clone it there yourself (`dependency-references` rule); adding it to the `REPOS` list of `${LUTECEPOWERS_ROOT}/hooks/sync-references` is the lead's job, afterwards, outside the migrated repository. The hook (it clones `develop` and fetches the v7 branches). Teammates can then search reference sources for ALL dependencies, not just the repositories listed in the hook.
+5. **Clone missing dependencies** — for each dependency confirmed v8 but not yet in `~/.lutece-references/`, clone it there yourself (`dependency-references` rule); adding it to the `REPOS` list of `${LUTECEPOWERS_ROOT}/hooks/sync-references` is the lead's job, afterwards, outside the migrated repository. The hook clones `develop` and fetches the v7 branches. Teammates can then search reference sources for ALL dependencies, not just the repositories listed in the hook.
 
 ---
 
@@ -228,7 +228,7 @@ The gate passes when ALL of the following are true:
 - **e2e bench** (Phase G): every suite green, or every red attributed to a defect outside the plugin
 
 Then:
-1. Ask the Config Migrator to delete the remaining `*_context.xml` files, then the Verifier to run the final sweep and remove `.migration/`
+1. Ask the Config Migrator to delete the remaining `*_context.xml` files, then the Verifier to run the final sweep
 2. Present the migration summary to the user:
    - `verify-migration.sh` results (PASS/FAIL/WARN counts)
    - Compile result (`mvn clean install -Dmaven.test.skip=true`)
@@ -236,8 +236,8 @@ Then:
    - Reviewer agent verdict (PASS/FAIL/WARN counts)
    - e2e bench: suite counts and what each remaining red is attributed to
    - List of files modified
-3. **Run the gate, do not hand-check.** `bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh .` re-measures the checks, the unit tests read from surefire and the e2e bench, and refuses the migration while any of them is red. Run it after **every** batch of fixes, not once at the end: a fix to a portlet invalidates the tests that asserted on its old rendering, and a fix to a defect turns the scenario pinning it red. Drop `.migration/gate-required` in the project at the start of the migration and the plugin's Stop hook will not let a turn end while the gate is red.
-4. **List the files the migration created and that git does not track yet** (`git status --porcelain | grep '^??'`), and tell the user to stage them with `git add -A`, never `git commit -a`. `beans.xml` and the test `microprofile-config.properties` are new files: `commit -a` silently leaves them out, and the plugin then fails at the next clone with `UnsatisfiedResolutionException` in the Home static initializer. `ST05` fails while they are untracked.
+3. **Run the gate, do not hand-check.** `bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/final-gate.sh .` re-measures the checks, the unit tests read from surefire and the e2e bench, and refuses the migration while any of them is red. Run it after **every** batch of fixes, not once at the end: a fix to a portlet invalidates the tests that asserted on its old rendering, and a fix to a defect turns the scenario pinning it red. `.migration/gate-required`, dropped at A.2, makes the plugin's Stop hook refuse to end a turn while the gate is red. Once the gate passes, ask the Verifier to remove `.migration/`.
+4. **List the files the migration created and that git does not track yet** (`git status --porcelain | grep '^??'`), and tell the user to stage them with `git add -A`, never `git commit -a`. `beans.xml` and the test `microprofile-config.properties` are new files: `commit -a` silently leaves them out, and the plugin then fails at the next clone with `UnsatisfiedResolutionException` in the Home static initializer. `ST05` fails when .gitignore excludes them.
 5. Clean up the team
 6. **STOP.** Do NOT commit. The user decides when and how to commit.
 
@@ -285,17 +285,17 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/`:
 | `task-splitter.sh` | JSON scan → per-teammate task files | Lead (Phase B) |
 | `migrate-java-mechanical.sh` | javax→jakarta + Spring→CDI + net.sf.json imports | Java Migrators |
 | `migrate-template-mechanical.sh` | BO macros + null-safety (`--no-webxml` for the Template Migrator) | Template Migrator |
-| `ensure-exploded.sh` | Assembles the project's webapp (`mvn lutece:exploded`): the precondition of every template analysis, and the source of the macro signatures, the icon font and the dependency templates | Template Migrator |
+| `ensure-exploded.sh` | Assembles the project's webapp (`mvn lutece:exploded-lite`, falling back to `lutece:exploded`): the precondition of every template analysis, and the source of the macro signatures, the icon font and the dependency templates | Template Migrator |
 | `scan-template-design.py` | Design rules a macro-written template still breaks, per file with a kind (list, form, fragment, email, fo, sql); codes in its header; `--json`, `--flat`, `--warn-only` | Template Migrator, Verifier (TM08) |
 | `check-template-parse.sh` | Parses every template with FreeMarker itself (a template that does not parse answers 500); project or single file | Template Migrator, Verifier (TM09), `verify-file.sh` |
-| `check-i18n-keys.sh` | Every `#i18n` key of the project against the bundles the assembled webapp really carries, templates and Java alike; a key no bundle answers renders as an empty string, so the label is absent with nothing in the log. Separates the keys built from a variable and those owned by a plugin that is not here; assembles the project itself and stops with exit 2 when it cannot, because without the dependency bundles every key they own would be reported missing | Template Migrator, v8 Reviewer |
+| `check-i18n-keys.sh` | Every `#i18n` key of the project against the bundles the assembled webapp really carries, templates and Java alike; a key no bundle answers renders as an empty string, so the label is absent with only a WARN in the log. Separates the keys built from a variable and those owned by a plugin that is not here; assembles the project itself and stops with exit 2 when it cannot, because without the dependency bundles every key they own would be reported missing | Template Migrator, v8 Reviewer |
 | `render-template.sh` | Renders templates offline with the real core macros and a lenient model (optional JSON model per template); counts the wrong-argument warning comments the core macros emit, resolves the `#i18n` keys against the assembled bundles and names those that answer nothing | Template Migrator |
 | `extract-context-beans.sh` | Spring context XML → JSON catalog | Config Migrator |
 | `verify-migration.sh` | every check of `verification/checks.md`, optional --json mode | Verifier |
 | `verify-file.sh` | Per-file verification subset | All teammates |
-| `final-gate.sh` | Postcondition: checks + compiler warnings + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase G, after every fix) |
+| `final-gate.sh` | Postcondition: checks + compiler warnings + surefire + e2e, refuses a red migration (`--help`, `--no-e2e`) | Lead (Phase H, after every fix) |
 | `add-liquibase-headers.sh` | Liquibase headers on SQL files | Config Migrator |
-| `restore-line-endings.sh` | Restores the endings HEAD had on files the editor converted (check LE01) | Verifier |
+| `restore-line-endings.sh` | Restores the endings HEAD had on files the editor converted (check LE01) | Owner of the file, through the Lead |
 | `progress-report.sh` | Migration progress display | Lead (Phase E) |
 
 ## Pattern Locations
@@ -313,5 +313,5 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/`:
 | `json-patterns.md` | json-lib→Jackson | Java Migrators (if net.sf.json) |
 | `deprecation-fixes.md` | What each deprecated API is replaced by (RBAC/workgroup `User` overloads, `getModel()`, `Strings.CS`, `getInstance()`, reflection, task signatures) | Java Migrators (always, short) |
 | `core-8x-moves.md` | Core APIs that moved or shrank (XSL to plugin-xmltransformer, ContentService without cache, Parser in library-core-utils), reflection-instantiated classes | Java Migrators + Config Migrator (always, short) |
-| `sql-liquibase.md` | Header, one small changeset per concern, precondition on tables another plugin owns, `runAfter`, AUTO_INCREMENT on a table shipped with an id 0, why the upgrade path is proven on a taken-over database | Config Migrator, Verifier |
+| `rules/sql-liquibase.md` (repository root, loaded with every `**/sql/**/*.sql`) | Header, one small changeset per concern, precondition on tables another plugin owns, `runAfter`, AUTO_INCREMENT on a table shipped with an id 0, why the upgrade path is proven on a taken-over database | Config Migrator, Verifier |
 | `persistence-patterns.md` | JPA kept on EclipseLink (`persistence-3.1`), JPQL/native SQL rules, entity rules, Spring JDBC as library | Java Migrators + Config Migrator (if `persistence.hasJpa` or `hasSpringJdbc`) |

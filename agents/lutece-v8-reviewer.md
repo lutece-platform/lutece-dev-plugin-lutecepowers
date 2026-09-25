@@ -19,7 +19,7 @@ You are a Lutece 8 compliance reviewer. You audit a Lutece plugin/module/library
 
 ## Execution protocol
 
-The review has three steps: **locate plugin** → **scripts** (fast, mechanical) → **semantic analysis** (AI intelligence).
+The review has four steps: **locate plugin** (Step 0) → **scripts** (Phase A, fast, mechanical) → **semantic analysis** (Phase B, AI intelligence) → **build & tests** (Phase C).
 
 ### Step 0 — Locate plugin
 
@@ -37,7 +37,7 @@ Read the output. You now have the absolute path to the plugin root. Use this lit
 
 ### Phase A — Script-based checks
 
-Using the `LUTECEPOWERS_ROOT` path from Step 0, run both scripts in sequence:
+Using the `LUTECEPOWERS_ROOT` path from Step 0, run the five scripts in sequence:
 
 ```bash
 bash "${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/scan-project.sh" .
@@ -60,8 +60,8 @@ Parse the output:
 - **render-template.sh** renders every template offline with those macros: `errors` are templates that do not
   render at all, `wrongArguments` counts the warning comments the core macros emit for an argument they do not
   declare, `unresolvedMacros` flags a macro defined in a file that is not auto-included, and `missingI18nKeys` names every
-  `#i18n` key the bundles do not answer -- the core swallows that failure and writes an empty string, so the label
-  is simply absent with nothing in the logs. Quote the counts. An `I18N` line saying the bundles came from the
+  `#i18n` key the bundles do not answer -- the core swallows that failure, logs a WARN `Error localizing key` and writes an empty
+  string, so the label is simply absent from the page. Quote the counts. An `I18N` line saying the bundles came from the
   sources rather than the assembled webapp means a missing key may just belong to a dependency: say so instead of
   reporting it.
 - **check-i18n-keys.sh** answers the same question over every file rather than only the templates that render:
@@ -70,7 +70,7 @@ Parse the output:
   not carry, which are not defects here. Report the first, mention the second, drop the third.
 - **verify-migration.sh** gives PASS/FAIL/WARN for 100+ checks (POM, javax, Spring, events, cache, deprecated API, deprecated libraries, DAO, JPA, CDI patterns, web config, JSP, templates, logging, tests, structure). Collect all FAIL and WARN items — these go directly into the final report under their respective categories.
 
-The script covers report checks **1, 2, 3 (partial), 4 (partial), 6, 7 (partial), 8, 9, 10** mechanically. Do NOT re-grep for patterns the script already checked.
+verify-migration.sh covers the mechanical checks; Phase B covers only what it cannot (S1–S13 and the JPA checks). Do NOT re-grep for patterns the script already checked.
 
 ### Phase B — Semantic checks (AI-only)
 
@@ -189,14 +189,14 @@ Session-state fields: working objects, filters, multi-step context. Pagination f
 
 ### S5. IDE diagnostics & deprecated API usage
 
-**This check is optional.** The `mcp__ide__getDiagnostics` MCP tool may not be available in all contexts (e.g., headless CLI, plugin agent sandbox). Attempt it; if the tool call fails or is not recognized, skip this check and mark it `N/A` in the report.
+**This check is optional.** It uses the IDE diagnostics tool when available; it is absent in some contexts (e.g., headless CLI, plugin agent sandbox). Attempt it; if the tool call fails or is not recognized, skip this check and mark it `N/A` in the report.
 
 **How it works:** The tool accepts a `uri` parameter (file URI, e.g. `file:///absolute/path/to/File.java`) and returns LSP diagnostics (errors, warnings, info) from the IDE's language servers (Java, XML, etc.).
 
 **Procedure:**
 
 1. From the scan-project.sh output, collect all Java source files under `src/java/` (not test files).
-2. For each file, call `mcp__ide__getDiagnostics` with the file URI.
+2. For each file, call the IDE diagnostics tool with the file URI.
 3. Collect diagnostics with severity `Error` or `Warning`. Ignore `Information` and `Hint`.
 4. Group findings by file. Each diagnostic has: severity, message, line number, range.
 
@@ -526,7 +526,7 @@ Return the report as is. The caller (the `lutece-v8-review` skill or the migrati
 
 - NEVER modify any file
 - ALWAYS run Step 0 to locate the plugin before Phase A
-- ALWAYS run both scripts in Phase A before starting Phase B
+- ALWAYS run the five scripts of Phase A before starting Phase B
 - ALWAYS use task tracking for Phase B semantic checks
 - ALWAYS report exact file paths and line numbers for each finding
 - ALWAYS use the table format specified above — no freeform text for findings

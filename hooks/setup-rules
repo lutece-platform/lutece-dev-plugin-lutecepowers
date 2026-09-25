@@ -13,6 +13,6 @@ RULES_DST="${PROJECT_DIR}/.claude/rules"
 grep -q "lutece-plugin\|lutece-module\|lutece-library\|lutece-site\|lutece-global-pom" "${PROJECT_DIR}/pom.xml" 2>/dev/null || exit 0
 
 # The copies belong to the workstation, never to the project's repository: the folder ignores itself, so a
-# `git add -A` at the end of a migration does not ship fourteen rule files with the plugin.
+# `git add -A` at the end of a migration does not ship the rule files with the plugin.
 mkdir -p "$RULES_DST" && cp -u "$RULES_SRC"/*.md "$RULES_DST/" 2>/dev/null && printf '*\n' > "$RULES_DST/.gitignore" && echo "Lutece project detected: rules copied to .claude/rules/"
 exit 0

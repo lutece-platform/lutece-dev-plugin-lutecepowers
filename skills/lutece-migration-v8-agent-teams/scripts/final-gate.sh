@@ -70,10 +70,11 @@ else
 fi
 
 step "3/4 unit tests"
-if [ -d src/test/java ] && find src/test/java -name "*Test.java" | grep -q .; then
-    # lutece:exploded only exists for a core, a plugin or a site: a library runs its tests plainly.
+if [ -d src/test/java ] && find src/test/java \( -name "Test*.java" -o -name "*Test.java" -o -name "*Tests.java" -o -name "*TestCase.java" \) | grep -q .; then
+    # lutece:exploded only exists for a core, a plugin or a site: a library runs its tests without it, on the same
+    # test database profile.
     if grep -q "<packaging>jar</packaging>" pom.xml 2>/dev/null; then
-        mvn -B -s "$SETTINGS" clean test > $LOGS-tests.log 2>&1
+        mvn -B -s "$SETTINGS" clean test -Dlutece-test-hsql > $LOGS-tests.log 2>&1
     else
         mvn -B -s "$SETTINGS" clean lutece:exploded antrun:run -Dlutece-test-hsql test > $LOGS-tests.log 2>&1
     fi

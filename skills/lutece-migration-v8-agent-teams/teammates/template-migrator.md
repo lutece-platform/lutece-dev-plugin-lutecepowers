@@ -61,7 +61,7 @@ ${ pageContext.getAttribute( 'strContent' ) }
 <%@ include file="../../AdminFooter.jsp" %>
 ```
 
-Reference: core `jsp/admin/templates/ManageThemes.jsp`, forms `jsp/admin/plugins/forms/ManageForms.jsp`.
+Reference: core `webapp/jsp/admin/theme/ManageThemes.jsp`, forms `jsp/admin/plugins/forms/ManageForms.jsp`.
 
 ### Pattern B: Download in an MVC bean
 No dedicated JSP. The download is an `@Action` of the controller bean that calls the inherited `download( data, fileName, contentType )` (`MVCAdminJspBean.java:740`, `:768`) and returns `null`; the link is `ManageItems.jsp?action=downloadItem&id=…`. Delete the former `DownloadX.jsp`.
@@ -133,9 +133,8 @@ Confirm the `kind` the scan guessed (`list`, `form`, `page`, `fragment`, `email`
 file and its caller. An e-mail body stays byte-identical: an `<html>` root, `@portal_url@` placeholders, a `send_*`
 or `notification_*` name, or a caller passing it to `MailService` are each enough to tell one. A `.js` file under
 `WEB-INF/templates` **is** a template, `AppTemplateService` renders it. A fragment included elsewhere keeps no page
-container. The `skin/` folder is not only pages: a rule applied to "every skin template" is how damage gets in — the
-core pass that wrapped every skin template in `<@cTpl>` (LUT-31677) also wrapped three mail bodies and left one
-unparseable.
+container. The `skin/` folder is not only pages: a rule applied to "every skin template" is how damage gets in: it
+also reaches the mail bodies and can leave one unparseable.
 
 For a skin template, check whether the core theme overrides it (`render-template.sh` prints an `OVERRIDE` line): a
 site on that theme never renders the plugin file. A plugin template that is a byte-for-byte copy of that override is
@@ -154,7 +153,7 @@ The render uses the real macros and a lenient model: every variable the template
 counted as `wrongArguments`) and the empty branches. Write a small JSON model for the list and form templates so the
 populated branch renders too, and read the produced HTML. The render also resolves the `#i18n` keys of the output
 against the bundles of the assembled webapp and names those that answer nothing: a key that does not exist renders
-as an empty string, so the label vanishes without a trace. Prefer property access to getter calls in a template
+as an empty string, so the label vanishes with only a WARN in the log. Prefer property access to getter calls in a template
 (`item.pageUrl`, not `item.getPageUrl()`): both work on a bean, only the first works on a JSON hash.
 
 At the end, re-run the scan into `.migration/template-design-after.json` and compare.
@@ -166,7 +165,7 @@ line per file changed, one line per finding kept with the reason, what needs a J
 the gaps you found in the skills or the rules. A gap is worth a change in the plugin repository, not a workaround
 here.
 
-## Step 4a: Upload widget (conditional)
+## Step 4: Upload widget (conditional)
 
 **Only if tasks-template.json shows files with the `upload_widget` flag** (jQuery File Upload, SWFUpload, plupload,
 Dropzone, uploadify; TD45 in the design scan). Replace the widget with `plugin-asynchronousupload`, never revive it
@@ -174,9 +173,9 @@ with `library-theme-jquery`: `patterns/fileupload-patterns.md` § Replacing a jQ
 and a bean change: hand those to the Java migrator with the recipe, and delete the vendored library once the screen
 uses the component.
 
-## Step 4: SuggestPOI Migration (conditional)
+## Step 5: SuggestPOI Migration (conditional)
 
-**Only if tasks-template.json shows files with `old_suggestpoi` flag.** (jQuery in general is the Polisher's Step 6: it cross-checks the pom for `library-theme-jquery` before deciding to port or to keep.)
+**Only if tasks-template.json shows files with `old_suggestpoi` flag.** (jQuery in general belongs to the design pass, Step 3: `TM02` cross-checks the pom for `library-theme-jquery` before deciding to port or to keep.)
 
 Replace jQuery autocomplete with LuteceAutoComplete:
 - `autocomplete-js.jsp` → `@setupSuggestPOI` macro
@@ -184,7 +183,7 @@ Replace jQuery autocomplete with LuteceAutoComplete:
 
 Search `~/.lutece-references/lutece-tech-module-address-autocomplete/` for the v8 implementation.
 
-## Step 5: Per-File Verification
+## Step 6: Per-File Verification
 
 After each file:
 ```bash
@@ -212,10 +211,9 @@ Pick the scope from the state: a bean whose public methods each start with `init
 per-call state, so `@RequestScoped`. Being instantiated elsewhere by reflection (insert services are)
 does not prevent it from also being a CDI bean.
 
-**And check the reference before copying it.** `lutece-cms-plugin-blog` ships two JSPs calling
-`BlogUrlInsertServiceJspBean.doInsertBlogLink(...)` and `.doSearchBlogLink(...)` — by class name, and
-neither method exists in that class. A reference shows what was done, not that it works: verify the
-symbol exists and that the mechanism can resolve it.
+**And check the reference before copying it.** A reference JSP can call
+`MyInsertServiceJspBean.doInsertLink(...)` by class name, on a method the class does not have. A reference
+shows what was done, not that it works: verify the symbol exists and that the mechanism can resolve it.
 
 ## Before you finish
 

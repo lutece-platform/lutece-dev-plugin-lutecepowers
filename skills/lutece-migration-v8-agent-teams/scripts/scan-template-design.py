@@ -44,8 +44,7 @@ Front-office (templates/skin)
   TD34 INFO  ?exists                                                              -> ?? or ?has_content
   TD37 INFO  @cBtn label='' self-closing (empty button)
 Both sides
-  TD06 INFO  raw & between URL parameters in href/action                         -> &amp; (never in an @offcanvas targetUrl)
-  TD07 WARN  &amp; in the targetUrl of an @offcanvas useIframe: the button copies it through a JS string, the parameter is lost
+  TD06 INFO  raw & between URL parameters in href/action                         -> &amp;
   TD26 INFO  &gt; / &lt; inside a FreeMarker condition                          -> gt / lt
   TD16 WARN  argument a macro does not declare: the core macros collect it in `deprecated...` and print an HTML warning comment
   TD41 WARN  the same argument passed twice in one macro call: FreeMarker keeps the last value silently
@@ -134,7 +133,6 @@ ROW_MARKERS = ("<@tr", "<tr", "<@manageFeatureItem", "<@li", "<li", "<@card", "<
 ICON_ATTRS = ("buttonIcon", "btnIcon", "linkIcon", "tagIcon", "iconName", "actionIcon", "tabIcon", "iconTitle")
 ACTION_ICONS = r"(buttonIcon|btnIcon)='(edit|pencil|trash)'"
 RAW_AMP = r"(href|action)='[^']*\?[^']*&(?!amp;|#)[a-z_]+="
-IFRAME_AMP = r"<@offcanvas\b[^>]*useIframe=true[^>]*targetUrl='[^']*&amp;|<@offcanvas\b[^>]*targetUrl='[^']*&amp;[^>]*useIframe=true"
 CALL = re.compile(r"<@([A-Za-z_][A-Za-z0-9_.]*)((?:'[^']*'|\"[^\"]*\"|[^>'\"])*)/?>", re.S)
 MACRO_DEF = re.compile(r"<#macro\s+([A-Za-z_][A-Za-z0-9_]*)((?:'[^']*'|\"[^\"]*\"|[^>'\"])*)>", re.S)
 
@@ -824,7 +822,7 @@ def check_skin(text, findings, know):
     hits = [line_of(text, m.start()) for m in re.finditer(r"password-toggler|generate_password|LutecePassword|progress_bar_first_password", text)]
     add_grouped(findings, "TD31", "INFO", hits, "hand-rolled password field (toggler, generator, cProgress, LutecePassword module): @cInputPassword passwordMeter=true pmConfirmFieldId= covers it")
     if "<@cTpl" in text and "<@cContainer" not in text and looks_like_a_page(text):
-        add(findings, "TD33", "INFO", 1, "page template (it carries its own level 1 or 2 title) without @cContainer: the FO skeleton is cTpl > cContainer > cRow > cCol. A fragment is exempt, and since LUT-31677 a fragment legitimately carries @cTpl too, as its own override hook")
+        add(findings, "TD33", "INFO", 1, "page template (it carries its own level 1 or 2 title) without @cContainer: the FO skeleton is cTpl > cContainer > cRow > cCol. A fragment is exempt, and a fragment legitimately carries @cTpl too, as its own override hook")
     hits = [line_of(text, m.start()) for m in re.finditer(r"\?exists\b", text)]
     add_grouped(findings, "TD34", "INFO", hits, "?exists is obsolete: ?? tests presence, ?has_content tests content")
     hits = [line_of(text, offset) for offset, call in macro_calls(text, "cBtn") if re.search(r"\blabel=''", call) and call.rstrip().endswith("/>")]
@@ -836,7 +834,7 @@ def check_skin(text, findings, know):
     hits = [line_of(text, offset) for offset, call in macro_calls(text, "cIcon") if re.search(r"name='#i18n", call)]
     add_grouped(findings, "TD32", "WARN", hits, "@cIcon name='#i18n{...}': name is the glyph, not a label")
     hits = [line_of(text, offset) for offset, body in blocks(text, "cAlert") if body.strip() and not re.search(r"\btitle=", text[offset:offset + 400].split(">")[0])]
-    add_grouped(findings, "TD27", "INFO", hits, "@cAlert with a nested body and no title=: since core 03288c4 title is the main message, the body is secondary content")
+    add_grouped(findings, "TD27", "INFO", hits, "@cAlert with a nested body and no title=: title is the main message, the body is secondary content")
 
 
 def check_common(text, findings, kind, know):
@@ -932,9 +930,7 @@ def check_common(text, findings, kind, know):
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
     hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
-    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp; (targetUrl of an @offcanvas keeps raw &: offcanvas.ftl copies it into a script string)")
-    hits = [line_of(text, m.start()) for m in re.finditer(IFRAME_AMP, text, flags=re.S)]
-    add_grouped(findings, "TD07", "WARN", hits, "&amp; inside the targetUrl of an @offcanvas useIframe: offcanvas.ftl sets it through JS setAttribute, the iframe URL keeps a literal &amp; and the parameter is lost")
+    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp;")
 
 
 def dead_links(text, webapps):
@@ -1014,7 +1010,7 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
     elif kind == "email":
         add(findings, "TD10", "INFO", 1, "e-mail body template: out of scope, never convert to macros")
         for offset, _ in macro_calls(text, "cTpl"):
-            add(findings, "TD40", "INFO", line_of(text, offset), "e-mail body carrying the @cTpl theme-override hook: decide whether a theme override of a mail body is intended, and check the file still parses (the pass that wrapped every skin template, core LUT-31677, left one of these unparseable)")
+            add(findings, "TD40", "INFO", line_of(text, offset), "e-mail body carrying the @cTpl theme-override hook: decide whether a theme override of a mail body is intended, and check the file still parses")
             break
     elif kind == "fo":
         check_skin(text, findings, know)

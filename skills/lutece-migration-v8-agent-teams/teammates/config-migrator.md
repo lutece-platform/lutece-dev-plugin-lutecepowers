@@ -34,16 +34,16 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
    - `org.springframework.*` (all Spring artifacts)
    - `net.sf.ehcache` (EhCache)
    - `com.sun.mail` / `javax.mail`
-   - `org.quartz-scheduler`
+   - `org.quartz-scheduler` (the plugin's jobs become daemons scheduled by the core; a site that needs cluster-wide scheduling adds `plugin-quartz-scheduler`)
    - `net.sourceforge.scannotation`
    - `org.glassfish.jersey.*` (Jersey)
    - `net.sf.json-lib`
 4. **Remove** `<springVersion>` property
-5. **Update** `lutece-core` to latest `8.x` release range `[8.0.0,)`
+5. **Update** `lutece-core` to the range `[8.0.0,)`
 5b. **JPA project** (`summary.persistence.hasJpa` in `.migration/scan.json`): apply `${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/patterns/persistence-patterns.md` §2–§4 — `jakarta.persistence-api` in `provided`, no provider jar (`hibernate-core`, `module-jpa-hibernate`, `spring-orm`…), `persistence.xml` on `org.eclipse.persistence.jpa.PersistenceProvider` with `transaction-type="JTA"`, `jta-data-source jdbc/portal`, `shared-cache-mode NONE`, no `hibernate.*` property. For a site: feature `persistence-3.1` in `server.xml`, `ManagedConnectionService` + `portal.ds=jdbc/portal` in `db.properties`.
 6. **Update** all Lutece dependencies to their v8 versions — each dependency in `.migration/scan.json` has a `v8Version` field extracted from its reference POM. Use those exact versions. If `v8Version` is empty, read the version from `~/.lutece-references/<artifactId>/pom.xml`
 7. **Update** repository URLs from `http://` to `https://` (in `<repositories>`, `<pluginRepositories>`, `<distributionManagement>`)
-8. **Add** if not present:
+8. **Add**, only when `src/test/` exists and if not present (on a project with no test it proves nothing, and `mvn test` reports `No tests to run` while looking green):
    ```xml
    <dependency>
        <groupId>fr.paris.lutece.plugins</groupId>
@@ -55,12 +55,11 @@ Read `.migration/tasks-config.json` for your work list and dependency info.
 9. For **libraries**: replace `lutece-core` dependency with `library-core-utils` if the library should not depend on full core
 10. **Remove** Jira properties: `<jiraProjectName>` and `<jiraComponentId>` from `<properties>` block
 11. **Convert** bounded version ranges to open ranges: `[X,Y)` → `[X,)`. Upper bounds are unnecessary in v8
-12. **Test EL implementation, by parent version.** Parent `8.0.2` or later manages `org.glassfish.expressly:expressly` and no longer manages `org.glassfish:jakarta.el` (stopped at `5.0.0-M1`): rename it. Parent `8.0.0` / `8.0.1` manages only `org.glassfish:jakarta.el`: keep it, `expressly` would have no version there
-13. **Remove** any `<version>` on a dependency the parent already manages. Every 8.x parent: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, the EL implementation. From `8.0.2`: also `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
+12. **Test EL implementation: `org.glassfish.expressly:expressly`**, test scope, version managed by the parent. Rename any `org.glassfish:jakarta.el`: it stopped at `5.0.0-M1` and the parent does not manage it
+13. **Remove** any `<version>` on a dependency the parent already manages: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, `expressly`, `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`
 14. **Stay on Jakarta EE 10.** Do not introduce EE 11 artifacts — `jakarta.annotation-api` 3.0.0, `weld-junit5` 5.x (Weld 6 / CDI 4.1), `jakarta.el-api` 6.x. They resolve fine and break at runtime
-15. **From parent `8.0.2` the enforcer checks dependencies.** `requireUpperBoundDeps` fails the build on a transitive downgrade (all scopes except `provided`, so test dependencies count); `dependencyConvergence` only reports. Align the versions, do not disable the rule with `-Denforcer.dependencyRules.fail=false` except to diagnose
-16. **An XSL portlet is ported to HTML, never kept on XSL** — and `plugin-xmltransformer` is not added *to keep a portlet on XSL*. It **is** declared when the plugin's own code consumes `XmlTransformerService` (or another XSL service that moved there, `patterns/core-8x-moves.md`): that is the only correct dependency then, not a workaround. The style tables left the core and the back office can no longer create an XSL portlet whose type is not `DOCUMENT*` — full explanation and the four moves of the port in `mvc-patterns.md` §10, which the Java Migrator applies. Your part in the POM: **do not add `plugin-xmltransformer`**. Add it only when the user explicitly asks for a stopgap on an existing install, and then say it does not restore back-office creation. Checked by `XS01`.
-17. **Only add `library-lutece-unit-testing` when `src/test/` exists.** Declaring it on a project with no test adds a dependency that proves nothing, and `mvn test` reports `No tests to run` while looking green.
+15. **The parent's enforcer checks dependencies.** `requireUpperBoundDeps` fails the build on a transitive downgrade (all scopes except `provided`, so test dependencies count); `dependencyConvergence` only reports. Align the versions, do not disable the rule with `-Denforcer.dependencyRules.fail=false` except to diagnose
+16. **XSL.** A portlet: port it to HTML (`XS01`, `mvc-patterns.md` §10, applied by the Java Migrator); `plugin-xmltransformer` never keeps a portlet on XSL. Any other use of the XSL services (`XmlTransformerService` and the rest of `patterns/core-8x-moves.md`): declare `plugin-xmltransformer` (`XT01`).
 
 ## Step 2: Create beans.xml
 
@@ -112,10 +111,11 @@ Read `.migration/context-beans.json`. For beans with `needsProducer: true` that 
 
 ## Step 8: Verification
 
-Run `verify-file.sh` on each modified file:
+`verify-file.sh` checks nothing on `pom.xml`: read the `PM*` lines of the full script for it, and run `verify-file.sh` on the other files you changed:
 ```bash
-bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh pom.xml
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh . | sed -n '/CATEGORY: POM/,/CATEGORY: javax/p'
 bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh webapp/WEB-INF/web.xml
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-file.sh webapp/WEB-INF/plugins/myplugin.xml
 ```
 
 Mark all your tasks as **completed** when done. This unblocks the Java Migrators.
@@ -124,12 +124,12 @@ Mark all your tasks as **completed** when done. This unblocks the Java Migrators
 
 When the Lead reports that ALL Java Migrators have completed, delete every `*_context.xml` under `webapp/` (they were cataloged in Step 3 and are now replaced by CDI). Report the deleted paths to the Lead. Do not touch anything else at this point.
 
-## Step 18: an i18n key never repeats the plugin prefix
+## Step 10: an i18n key never repeats the plugin prefix
 
 Keys in `<plugin>_messages.properties` are relative to the bundle: the Java constant
 `"<plugin>.message.notFound"` is the line `message.notFound=…`. Writing
 `<plugin>.message.notFound=…` there resolves as `<plugin>.<plugin>.…` and the
-message silently renders as the raw key — nothing fails, nothing logs.
+message renders as an empty label (and a WARN in the log) — nothing fails.
 
 Two rules when you add a key:
 
@@ -140,7 +140,7 @@ Two rules when you add a key:
 
 Checked by `I18N01`.
 
-## Step 19: a range whose lower bound is a release finds no SNAPSHOT
+## Step 11: a range whose lower bound is a release finds no SNAPSHOT
 
 Most v8 plugins are published only as SNAPSHOTs. Maven orders `4.0.0-SNAPSHOT` **before** `4.0.0`,
 so `[4.0.0,5.0.0)` matches nothing at all and the build dies with
@@ -154,9 +154,9 @@ curl -sf "https://dev.lutece.paris.fr/nexus/repository/lutece_snapshots_reposito
 ```
 
 Only a SNAPSHOT: `[4.0.0-SNAPSHOT,)`. A release exists: `[4.0.0,)`. The upper bound is optional —
-`[8.0.0,)` is what the migrated references use for `lutece-core`.
+`lutece-core` takes `[8.0.0,)`.
 
-## Step 20: a plugin that declares site properties needs two new i18n keys per property
+## Step 12: a plugin that declares site properties needs two new i18n keys per property
 
 The v8 back office lays the site properties out in named columns. `admin/system/modify_properties.html`
 reads, for every property of every group:
@@ -178,7 +178,7 @@ site_property.<key>.group=<group>
 
 The core's own groups are the model: `src/java/fr/paris/lutece/portal/resources/site_messages.properties`.
 
-## Step 21: what the v8 core no longer carries, a plugin must now declare
+## Step 13: what the v8 core no longer carries, a plugin must now declare
 
 The full list of core APIs that moved or shrank is `patterns/core-8x-moves.md` (XSL services and `core_style*`
 tables to `plugin-xmltransformer`, `ContentService` without its cache, `Parser` in `library-core-utils`):
@@ -192,7 +192,7 @@ the class is gone:
 git -C ~/.lutece-references/lutece-core show origin/develop7.x:pom.xml | grep -A 3 "<artifactId>library-"
 ```
 
-## Step 22: a property declared with an empty value now resolves to null
+## Step 14: a property declared with an empty value now resolves to null
 
 `AppPropertiesService` reads MicroProfile Config in v8, and MicroProfile treats an **empty** value exactly like
 a key no source declares: `getProperty` returns `null`, where v7 returned `""`. Plugin `.properties` files are

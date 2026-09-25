@@ -33,7 +33,7 @@ public class MyRestApplication extends Application { }
 
 In v7 `fr.paris.lutece.plugins.rest.service.RestConstants.BASE_PATH` was `"/rest/"`. In v8 it is `""`, and the
 prefix lives in `RestConstants.APP_PATH`, used by `@ApplicationPath( RestConstants.APP_PATH )` on plugin-rest's
-`LuteceRestApplication`. Both values are the same in the 4.0.0 release and in 4.0.1-SNAPSHOT.
+`LuteceRestApplication`, is `"/rest/"`.
 
 So the same pair of constants has to be used differently in two places, and the compiler cannot tell you:
 
@@ -201,28 +201,19 @@ public class MyExceptionMapper implements ExceptionMapper<Throwable> { ... }
 
 ## 6. REST plugin.xml Changes
 
-- **Remove the whole `<filters>` block of a REST module, including a per-path security filter.** The original
-  advice was right, its stated reason was not: it is not about resource discovery. In v8 the REST security model
-  moved into plugin-rest itself — `RestAuthenticatorRequestFilter`, `@Provider @PreMatching
-  @Priority( AUTHENTICATION )`, **global to the whole REST application**, gated by `rest.security.activated`
-  (shipped `false`) and configured by `rest.requestAuthenticator.*`. No v8 reference declares a `@NameBinding`;
-  per-resource REST filtering is not the platform's idiom any more.
-  A descriptor filter cannot take its place either, because it no longer fires: `MainFilter.matchMapping` compares
-  the pattern to `request.getServletPath( )`, unchanged since v7, but `@ApplicationPath( "/rest/" )` now mounts a
-  real servlet, so that value is `/rest` and the rest of the url is in `getPathInfo( )`. `/rest/*` still matches;
-  **`/rest/<plugin>/*` never does.** The filter is still registered at startup and simply never runs, with nothing
-  in the log to say so — verified on a bench: the same unsigned call answers 401 on the v7 leg and 200 on the v8 one.
-  Filters on `/jsp/*` and the like are unaffected and stay (mylutece, document, resource declare them in v8).
-  The general form is worth keeping: **"the mechanism still exists" and "the mechanism still works here" are two
-  questions.** Here the class existed, the core service existed, migrated plugins still declared such blocks, and
-  the filter was registered at startup — all true, all beside the point, because none of it asked whether the
-  url-pattern still matched. Two HTTP calls settled what several source readings could not. When the answer decides
-  whether something is protected, measure it on both legs.
-  **Removing the block is half the work.** It is inert, so deleting it changes no behaviour — but the endpoints it
+- **Remove the whole `<filters>` block of a REST module, including a per-path security filter**, because it does
+  not fire: `MainFilter.matchMapping` compares the pattern to `request.getServletPath( )`, and
+  `@ApplicationPath( "/rest/" )` mounts a real servlet, so that value is `/rest` and the rest of the url is in
+  `getPathInfo( )`. `/rest/*` matches; **`/rest/<plugin>/*` never does.** The filter is registered at startup and
+  never runs, with nothing in the log to say so: an unsigned call the v7 filter refused answers 200. Check `WB05`.
+  Filters on `/jsp/*` and the like are unaffected and stay (mylutece, document, resource declare them).
+  **Removing the block is half the work.** It is inert, so deleting it changes no behaviour, but the endpoints it
   named are then unprotected, and a migration does not open what was closed. Replace it with the name-bound JAX-RS
   filter of §3, carrying the same parameters, and say in the hand-over that the mechanism changed while the
-  contract did not. plugin-rest's site-wide `rest.security.activated` is a separate, additional option, never the
-  replacement: it is off by default and covers every REST resource of the site.
+  contract did not. No migrated reference carries a name-bound filter: the recipe rests on the Jakarta REST
+  specification quoted in §3. plugin-rest's `RestAuthenticatorRequestFilter` (`@PreMatching`, global to the REST
+  application, gated by `rest.security.activated`, shipped `false`, configured by `rest.requestAuthenticator.*`)
+  is a separate, site-wide option, never the replacement.
   Do not treat this as a platform defect to be fixed: declaring a REST filter in the descriptor is a finished
   mechanism, and the core is not going back to it. The JAX-RS filter of §3 is the replacement, full stop.
 - Remove Jersey init-params

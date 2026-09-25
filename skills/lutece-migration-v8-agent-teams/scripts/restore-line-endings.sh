@@ -4,7 +4,7 @@
 #
 # An editor that saves in the other convention rewrites every line of the file: the diff then shows the whole
 # file and the migration is invisible in it, so the review cannot happen. This restores the endings HEAD has,
-# on the files where the diff is mostly endings (verify-migration.sh, check LE01), and leaves the content alone.
+# on every changed file whose endings moved (verify-migration.sh, check LE01), and leaves the content alone.
 
 set -uo pipefail
 cd "${1:-.}" || exit 1

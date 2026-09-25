@@ -1,5 +1,5 @@
 #!/bin/bash
-# verify-migration.sh — Run all migration verification checks (70+ checks)
+# verify-migration.sh — Run all migration verification checks
 # Usage: bash verify-migration.sh [project_root] [--json]
 # Exit code: 0 if all PASS, 1 if any FAIL
 # --json flag: output JSON instead of colored text (writes to .migration/verify-latest.json)
@@ -12,6 +12,17 @@ JSON_MODE=false
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 cd "$PROJECT_ROOT"
+
+# A project below the Lutece 8 level lutecepowers supports is refused before any check: every rule is written for
+# that level, so a report on an older core would judge it against behaviour it does not have.
+if [ -f pom.xml ]; then
+    bash "$SCRIPT_DIR/check-v8-floor.sh" . >/dev/null
+    if [ $? -eq 1 ]; then
+        echo "" >&2
+        echo "verify-migration stopped: the project resolves a lutece-core below the level lutecepowers supports." >&2
+        exit 2
+    fi
+fi
 
 # A verification that could not run must never look like one that passed. The template checks read the macro
 # signatures, the icon font and the dependency templates from the assembled webapp, so the precondition is
@@ -162,28 +173,26 @@ else
     emit "PM09" "PASS" "No bounded version ranges (no pom.xml)" 0
 fi
 
-# PM06: parent version must start with 8.
+# PM06: the parent is at or above the lowest Lutece 8 parent lutecepowers supports (v8-floor.conf).
 if [ -f "pom.xml" ]; then
+    # shellcheck source=/dev/null
+    . "$SCRIPT_DIR/v8-floor.conf"
     PARENT_VER=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
-    if [[ "$PARENT_VER" == 8.* ]]; then
+    if [[ "$PARENT_VER" == 8.* ]] && [ "$(printf '%s\n%s\n' "$V8_FLOOR_PARENT" "${PARENT_VER%%-*}" | sort -V | head -1)" = "$V8_FLOOR_PARENT" ] && [[ "$PARENT_VER" != "$V8_FLOOR_PARENT"-* ]]; then
         emit "PM06" "PASS" "Parent version is $PARENT_VER" 0
     else
-        emit "PM06" "FAIL" "Parent version is '$PARENT_VER' (must start with 8.)" 1
+        emit "PM06" "FAIL" "Parent version is '$PARENT_VER' (must be $V8_FLOOR_PARENT or later: the latest released lutece-global-pom / lutece-site-pom 8.x)" 1
     fi
 else
     emit "PM06" "PASS" "Parent version check (no pom.xml)" 0
 fi
 
-# PM10: EL implementation must match what the parent manages.
-#   parent >= 8.0.2 manages org.glassfish.expressly:expressly (org.glassfish:jakarta.el stopped at 5.0.0-M1)
-#   parent 8.0.0 / 8.0.1 manages org.glassfish:jakarta.el only
-# PM11: explicit <version> on a dependency the parent manages (list depends on the parent)
+# PM10: EL implementation is org.glassfish.expressly:expressly, the one the parent manages (org.glassfish:jakarta.el
+#   stopped at 5.0.0-M1 and has no managed version).
+# PM11: explicit <version> on a dependency the parent manages
 # PM12: Jakarta EE 11 artifact on the EE 10 baseline
 # Only <dependency> blocks outside <dependencyManagement> are inspected.
-PARENT_GE_802=false
-[ -n "${PARENT_VER:-}" ] && [ "$(printf '%s\n' "8.0.2" "$PARENT_VER" | sort -V | head -1)" = "8.0.2" ] && PARENT_GE_802=true
-MANAGED='library-lutece-unit-testing|hibernate-validator|jaxb-runtime|jakarta.el|expressly'
-$PARENT_GE_802 && MANAGED="$MANAGED|jboss-logging|jakarta.el-api|jakarta.annotation-api"
+MANAGED='library-lutece-unit-testing|hibernate-validator|jaxb-runtime|expressly|jboss-logging|jakarta.el-api|jakarta.annotation-api'
 PM10_COUNT=0; PM10_MATCHES=""
 PM11_COUNT=0; PM11_MATCHES=""
 PM12_COUNT=0; PM12_MATCHES=""
@@ -205,9 +214,7 @@ if [ -f "pom.xml" ]; then
 
         case "$GID:$AID" in
             org.glassfish:jakarta.el)
-                $PARENT_GE_802 && { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish:jakarta.el is not managed by parent $PARENT_VER, use org.glassfish.expressly:expressly"$'\n'; } ;;
-            org.glassfish.expressly:expressly)
-                $PARENT_GE_802 || { PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish.expressly:expressly is not managed by parent $PARENT_VER, use org.glassfish:jakarta.el"$'\n'; } ;;
+                PM10_COUNT=$((PM10_COUNT + 1)); PM10_MATCHES="${PM10_MATCHES}org.glassfish:jakarta.el is not managed by the parent, use org.glassfish.expressly:expressly"$'\n' ;;
         esac
 
         if [ -n "$VER" ] && printf '%s' "$AID" | grep -qE "^($MANAGED)$"; then
@@ -224,9 +231,9 @@ if [ -f "pom.xml" ]; then
 fi
 
 if [ "$PM10_COUNT" -eq 0 ]; then
-    emit "PM10" "PASS" "EL implementation matches the parent (${PARENT_VER:-none})" 0
+    emit "PM10" "PASS" "EL implementation is org.glassfish.expressly:expressly" 0
 else
-    emit "PM10" "FAIL" "EL implementation not managed by parent ${PARENT_VER:-?}" "$PM10_COUNT" "$PM10_MATCHES"
+    emit "PM10" "FAIL" "org.glassfish:jakarta.el declared: use org.glassfish.expressly:expressly, the EL implementation the parent manages" "$PM10_COUNT" "$PM10_MATCHES"
 fi
 
 if [ "$PM11_COUNT" -eq 0 ]; then
@@ -362,14 +369,34 @@ if [ "$COUNT" -eq 0 ]; then emit "DA02" "PASS" "Every DAOUtil lives in a try-wit
 else emit "DA02" "FAIL" "DAOUtil outside try-with-resources: the connection leaks on an exception" "$COUNT" "$DA02_MATCHES"; fi
 
 # SQ05: a value glued into a SQL literal in a DAO ("… LIKE '%" + str + "%'", "col = '" + value + "'"): an injection
-# point, and a quote in the value breaks the query. Bind it with daoUtil.setString.
+# point, and a quote in the value breaks the query. Bind it with daoUtil.setString. A constant of the class glued the
+# same way is a compile-time literal, not a value.
 SQ05_MATCHES=""
 if [ -d "src/" ]; then
-    SQ05_MATCHES=$(grep -rnE "'[%_]*\"[[:space:]]*\+[[:space:]]*[A-Za-z_]" src/ --include="*DAO.java" 2>/dev/null) || SQ05_MATCHES=""
+    SQ05_MATCHES=$(grep -rnE "'[%_]*\"[[:space:]]*\+[[:space:]]*[A-Za-z_]" src/ --include="*DAO.java" 2>/dev/null \
+        | grep -vE "'[%_]*\"[[:space:]]*\+[[:space:]]*[A-Z][A-Z0-9_]*[[:space:]]*(\+|;|$)") || SQ05_MATCHES=""
 fi
 COUNT=0; [ -n "$SQ05_MATCHES" ] && COUNT=$(echo "$SQ05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ05" "PASS" "No value concatenated into a SQL literal" 0
 else emit "SQ05" "FAIL" "Value concatenated into a SQL literal: bind it (setString), it is an injection point" "$COUNT" "$SQ05_MATCHES"; fi
+echo ""
+
+# SQ06: a Liquibase-headed SQL file of the project that never reaches WEB-INF/classes/sql of the assembled webapp. The
+# lutece-maven-plugin copies a file there only when it can parse its name (update_db_<plugin>-<from>-<to>.sql, versions
+# in digits and dots); plugin-liquibase reads nothing else, so the script is dropped without a log line.
+SQ06_MATCHES=""
+SQ06_CLASSES=""
+for d in target/lutece target/*; do [ -d "$d/WEB-INF/classes/sql" ] && [ -d "$d/WEB-INF/templates" ] && { SQ06_CLASSES="$d/WEB-INF/classes/sql"; break; }; done
+if [ -d "src/sql" ] && [ -n "$SQ06_CLASSES" ]; then
+    SQ06_MATCHES=$(find src/sql -name "*.sql" 2>/dev/null | sort | while read -r f; do
+        head -1 "$f" | grep -q "liquibase formatted sql" || continue
+        rel=${f#src/sql/}
+        [ -f "$SQ06_CLASSES/$rel" ] || echo "$f: not copied to WEB-INF/classes/sql, Liquibase never runs it: an upgrade is plugins/<plugin>/upgrade/update_db_<plugin>-<from>-<to>.sql (versions in digits and dots), an install script plugins/<plugin>/plugin/create_db_ or init_db_, or core/init_core_"
+    done) || SQ06_MATCHES=""
+fi
+COUNT=0; [ -n "$SQ06_MATCHES" ] && COUNT=$(echo "$SQ06_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ06" "PASS" "Every Liquibase SQL file reaches the classpath of the assembled webapp" 0
+else emit "SQ06" "FAIL" "SQL file Liquibase never sees: its name is not parsed" "$COUNT" "$SQ06_MATCHES"; fi
 echo ""
 
 # ─── JPA ─────────────────────────────────────────────────
@@ -560,7 +587,7 @@ if [ "$COUNT" -eq 0 ]; then emit "MV07" "PASS" "Every @Controller path ends with
 else emit "MV07" "FAIL" "@Controller controllerPath without its trailing slash: urls and CSRF registry name a missing JSP" "$COUNT" "$MV07_MATCHES"; fi
 # MV03: an MVC bean gets its CSRF token from the framework; carrying it by hand there means the framework's own
 # token is off or duplicated. A bean that is not MVC (a portlet admin bean, a servlet) has no framework token and
-# must carry it by hand: that is the pattern, not a finding. An explicitly disabled token is always one.
+# must carry it by hand: that is the pattern, not a finding. A disabled or unset securityTokenEnabled is always one.
 MV03_TOKEN='SecurityTokenService\.MARK_TOKEN|getSecurityTokenService\( \)\.(getToken|validate)|_securityTokenService\.(getToken|validate)'
 MV03_MATCHES=""
 if [ -d "src/" ]; then
@@ -571,10 +598,23 @@ if [ -d "src/" ]; then
     done)
     MV03_OFF=$({ grep -rnE 'securityTokenEnabled[[:space:]]*=[[:space:]]*false' src/ --include="*.java" 2>/dev/null || true; })
     [ -n "$MV03_OFF" ] && MV03_MATCHES="$MV03_MATCHES${MV03_MATCHES:+$'\n'}$MV03_OFF"
+    MV03_UNSET=$({ grep -rlE 'annotations\.Controller\b' src/ --include="*.java" 2>/dev/null || true; } | python3 -c '
+import re, sys
+for f in sys.stdin.read().split():
+    s = open(f, encoding="utf-8", errors="replace").read()
+    for m in re.finditer(r"^[ \t]*@Controller[ \t]*\(", s, re.M):
+        i, depth = m.end(), 1
+        while i < len(s) and depth:
+            depth += {"(": 1, ")": -1}.get(s[i], 0)
+            i += 1
+        if not re.search(r"securityTokenEnabled\s*=", s[m.end():i]):
+            print("%s:%d: @Controller without securityTokenEnabled (the token is off by default)" % (f, s.count("\n", 0, m.start()) + 1))
+')
+    [ -n "$MV03_UNSET" ] && MV03_MATCHES="$MV03_MATCHES${MV03_MATCHES:+$'\n'}$MV03_UNSET"
 fi
 COUNT=0; [ -n "$MV03_MATCHES" ] && COUNT=$(echo "$MV03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "MV03" "PASS" "CSRF token left to the framework in the MVC beans" 0
-else emit "MV03" "WARN" "Manual CSRF token in an MVC bean, or securityTokenEnabled=false (the framework owns the token there)" "$COUNT" "$MV03_MATCHES"; fi
+else emit "MV03" "WARN" "Manual CSRF token in an MVC bean, or securityTokenEnabled false or unset (the framework owns the token there)" "$COUNT" "$MV03_MATCHES"; fi
 
 # MV04: FileItem still used (not MultipartItem). Excludes MemoryFileItem from library-httpaccess (v8 in-memory helper).
 check_grep "MV04" 'import\s\+org\.apache\.commons\.fileupload[0-9]*\(\.core\)\?\.FileItem' "src/" "FAIL" "FileItem -> MultipartItem (use MemoryFileItem from library-httpaccess for in-memory cases)" "--include=*.java"
@@ -586,19 +626,24 @@ check_grep "WB01" 'java\.sun\.com/xml/ns/javaee' "webapp/" "FAIL" "Old Java EE n
 check_grep "WB02" '<application-class>' "webapp/WEB-INF/plugins/" "FAIL" "application-class -> CDI auto-discovery"
 check_grep "WB03" 'ContextLoaderListener' "webapp/" "FAIL" "Spring ContextLoaderListener in web.xml"
 
-# WB04: min-core-version not set to 8.0.0
+# WB04: min-core-version below the declared Lutece 8 core (digits only: the core cuts the value at '-')
+. "$SCRIPT_DIR/v8-floor.conf"
+WB04_FLOOR="$V8_DECLARED_CORE"
 WB04_MATCHES=""
 if [ -d "webapp/WEB-INF/plugins/" ]; then
-    WB04_MATCHES=$(grep -rn '<min-core-version>' webapp/WEB-INF/plugins/ --include="*.xml" 2>/dev/null | grep -v '8\.0\.0') || WB04_MATCHES=""
+    WB04_MATCHES=$(grep -rn '<min-core-version>' webapp/WEB-INF/plugins/ --include="*.xml" 2>/dev/null | while IFS= read -r l; do
+        v=$(printf '%s' "$l" | sed -n 's/.*<min-core-version>\([^<]*\)<\/min-core-version>.*/\1/p' | tr -d ' ')
+        { [[ ! "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]] || [ "$(printf '%s\n%s\n' "$WB04_FLOOR" "$v" | sort -V | head -1)" != "$WB04_FLOOR" ]; } && echo "$l"
+    done) || WB04_MATCHES=""
 fi
 COUNT=0; [ -n "$WB04_MATCHES" ] && COUNT=$(echo "$WB04_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "WB04" "PASS" "min-core-version set to 8.0.0" 0
-else emit "WB04" "WARN" "min-core-version not set to 8.0.0" "$COUNT" "$WB04_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "WB04" "PASS" "min-core-version at $WB04_FLOOR or later" 0
+else emit "WB04" "WARN" "min-core-version below $WB04_FLOOR, or not plain digits: set <min-core-version>$WB04_FLOOR</min-core-version>" "$COUNT" "$WB04_MATCHES"; fi
 
 # WB05: a descriptor filter mapped under the JAX-RS application path never fires in v8.
 # MainFilter.matchMapping compares the url-pattern to request.getServletPath( ), which is "/rest" for every call
 # routed to the application mounted by @ApplicationPath( "/rest/" ). A pattern deeper than that can never match,
-# so the filter is registered at startup and silently never runs: measured 401 on a v7 site, 200 on v8.
+# so the filter is registered at startup and silently never runs.
 # Replace it with a @NameBinding ContainerRequestFilter on the resource (patterns/rest-patterns.md 3 and 6).
 WB05_MATCHES=""
 if [ -d "webapp/WEB-INF/plugins/" ]; then
@@ -606,9 +651,15 @@ if [ -d "webapp/WEB-INF/plugins/" ]; then
 fi
 COUNT=0; [ -n "$WB05_MATCHES" ] && COUNT=$(echo "$WB05_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB05" "PASS" "no descriptor filter mapped under the JAX-RS application path" 0
-else emit "WB05" "FAIL" "descriptor filter under /rest/ never fires in v8 -> @NameBinding ContainerRequestFilter" "$COUNT" "$WB05_MATCHES"; fi
+else emit "WB05" "FAIL" "descriptor filter under /rest/ never fires: remove it and protect the resource with a @NameBinding ContainerRequestFilter carrying the same parameters (rest-patterns.md 3 and 6)" "$COUNT" "$WB05_MATCHES"; fi
 
-check_file_exists "ST01" "src/main/resources/META-INF/beans.xml" "FAIL" "beans.xml exists"
+# ST01: a project that declares CDI beans ships src/main/resources/META-INF/beans.xml; one with no CDI bean (a site, a
+# library of static helpers) needs none.
+if grep -rqE '@(ApplicationScoped|RequestScoped|SessionScoped|Dependent|Singleton|Named|Inject|Produces|Observes|ObservesAsync|Decorator|Interceptor)\b' src/ --include="*.java" 2>/dev/null; then
+    check_file_exists "ST01" "src/main/resources/META-INF/beans.xml" "FAIL" "beans.xml exists"
+else
+    emit "ST01" "PASS" "No CDI bean in the project: no beans.xml needed" 0
+fi
 echo ""
 
 # ─── Structure ───────────────────────────────────────────
@@ -638,10 +689,10 @@ else emit "ST02" "FAIL" "final keyword on a CDI class resolved by its concrete t
 # ST03: DAO classes without @ApplicationScoped
 ST03_MATCHES=""
 if [ -d "src/" ]; then
-    # Only a file that DECLARES a DAO class. The former pattern, `class.*DAO`, also matched any line mentioning
-    # a DAO after the word class — `select( ICityDAO.class, NamedLiteral.of( "myplugin.cityDAO" ) )` in a Home,
-    # for instance — and reported Home facades, which are static by design and carry no scope.
-    ST03_MATCHES=$(grep -rlE '^[[:space:]]*(public|final|abstract|public final|public abstract)[[:space:]]+class[[:space:]]+[A-Za-z0-9_]*DAO\b' src/ --include="*.java" 2>/dev/null | while read -r f; do
+    # Only a file that DECLARES a DAO class: a line naming a DAO after the word class, such as
+    # `select( IMyEntityDAO.class, … )` in a Home, is not one, and a Home facade is static by design with no scope.
+    # An abstract DAO base is never a bean itself: its subclasses carry (or inherit) the scope.
+    ST03_MATCHES=$(grep -rlE '^[[:space:]]*(public|final|public final)[[:space:]]+class[[:space:]]+[A-Za-z0-9_]*DAO\b' src/ --include="*.java" 2>/dev/null | while read -r f; do
         grep -q 'public interface\|protected interface' "$f" 2>/dev/null && continue
         if ! grep -q '@ApplicationScoped\|@RequestScoped\|@SessionScoped\|@Dependent' "$f" 2>/dev/null; then
             echo "$f: DAO class without CDI scope annotation"
@@ -710,7 +761,7 @@ COUNT=0; [ -n "$LE01_MATCHES" ] && COUNT=$(echo "$LE01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "LE01" "PASS" "No file had its line endings converted" 0
 else emit "LE01" "FAIL" "Line endings converted: run restore-line-endings.sh, the diff must show the migration, not the whole file" "$COUNT" "$LE01_MATCHES"; fi
 
-# XT01: the XSL machinery left the core (LUT-32172): XmlTransformerService and the core_style* tables live in
+# XT01: the XSL machinery is not in the v8 core: XmlTransformerService and the core_style* tables live in
 # plugin-xmltransformer. Code or SQL that still uses them needs that dependency declared — or, for a portlet, the
 # port to HTML (XS01).
 XT01_MATCHES=""
@@ -741,7 +792,7 @@ if grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null 
 fi
 COUNT=0; [ -n "$XT02_MATCHES" ] && COUNT=$(echo "$XT02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "XT02" "PASS" "Install scripts writing core_style* run after xmltransformer" 0
-else emit "XT02" "FAIL" "Install scripts write core_style* without runAfter:xmltransformer (sql-liquibase.md)" "$COUNT" "$XT02_MATCHES"; fi
+else emit "XT02" "FAIL" "Install scripts write core_style* without runAfter:xmltransformer (rules/sql-liquibase.md)" "$COUNT" "$XT02_MATCHES"; fi
 
 # XT03: an upgrade script that writes to core_style* runs on every site that migrates, including the ones where
 # those tables are gone. Unguarded, its first statement stops the whole Liquibase update, the core's own upgrade
@@ -757,7 +808,7 @@ if [ -d src/sql ]; then
 fi
 COUNT=0; [ -n "$XT03_MATCHES" ] && COUNT=$(echo "$XT03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "XT03" "PASS" "Upgrade statements on core_style* are guarded by a precondition" 0
-else emit "XT03" "FAIL" "Upgrade statements on core_style* without a precondition on the tables (sql-liquibase.md)" "$COUNT" "$XT03_MATCHES"; fi
+else emit "XT03" "FAIL" "Upgrade statements on core_style* without a precondition on the tables (rules/sql-liquibase.md)" "$COUNT" "$XT03_MATCHES"; fi
 
 # SQ03: adding AUTO_INCREMENT to a column whose rows include a 0 makes MariaDB and MySQL renumber that 0 into 1
 # and fail on the duplicate key. Reference rows shipped with id 0 are common in older init scripts. The ALTER needs
@@ -781,8 +832,8 @@ if [ -d src/sql ]; then
 fi
 COUNT=0; [ -n "$SQ03_MATCHES" ] && COUNT=$(echo "$SQ03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ03" "PASS" "No AUTO_INCREMENT added without NO_AUTO_VALUE_ON_ZERO" 0
-elif [ "$SQ03_ZERO" -eq 1 ]; then emit "SQ03" "FAIL" "AUTO_INCREMENT added to a table shipped with an id 0, without NO_AUTO_VALUE_ON_ZERO (sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"
-else emit "SQ03" "WARN" "AUTO_INCREMENT added without NO_AUTO_VALUE_ON_ZERO: fails on a site whose older data holds an id 0 (sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"; fi
+elif [ "$SQ03_ZERO" -eq 1 ]; then emit "SQ03" "FAIL" "AUTO_INCREMENT added to a table shipped with an id 0, without NO_AUTO_VALUE_ON_ZERO (rules/sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"
+else emit "SQ03" "WARN" "AUTO_INCREMENT added without NO_AUTO_VALUE_ON_ZERO: fails on a site whose older data holds an id 0 (rules/sql-liquibase.md)" "$COUNT" "$SQ03_MATCHES"; fi
 
 # CS02: ContentService no longer extends AbstractCacheableService in v8: initCache/getFromCache/putInCache on a
 # content service do not compile. The cache, if still wanted, is a service of its own (lutece-cache skill).
@@ -802,7 +853,7 @@ echo "CATEGORY: v8 core changes"
 
 # XS01: a portlet still rendered by XSL. Must be ported to HTML, there is no second option:
 # the style tables left the core for plugin-xmltransformer, PortletStyleDAO in the core is a
-# stub, and since LUT-32172 the back office cannot create an XSL portlet whose type is not
+# stub, and the back office cannot create an XSL portlet whose type is not
 # DOCUMENT* (MANDATORY_FIELDS, whatever is installed). Port per mvc-patterns.md §10:
 # extend PortletHtmlContent, implement getHtmlContent(), delete the XSL and the core_style rows.
 XS01_MATCHES=""
@@ -824,7 +875,7 @@ if [ "$COUNT" -eq 0 ]; then emit "XS01" "PASS" "No portlet left on XSL rendering
 else emit "XS01" "FAIL" "Portlet still rendered by XSL (port to HTML, mvc-patterns.md 10)" "$COUNT" "$XS01_MATCHES"; fi
 
 # SQ01: every SQL file must start with the Liquibase header. v7 installed through Ant and ran headerless files;
-# v8 installs through plugin-liquibase only, which drops them without a log line (sql-liquibase.md).
+# v8 installs through plugin-liquibase only, which drops them without a log line (rules/sql-liquibase.md).
 SQ01_MATCHES=""
 if [ -d "src/sql" ]; then
     SQ01_MATCHES=$(find src/sql -name '*.sql' -size +0 | sort | while read -r f; do
@@ -833,12 +884,12 @@ if [ -d "src/sql" ]; then
 fi
 COUNT=0; [ -n "$SQ01_MATCHES" ] && COUNT=$(echo "$SQ01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ01" "PASS" "Every SQL file carries the Liquibase header" 0
-else emit "SQ01" "FAIL" "SQL files Liquibase will ignore (sql-liquibase.md)" "$COUNT" "$SQ01_MATCHES"; fi
+else emit "SQ01" "FAIL" "SQL files Liquibase will ignore (rules/sql-liquibase.md)" "$COUNT" "$SQ01_MATCHES"; fi
 
 # SQ02: what the creation script gained since the last commit, an existing site never gets. A column or a table
-# added to create_db_*.sql is green on every fresh bench and breaks the first migrated site (seen with a v8
-# DAO writing a new column into a history table the v7 base did not have). Each addition needs an
-# upgrade script under src/sql/**/upgrade/ that creates it, with a real precondition (sql-liquibase.md).
+# added to create_db_*.sql is green on every fresh bench and breaks the first migrated site (a v8 DAO writing a
+# column the v7 base does not have). Each addition needs an
+# upgrade script under src/sql/**/upgrade/ that creates it, with a real precondition (rules/sql-liquibase.md).
 SQ02_MATCHES=""
 if [ -d "src/sql" ] && git rev-parse -q --verify HEAD >/dev/null 2>&1; then
     columns() { awk 'BEGIN{IGNORECASE=1} /CREATE TABLE/{t=$0; sub(/.*CREATE TABLE[[:space:]]+(IF NOT EXISTS[[:space:]]+)?/,"",t); sub(/[[:space:]]*\(.*/,"",t); gsub(/`/,"",t); in_t=1; next}
@@ -847,7 +898,7 @@ if [ -d "src/sql" ] && git rev-parse -q --verify HEAD >/dev/null 2>&1; then
         git cat-file -e "HEAD:$f" 2>/dev/null || continue
         comm -13 <(columns <(git show "HEAD:$f")) <(columns "$f") | while IFS=. read -r table col; do
             # Covered when an upgrade script adds the column, or (re)creates the table WITH it — an older
-            # upgrade that created the table without the column proves nothing, it is how the first case broke.
+            # upgrade that created the table without the column proves nothing.
             if grep -rqiE "ALTER TABLE \`?$table\`?.*ADD (COLUMN )?\`?$col\`?\b" src/sql --include='update_db_*.sql' 2>/dev/null; then continue; fi
             if grep -rliE "CREATE TABLE (IF NOT EXISTS )?\`?$table\`?\b" src/sql --include='update_db_*.sql' 2>/dev/null | xargs -r cat | columns | grep -qx "$table.$col"; then continue; fi
             echo "$f: $table.$col is new here and no upgrade script under src/sql/**/upgrade/ adds it"
@@ -856,11 +907,10 @@ if [ -d "src/sql" ] && git rev-parse -q --verify HEAD >/dev/null 2>&1; then
 fi
 COUNT=0; [ -n "$SQ02_MATCHES" ] && COUNT=$(echo "$SQ02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ02" "PASS" "Every column or table the creation script gained has its upgrade script" 0
-else emit "SQ02" "FAIL" "Schema gained by create_db without an upgrade script for existing sites (sql-liquibase.md)" "$COUNT" "$SQ02_MATCHES"; fi
+else emit "SQ02" "FAIL" "Schema gained by create_db without an upgrade script for existing sites (rules/sql-liquibase.md)" "$COUNT" "$SQ02_MATCHES"; fi
 
 # TL01: ThreadLocal must be cleared with remove() in a finally block, never reassigned.
-# Reassigning keeps one entry per pooled thread for the whole application lifetime
-# (LUT-31201, see the scalability skill). Applies to migration, not only to scaling work.
+# Reassigning keeps one entry per pooled thread for the whole application lifetime.
 TL01_MATCHES=""
 if [ -d "src/" ]; then
     TL01_MATCHES=$({ grep -rlnE '\bThreadLocal\b' src/ --include="*.java" 2>/dev/null || true; } | while read -r f; do
@@ -901,7 +951,7 @@ else emit "CS01" "FAIL" "Portlet JspBean without CSRF token (mvc-patterns.md 11)
 
 # I18N01: a key of <plugin>_messages.properties is relative to the bundle, so it never repeats the plugin name.
 # Writing <plugin>.message.x in <plugin>_messages.properties resolves as <plugin>.<plugin>.message.x and
-# the message silently renders as the raw key. The same grep catches a key appended without a newline, glued to
+# the message renders as an empty label (and a WARN in the log). The same grep catches a key appended without a newline, glued to
 # the value of the line above, which corrupts both entries at once.
 I18N01_MATCHES=""
 if [ -d "src/java" ]; then
@@ -921,7 +971,7 @@ else emit "I18N01" "FAIL" "i18n key repeats the plugin prefix (or glued to the l
 echo ""
 
 # I18N02: a key a template or a message constant asks for, that no bundle of this plugin declares. Lutece then
-# renders the raw key on screen and nothing fails at build time. Unambiguous sources only: `#i18n{}` in the
+# renders an empty label (and a WARN in the log) and nothing fails at build time. Unambiguous sources only: `#i18n{}` in the
 # templates, the Java constants whose name says they hold a message key (MESSAGE_, INFO_, ERROR_, WARNING_, TITLE_,
 # PROPERTY_PAGE_TITLE_), the label tags of the plugin descriptor (feature, portlet type, daemon, description) and the
 # name/description of the core_admin_right and core_portlet_type rows the SQL inserts. Bean names and CSRF action names are strings too, and are not keys.
@@ -955,12 +1005,11 @@ if [ -d "src/java" ]; then
 fi
 COUNT=0; [ -n "$I18N02_MATCHES" ] && COUNT=$(echo "$I18N02_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "I18N02" "PASS" "Every i18n key the plugin asks for is declared" 0
-else emit "I18N02" "WARN" "i18n key asked for but declared nowhere: the raw key shows on screen" "$COUNT" "$I18N02_MATCHES"; fi
+else emit "I18N02" "WARN" "i18n key asked for but declared nowhere: an empty label on screen (and a WARN in the log)" "$COUNT" "$I18N02_MATCHES"; fi
 echo ""
 
 # ─── JSP ─────────────────────────────────────────────────
-# SQ04: an INSERT into a core table without its column list. The core adds columns across 8.0.x (core_portlet gained
-# id_template in 8.0.2): a positional VALUES list then fails with "Column count doesn't match value count", Liquibase
+# SQ04: an INSERT into a core table without its column list. The core adds columns: a positional VALUES list then fails with "Column count doesn't match value count", Liquibase
 # stops and the site never starts. Name the columns.
 SQ04_MATCHES=""
 if [ -d "src/sql" ]; then
@@ -1141,7 +1190,7 @@ echo ""
 
 # WB06: an <admin-feature> whose <feature-group> is not the group its install SQL gives it. Reinstalling the plugin from
 # the Plugins screen rebuilds its rights from the descriptor (Plugin.install -> registerRights), so the feature moves
-# (tagcloud: CONTENT -> NULL, then shown in the last menu group). A NULL group in both is consistent (plugin-forms).
+# (CONTENT -> NULL, then shown in the last menu group). A NULL group in both is consistent.
 WB06_MATCHES=""
 if [ -d "webapp/WEB-INF/plugins" ]; then
     WB06_MATCHES=$(python3 - <<'PY'
@@ -1174,7 +1223,7 @@ import glob, re
 for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
     text = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r"<admin-feature>(.*?)</admin-feature>", text, re.S):
-        if "<feature-icon-url>" in m.group(1) and "<icon-url>" not in m.group(1):
+        if re.search(r"<feature-icon-url>\s*[^<\s]", m.group(1)) and "<icon-url>" not in m.group(1):
             fid = re.search(r"<feature-id>\s*([^<\s]+)", m.group(1))
             print("%s: admin-feature %s carries its icon in <feature-icon-url>, which the core digester ignores (it reads <icon-url>): a reinstall resets icon_url to NULL" % (f, fid.group(1) if fid else "?"))
 PY
@@ -1207,7 +1256,7 @@ if [ "$COUNT" -eq 0 ]; then emit "WB06" "PASS" "Every admin feature declares its
 else emit "WB06" "FAIL" "admin-feature whose descriptor group differs from its install SQL: a reinstall moves it" "$COUNT" "$WB06_MATCHES"; fi
 COUNT=0; [ -n "$WB07_MATCHES" ] && COUNT=$(echo "$WB07_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB07" "PASS" "Admin feature icons survive a reinstall" 0
-else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url> (core inconsistency with the DTD, reported upstream)" "$COUNT" "$WB07_MATCHES"; fi
+else emit "WB07" "WARN" "Icon in <feature-icon-url>: the core digester reads <icon-url>" "$COUNT" "$WB07_MATCHES"; fi
 WB08_WARN=$(echo "$WB08_MATCHES" | sed -n 's/^SHIPPED //p')
 COUNT=0; [ -n "$WB08_WARN" ] && COUNT=$(echo "$WB08_WARN" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB08" "PASS" "Every descriptor icon the project ships is named by its path" 0
@@ -1229,7 +1278,7 @@ echo ""
 # PV01: the pom and the plugin descriptor disagree on the version: the plugin screen, the upgrade scripts (Liquibase
 # compares the installed version with the scripts' target) and the release read different ones.
 # PV02: the v8 version is not above the last released tag: a site already on that release is "up to date", so the new
-# upgrade scripts are silently NOT included (workflow-rest: 2.0.0-SNAPSHOT after a 2.1.x release).
+# upgrade scripts are silently NOT included (2.0.0-SNAPSHOT after a 2.1.x release).
 PV_MATCHES=$(python3 - <<'PY'
 import glob, re, subprocess
 def version(v):
@@ -1248,7 +1297,7 @@ try:
     tags = subprocess.run(["git", "tag"], capture_output=True, text=True).stdout.split()
 except OSError:
     tags = []
-released = [(version(t.rsplit("-", 1)[-1] if re.search(r"-\d+\.\d+", t) else t), t) for t in tags if re.search(r"\d+\.\d+", t)]
+released = [(version(re.findall(r"\d+\.\d+(?:\.\d+)*", t)[-1]), t) for t in tags if re.search(r"\d+\.\d+", t)]
 released = [(v, t) for v, t in released if v]
 if released:
     last = max(released)
@@ -1301,8 +1350,7 @@ else emit "JS05" "FAIL" "Admin JSP writing its own HTML: move it to a template r
 # JS06: a JSP that streams a file (download, export) and leaves template text. The bean writes the bytes through
 # getOutputStream(); at the end of the page the JSP flushes its own text through getWriter() and the container throws
 # "OutputStream already obtained" on every download. Only directives, JSP comments and the EL call may remain: a
-# newline between them is template text too, and trimDirectiveWhitespaces="true" does not remove it on Liberty
-# (observed on the blobstore bench: 47 exceptions with the newline, 0 once it sat inside a JSP comment).
+# newline between them is template text too, and trimDirectiveWhitespaces="true" does not remove it on Liberty.
 JS06_MATCHES=""
 if [ -d "webapp/jsp" ]; then
     JS06_MATCHES=$(python3 - <<'PY'
@@ -1337,7 +1385,7 @@ if [ -d "webapp/jsp/admin" ] && [ -d "src/java" ]; then
         [ -n "$src" ] || continue
         legacy=1
         for _ in 1 2 3 4 5; do
-            grep -qE 'extends +PortletJspBean\b|@Controller' "$src" && { legacy=0; break; }
+            grep -qE '^[[:space:]]*@Controller\b|^[^/*]*\bextends +PortletJspBean\b' "$src" && { legacy=0; break; }
             parent=$(grep -oE 'class +[A-Za-z0-9_]+(<[^>]*>)? +extends +[A-Za-z0-9_]+' "$src" | head -1 | sed -E 's/.* extends +//')
             [ -n "$parent" ] || break
             src=$(grep -rlE "class +$parent\b" src/java --include="*.java" 2>/dev/null | head -1)
@@ -1513,14 +1561,14 @@ check_grep "TS03" 'import org\.junit\.Assert' "src/" "FAIL" "JUnit 4 Assert -> A
 check_grep "TS04" 'MokeHttpServletRequest' "src/" "FAIL" "MokeHttpServletRequest -> MockHttpServletRequest"
 check_grep "TS05" 'import org\.junit\.BeforeClass\|import org\.junit\.AfterClass' "src/" "FAIL" "JUnit 4 @BeforeClass/@AfterClass"
 
-# TS06: Test methods without @Test
+# TS06: Test methods without @Test (or another JUnit 5 test annotation) in the annotation block above them
 TS06_MATCHES=""
 if [ -d "src/test/" ]; then
     TS06_MATCHES=$(grep -rn 'public void test' src/test/ --include="*.java" 2>/dev/null | while read -r line; do
         FILE=$(echo "$line" | cut -d: -f1)
         LINENUM=$(echo "$line" | cut -d: -f2)
-        PREV_LINE=$((LINENUM - 1))
-        if ! sed -n "${PREV_LINE}p" "$FILE" 2>/dev/null | grep -q '@Test'; then
+        if ! head -n $((LINENUM - 1)) "$FILE" 2>/dev/null | tac | awk '/^[[:space:]]*(@|$)/ { print; next } { exit }' \
+                | grep -qE '@(Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b'; then
             echo "$line"
         fi
     done) || TS06_MATCHES=""

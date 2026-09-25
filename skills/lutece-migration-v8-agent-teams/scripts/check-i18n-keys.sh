@@ -1,8 +1,8 @@
 #!/bin/bash
 # check-i18n-keys.sh — every literal #i18n key of a project against the bundles it really resolves.
 # Usage: check-i18n-keys.sh [project_root] [--no-exploded]
-# A key no bundle answers is silent at runtime: I18nService catches the failure and returns an empty string, so the
-# label is simply missing from the page and nothing reaches the log. Reads the bundles of the assembled webapp
+# A key no bundle answers fails quietly at runtime: I18nService catches the failure, logs a WARN and returns an empty
+# string, so the label is simply missing from the page. Reads the bundles of the assembled webapp
 # (WEB-INF/classes and the dependency jars, ensure-exploded.sh), falls back on the sources at hand and says so.
 # Covers every file, not only the templates that render: #i18n also lives in .js, .java, .xml and .sql.
 # A key built from a variable (#i18n{${...}}) is listed apart, and when it is a literal prefix plus an expression the
@@ -24,7 +24,7 @@ assembly() {
     return 0
 }
 
-if ! grep -rqs "#i18n{" --include='*.html' --include='*.ftl' --include='*.js' --include='*.java' --include='*.xml' --include='*.sql' "$ROOT"; then
+if ! grep -rqsE "#i18n\{|I18nService\." --include='*.html' --include='*.ftl' --include='*.js' --include='*.java' --include='*.xml' --include='*.sql' "$ROOT"; then
     echo "I18NKEYS files=0 keys=0 unresolved=0 dynamic=0 foreignBundle=0 bundles=0 (this project references no i18n key)"
     exit 0
 fi

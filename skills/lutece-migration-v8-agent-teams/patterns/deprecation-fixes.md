@@ -18,7 +18,7 @@ mvn -B clean compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDep
 | `BigDecimal.divide( divisor, scale )` | `divide( divisor, scale, RoundingMode.HALF_UP )` | state the rounding, never let it be implicit |
 | `<Service>.getInstance( )` of a v8 plugin (`DocumentService`, `DocumentSpacesService`…) | `@Inject` in a CDI bean, `CDI.current( ).select( X.class ).get( )` in a class the core instantiates by reflection | the service is `@ApplicationScoped @Named` in its own plugin |
 | `ITask.processTaskWithResult( int nIdResourceHistory, … )` | `processTaskWithResult( int nIdResource, String strResourceType, int nIdResourceHistory, … )` | the default method of the interface still delegates to the old one; override the new signature |
-| `WorkgroupRemovalListenerService.getService( )` (and the other static `*RemovalListenerService`) | `@Inject @Named( "workgroupRemovalService" ) RemovalListenerService` in a CDI bean, which registers the listener in its own `init` | names in `BeanUtils` (`workgroupRemovalService`, `rbacRemovalService`, `portletRemovalService`, `mailingListRemovalService`) |
+| `WorkgroupRemovalListenerService.getService( )` (and the other static `*RemovalListenerService`) | `@Inject @Named( "workgroupRemovalService" ) RemovalListenerService` in a CDI bean, which registers the listener in its own `init` | names in `BeanUtils` (`workgroupRemovalService`, `rbacRemovalService`, `portletRemovalService`, `mailinglistRemovalService`) |
 
 **A deprecation the plugin owns is a decision, not a warning to silence.** When the plugin deprecated its own
 method and there is no replacement with the same semantics (an overload that filters on something the other one

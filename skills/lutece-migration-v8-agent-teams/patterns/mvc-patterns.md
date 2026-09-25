@@ -118,14 +118,13 @@ See `fileupload-patterns.md` for complete migration guide.
 ## 10. XSL portlet → HTML portlet (MANDATORY, no exception)
 
 **Any portlet still rendered by XSL must be ported to HTML during the migration.** This is not
-a choice between two options: since `LUT-32172` (core commit `0a0be84cc`) an XSL
+a choice between two options: an XSL
 portlet whose type does not start with `DOCUMENT` **cannot be created or modified from the back
 office at all**. `create_portlet.html` and `modify_portlet.html` render the style select under
 `<#if portletType.id?starts_with('DOCUMENT')>`, so no `style` parameter is posted, and
 `PortletJspBean.setPortletCommonData` returns `MANDATORY_FIELDS` for any XSL portlet without a
 style. The `return` sits outside the `if` that looks for the xmltransformer plugin, so
-installing that plugin changes nothing but a log line. Proven on an e2e bench: creating a
-`LINK_PAGES` portlet fails with `MANDATORY_FIELDS`.
+installing that plugin changes nothing but a log line.
 
 Depending on `plugin-xmltransformer` is a stopgap for an existing install, never the migration
 target. The port is four moves:
@@ -133,6 +132,10 @@ target. The port is four moves:
 **1. Extend the core base class.** `PortletHtmlContent` forces the HTML path: it makes
 `getHtmlContent` abstract, neutralises `getXml`/`getXmlDocument` (both return `null`) and
 returns `false` from `isContentGeneratedByXmlAndXsl()`. Never override that method by hand.
+Build the model with `createPortletModel( )` (the portlet, its id, its device display classes, its
+name when the title is shown) and render with `renderTemplate( request, TEMPLATE_DEFAULT, model )`:
+it applies the template chosen for the portlet in the back office, and the default template of the
+type otherwise.
 
 ```java
 // Before
@@ -144,20 +147,21 @@ public class MyPortlet extends Portlet
 // After
 public class MyPortlet extends PortletHtmlContent
 {
+    private static final String TEMPLATE_DEFAULT = "skin/plugins/myplugin/portlet/my_portlet.html";
+
     @Override
     public String getHtmlContent( HttpServletRequest request )
     {
-        Map<String, Object> model = new HashMap<>( );
+        Map<String, Object> model = createPortletModel( );
         model.put( MARK_ITEMS, MyPortletHome.getItems( getId( ) ) );
-        if ( getDisplayPortletTitle( ) == 0 ) { model.put( MARK_PORTLET_NAME, getName( ) ); }
-        return AppTemplateService.getTemplate( TEMPLATE_PORTLET, request.getLocale( ), model ).getHtml( );
+        return renderTemplate( request, TEMPLATE_DEFAULT, model );
     }
 }
 ```
 
 **2. Write the skin template**, one per XSL it replaces, under
-`webapp/WEB-INF/templates/skin/plugins/<plugin>/portlet/`. Reference:
-`lutece-cms-plugin-blog/webapp/WEB-INF/templates/skin/plugins/blog/portlet/default_portlet_blog.html`.
+`webapp/WEB-INF/templates/skin/plugins/<plugin>/portlet/`. Reference: an HTML portlet template of a
+migrated plugin under `~/.lutece-references/` (`find ~/.lutece-references -path '*templates/skin/*portlet*'`).
 Port the XSL structure, do not invent a new markup: the XSL is the specification of what the
 page looked like.
 

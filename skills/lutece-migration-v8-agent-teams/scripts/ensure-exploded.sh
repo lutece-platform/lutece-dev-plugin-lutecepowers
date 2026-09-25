@@ -61,6 +61,10 @@ if [ ! -f "$ROOT/pom.xml" ]; then
     exit 3
 fi
 
+FLOOR_ARGS=("$ROOT"); [[ " ${MVN_FLAGS[*]} " == *" -o "* ]] && FLOOR_ARGS+=(--offline)
+bash "$(dirname "$0")/check-v8-floor.sh" "${FLOOR_ARGS[@]}" >/dev/null
+[ $? -eq 1 ] && { say "EXPLODED refused: the project is below the Lutece 8 level lutecepowers supports (see above)"; exit 6; }
+
 if [ "$FORCE" -eq 0 ] && fresh; then
     TEMPLATES="$(locate)"
     say "EXPLODED reused: $TEMPLATES"

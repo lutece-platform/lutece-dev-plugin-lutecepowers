@@ -16,7 +16,9 @@ import java.util.stream.Stream;
  * expression cannot be resolved here and is listed apart, not counted as missing. A key whose bundle was never
  * loaded belongs to a plugin this webapp does not carry and is listed apart too.
  * In Java, the key usually arrives through a constant of the same file: the constant is followed to its literal, and
- * only a value whose bundle exists is taken for a key, because the same call also carries URLs and JSP names.
+ * only a value whose bundle exists is taken for a key, because the same call also carries URLs and JSP names. A key
+ * glued with '+' is rebuilt from its literals and constants. A key defined in a configuration properties file of the
+ * project is a value read through AppPropertiesService, not a bundle key.
  * Reports path:line, the key and the closest key that does exist when one is within a typo's distance.
  */
 public class I18nKeys
@@ -36,6 +38,7 @@ public class I18nKeys
                                        webInf == null ? null : webInf.resolve( "lib" ),
                                        sources( root ), sources( core ) );
         int keys = 0, missing = 0, files = 0, dynamic = 0, foreign = 0;
+        java.util.Set<String> configuration = configurationKeys( root );
         StringBuilder later = new StringBuilder( );
         try ( Stream<Path> tree = Files.walk( root ) )
         {
@@ -49,6 +52,7 @@ public class I18nKeys
                     keys++;
                     if ( !counted ) { files++; counted = true; }
                     String where = root.relativize( file ) + ":" + line( text, found.getKey( ) ) + " ";
+                    if ( configuration.contains( key ) ) continue;
                     if ( key.startsWith( "?" ) )
                     {
                         dynamic++;
@@ -119,14 +123,71 @@ public class I18nKeys
         Matcher call = I18N_CALL.matcher( text );
         while ( call.find( ) )
         {
-            Matcher word = WORD.matcher( call.group( 1 ) != null ? call.group( 1 ) : call.group( 2 ) );
-            while ( word.find( ) )
+            for ( String argument : ( call.group( 1 ) != null ? call.group( 1 ) : call.group( 2 ) ).split( "," ) )
             {
-                String key = word.group( 1 ) != null ? word.group( 1 ) : constants.get( word.group( 2 ) );
-                if ( key != null && key.contains( "." ) && !key.contains( " " ) && !key.contains( "/" ) && bundles.hasBundle( key ) ) found.put( call.start( ), key );
+                if ( argument.contains( "+" ) )
+                {
+                    String key = concatenated( argument, constants );
+                    String bare = key.endsWith( "*" ) ? key.substring( 0, key.length( ) - 1 ) : key;
+                    if ( isKey( bare ) && bundles.hasBundle( bare ) ) found.put( call.start( ), key );
+                    continue;
+                }
+                Matcher word = WORD.matcher( argument );
+                while ( word.find( ) )
+                {
+                    String key = word.group( 1 ) != null ? word.group( 1 ) : constants.get( word.group( 2 ) );
+                    if ( key != null && isKey( key ) && bundles.hasBundle( key ) ) found.put( call.start( ), key );
+                }
             }
         }
         return found;
+    }
+
+    /**
+     * The key an argument glued with '+' spells, its literals and the constants of the file joined in order; when a
+     * piece is not a literal nor a known constant, the part before it followed by '*', a prefix to check.
+     */
+    static String concatenated( String argument, Map<String, String> constants )
+    {
+        StringBuilder key = new StringBuilder( );
+        for ( String piece : argument.split( "\\+" ) )
+        {
+            String value = valueOf( piece.trim( ), constants );
+            if ( value == null ) return key + "*";
+            key.append( value );
+        }
+        return key.toString( );
+    }
+
+    /** The value of a string literal or of a constant of the file, null for anything else. */
+    static String valueOf( String piece, Map<String, String> constants )
+    {
+        if ( piece.length( ) >= 2 && piece.startsWith( "\"" ) && piece.endsWith( "\"" ) ) return piece.substring( 1, piece.length( ) - 1 );
+        return constants.get( piece );
+    }
+
+    /** A value shaped like a bundle key, not a URL, a path or a sentence. */
+    static boolean isKey( String value )
+    {
+        return value.contains( "." ) && !value.contains( " " ) && !value.contains( "/" );
+    }
+
+    /** The keys of every configuration properties file of the project: a value read through AppPropertiesService. */
+    static java.util.Set<String> configurationKeys( Path root ) throws java.io.IOException
+    {
+        java.util.Set<String> keys = new java.util.HashSet<>( );
+        Path conf = root.resolve( "webapp/WEB-INF/conf" );
+        if ( !Files.isDirectory( conf ) ) return keys;
+        try ( Stream<Path> tree = Files.walk( conf ) )
+        {
+            for ( Path file : tree.filter( f -> f.toString( ).endsWith( ".properties" ) ).toList( ) )
+            {
+                java.util.Properties properties = new java.util.Properties( );
+                try ( java.io.Reader reader = Files.newBufferedReader( file, java.nio.charset.StandardCharsets.ISO_8859_1 ) ) { properties.load( reader ); }
+                keys.addAll( properties.stringPropertyNames( ) );
+            }
+        }
+        return keys;
     }
 
     /** The text between an opening brace and the one that closes it, so an interpolated key is shown whole. */

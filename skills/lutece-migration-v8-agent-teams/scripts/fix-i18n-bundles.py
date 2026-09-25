@@ -5,7 +5,7 @@ I18N01, I18N10 and I18N09, in that order:
 1. a bundle suffixed with a country code (`_cz`, `_dk`, `_se`...) is renamed to its language code with `git mv`
    (merged into the language bundle when both exist, the language bundle winning);
 2. a `key>value` line gets its `=` back;
-3. a key repeating the bundle prefix (`appointment.name` in appointment_messages) loses the prefix, or is removed when
+3. a key repeating the bundle prefix (`myplugin.name` in myplugin_messages) loses the prefix, or is removed when
    the bundle already declares the short key;
 4. a key declared twice in a bundle keeps its last occurrence only, the one java.util.Properties already shows;
 5. in a translation, a key the default bundle does not declare is removed: nothing asks for it, it never shows.

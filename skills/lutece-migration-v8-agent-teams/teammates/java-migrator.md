@@ -120,7 +120,7 @@ Checked by `CS01`.
 
 Clear every `ThreadLocal` with `remove()` in a `finally`, never with a reassignment
 (`set(false)`, `set(null)`). A reassignment keeps one entry per pooled thread for the whole
-application lifetime (LUT-31201). Checked by `TL01`.
+application lifetime. Checked by `TL01`.
 
 ```java
 finally { reentrancyGuard.remove( ); }   // not reentrancyGuard.set( Boolean.FALSE );
@@ -215,8 +215,8 @@ Every file you own compiles **without a warning** when it leaves your hands: `@D
 its successor, generics declared (no raw types, no unchecked casts left to the reader), `serialVersionUID`
 on `Serializable` classes, unused imports and variables removed, `@Override` where it applies. The migration is
 the one moment somebody reads these files; a warning left now stays for years and hides the next real one.
-Check with `mvn -q compile -Dmaven.compiler.showWarnings=true -Dmaven.compiler.showDeprecation=true` when the
-Verifier reports the build compiles; the final gate fails on any warning in `src/`.
+You never run Maven: the Verifier reports the warnings of its compile build, file by file, and the final gate
+fails on any warning in `src/`.
 
 ## Before you finish
 

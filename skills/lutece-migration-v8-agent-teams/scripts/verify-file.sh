@@ -19,6 +19,7 @@ WARN=0
 DETAILS="["
 FIRST=true
 
+# Greps a pattern in the file and records the check as PASS, or as the given severity with the match count.
 check() {
     local id="$1" pattern="$2" severity="$3" description="$4"
     local count
@@ -56,7 +57,7 @@ if echo "$FILE" | grep -q '\.java$'; then
     check "SP04" '@Autowired' "FAIL" "@Autowired"
     check "CD04" 'org\.apache\.commons\.fileupload' "FAIL" "commons.fileupload"
     check "DA01" 'daoUtil\.free( )' "FAIL" "daoUtil.free()"
-    check "LG01" 'AppLogService\.\(info\|error\|debug\|warn\).*+ ' "WARN" "String concat in logging"
+    check "LG01" 'AppLogService\.\(info\|error\|debug\|warn\).*+ ' "FAIL" "String concat in logging"
 
     # Test-specific checks
     if echo "$FILE" | grep -q 'src/test/'; then
@@ -79,7 +80,11 @@ elif echo "$FILE" | grep -qE '\.(html|ftl)$'; then
         check "TM01" 'class="panel' "FAIL" "Old Bootstrap panels"
         check "TM06" '<@addRequiredJsFiles[^B]' "FAIL" "@addRequiredJsFiles -> BO"
     fi
-    check "TM02" 'jQuery\|\$(' "WARN" "jQuery usage"
+    TM02_SEV=FAIL
+    POM_DIR=$(cd "$(dirname "$FILE")" && pwd)
+    while [ "$POM_DIR" != "/" ] && [ ! -f "$POM_DIR/pom.xml" ]; do POM_DIR=$(dirname "$POM_DIR"); done
+    grep -q 'library-theme-jquery' "$POM_DIR/pom.xml" 2>/dev/null && TM02_SEV=WARN
+    check "TM02" 'jQuery\|\$(' "$TM02_SEV" "jQuery usage (FAIL without library-theme-jquery in the pom: nothing loads it)"
     check "TM04" 'errors?size\|infos?size\|warnings?size' "FAIL" "Unsafe null access"
     for RULE in "TM10 offcanvas Offcanvas: @modal for the page's content, a plain link for another page" "TM11 fo-forms Front-office form without @cForm validation" "TM12 inline-forms Inline form: one field per row"; do
         RID=${RULE%% *}; REST=${RULE#* }; RNAME=${REST%% *}; RDESC=${REST#* }
@@ -112,7 +117,18 @@ elif echo "$FILE" | grep -q '\.jsp$'; then
 elif echo "$FILE" | grep -q '\.xml$'; then
     if echo "$FILE" | grep -q 'plugins/'; then
         check "WB02" '<application-class>' "FAIL" "application-class"
-        check "WB04" '<min-core-version>' "WARN" "min-core-version check"
+        . "$(dirname "$0")/v8-floor.conf"
+        WB04_FLOOR="$V8_DECLARED_CORE"
+        WB04_VER=$(sed -n 's/.*<min-core-version>\([^<]*\)<\/min-core-version>.*/\1/p' "$FILE" | head -1 | tr -d ' ')
+        $FIRST || DETAILS="$DETAILS,"
+        FIRST=false
+        if [ -z "$WB04_VER" ] || { [[ "$WB04_VER" =~ ^[0-9]+(\.[0-9]+)*$ ]] && [ "$(printf '%s\n%s\n' "$WB04_FLOOR" "$WB04_VER" | sort -V | head -1)" = "$WB04_FLOOR" ]; }; then
+            DETAILS="$DETAILS{\"id\":\"WB04\",\"status\":\"PASS\",\"description\":\"min-core-version at $WB04_FLOOR or later\"}"
+            PASS=$((PASS + 1))
+        else
+            DETAILS="$DETAILS{\"id\":\"WB04\",\"status\":\"WARN\",\"description\":\"min-core-version below $WB04_FLOOR, or not plain digits: set <min-core-version>$WB04_FLOOR</min-core-version>\",\"count\":1}"
+            WARN=$((WARN + 1))
+        fi
     fi
     if echo "$FILE" | grep -q 'web\.xml'; then
         check "WB01" 'java\.sun\.com/xml/ns/javaee' "FAIL" "Old namespace"

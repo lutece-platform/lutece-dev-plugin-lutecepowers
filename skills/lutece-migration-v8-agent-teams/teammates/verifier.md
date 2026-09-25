@@ -95,7 +95,7 @@ If build fails:
 | `duplicate import` | Mechanical script added duplicate | Java Migrator |
 | `private constructor in CDI bean` | Need to remove private constructor | Java Migrator |
 | `final class cannot be proxied` | Remove `final` **only on that class**: it is legal, and is the core's own pattern, when the bean is resolved through its interface (`cdi-patterns.md` §1) | Java Migrator |
-| `UnsatisfiedResolutionException` in a Home static initializer | `beans.xml` missing from the built archive, or on disk but untracked by git (`ST05`) | Config Migrator |
+| `UnsatisfiedResolutionException` in a Home static initializer | `beans.xml` missing from the built archive, or on disk but excluded by `.gitignore` (`ST05` fails when .gitignore excludes them) | Config Migrator |
 
 ## Phase 4: Full Build with Tests
 
@@ -135,11 +135,11 @@ If a report shows Failures or Errors:
    ```bash
    bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/verify-migration.sh .
    ```
-3. Remove your own working directory `.migration/` (scan.json, tasks-*.json, context-beans.json, verify-latest.json)
-4. Report final status to Lead:
+3. Report final status to Lead:
    - Total checks: X PASS, 0 FAIL, Y WARN
    - Build: compile SUCCESS; tests run / failures / errors / skipped from the surefire reports
    - Migration: COMPLETE
+4. When the Lead reports the final gate green, and not before (the Stop hook reads `.migration/gate-required`), remove your own working directory `.migration/` (scan.json, tasks-*.json, context-beans.json, verify-latest.json)
 
 Mark your final task as **completed**.
 
