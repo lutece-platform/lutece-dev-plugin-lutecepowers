@@ -17,7 +17,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - cProgress - Progress bar
 - cBtn - Buttons
 - cCard - Cards
-- cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme now registers
+- cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme registers
 - cForm - Validation and encoding
 - cInput - errorMsg and helpMsg
 - cInput - Native size and validation parameters
@@ -44,7 +44,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - cText - Correct usage
 
 ### cCol - Column format
-- Use the format `cols='12 col-md-X'` (not `cols='xs-12 col-md-X'` — the `xs-` prefix no longer exists in Bootstrap 5)
+- Use the format `cols='12 col-md-X'` (not `cols='xs-12 col-md-X'` — the `xs-` prefix does not exist in Bootstrap 5)
 - **Replace `cols='xs-12 ...'` with `cols='12 ...'`** systematically
 - **Replace `<@cCol cols='12'>` with `<@cCol>`** — full-width column by default, no need for `cols`
 - The size always goes in `cols`, never in `class`: `<@cCol class='12 col-md-6'>` renders `class="col 12 col-md-6"` (`cCol.ftl:33`, signature `cols='' default='col' class=''`)
@@ -53,10 +53,10 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### cAlert - Alerts
 - Signature (`components/alert/cAlert.ftl`): `id title isHtmlTitle=false htmlTitleLevel=3 type='primary' iconType='informative' class classText dismissible=false params`
 - `title` is the main message; nested content is secondary (`alert-content`). Self-closing when there is no body: `<@cAlert type='warning' title=msg />`
-- `type` is one of the `<#case>` branches of `cAlert.ftl` (`warning`, `danger`, `success`, default `primary`): there is no `info` type, `type='info'` falls back to the default icon and colour. A first class token in `class` (`class='danger'`) overrides `type`; both work, prefer `type`
+- `type` sets the class `alert-${type}`, and `cAlert.ftl` gives `danger`, `warning` and `success` their own icon and ARIA role; any other value (`primary`, `info`) keeps the `info-circle` icon and `role="status"`. The theme's `components/alert.css` styles `alert-primary` and `alert-info`. A first class token among `warning`, `primary`, `danger`, `success` in `class` (`class='danger'`) overrides `type`; both work, prefer `type`
 - `isHtmlTitle=true` when the message carries markup; `dismissible=true` for a closable alert
 - Inline icon SVGs are unnecessary, the macro handles the icon (`iconType`)
-- The DOM is `alert > alert-header (alert-icon, alert-text) + alert-content`: CSS written for the old flat `.alert > .alert-title` no longer applies
+- The DOM is `alert > alert-header (alert-icon, alert-text) + alert-content`: CSS written for a flat `.alert > .alert-title` does not apply
 
 ### cInput - Hidden fields
 - `class=''` on hidden inputs drops the default `form-control`; no visual effect, optional
@@ -143,7 +143,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### Model access
 - Prefer property access to getter calls: `authentication.lostPasswordPageUrl`, not `authentication.getLostPasswordPageUrl()`. Both work on a bean, only the first works on a hash (JSON model of the offline renderer, `Map` put in the model)
 
-### cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme now registers
+### cTile / cEmpty / cErrorMessage / cAccordion / noScriptMessage - Component macros the theme registers
 - `<@cTile title url level=3 imgName badge horizontal=false />` — clickable tile (`components/tile/cTile.ftl`, registered in `theme_commons_macros.ftl`)
 - `<@cEmpty title subtitle iconName='mood-empty' actionTitle actionUrl actionIcon='plus' />` — empty state of a list (`components/empty/cEmpty.ftl`, class `lutece-ds-empty`)
 - `<@cErrorMessage title text linkUrl linkLabelUrl>` — error pages; nested content for the technical cause (`components/error/cErrorMessage.ftl`, see examples.md)
@@ -187,7 +187,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 
 ### cInput - Extra HTML attributes
 - Use `params` for attributes not covered by the macro parameters: `params='onkeypress="return fn(event);"'`
-- Dynamic validation classes: **always include `form-control`**: `class='form-control ${classPassword?if_exists}'`
+- Dynamic validation classes: **always include `form-control`**: `class='form-control ${classPassword!}'`
 
 ### Macro parameters - Complex dynamic values
 - **Never** inline FreeMarker logic (`<#if>`, `<#list>`, complex interpolations) directly in a macro parameter — **this applies to all parameters**, not only `params`
@@ -222,7 +222,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 
 ### cCheckbox - Checkboxes
 - Main params: `name` (required), `label` (required), `value`, `id`, `checked` (boolean), `inline` (boolean), `required` (boolean), `disabled` (boolean), `params`
-- `label` is **required**: if the field has no visible title, use `label='&nbsp;'`
+- `label` is **required**: if the field has no visible title, keep the real text and hide it with `labelClass='visually-hidden'` (`cFormCheck.ftl` handles that class), never `label='&nbsp;'`
 - **No `title` parameter**: pass the title in `params`: `params='title="my tooltip"'`
 - **Pre-build dynamic values** with `<#assign>` before calling the macro:
   ```freemarker
@@ -232,8 +232,8 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
   <#if field.comment?? && field.comment != ''>
       <#assign cbParams = 'title="${field.comment}"'>
   </#if>
-  <#assign cbLabel><#if !field.noDisplayTitle>${field.title}<#else>&nbsp;</#if></#assign>
-  <@cCheckbox name='myField' id='myField_${field.id}' value='${field.id}' checked=isChecked label=cbLabel params=cbParams inline=isInline />
+  <#assign cbLabelClass><#if field.noDisplayTitle>visually-hidden</#if></#assign>
+  <@cCheckbox name='myField' id='myField_${field.id}' value='${field.id}' checked=isChecked label=field.title labelClass=cbLabelClass params=cbParams inline=isInline />
   ```
 - For checkboxes grouped in a vertical list, do not wrap them in a `<@cBlock class='checkbox'>` — the macro handles its own container
 
@@ -360,13 +360,13 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
   ```freemarker
   <#-- INCORRECT — nested content with <#list> -->
   <@cAlert type='danger' id='messages_errors_div'>
-      <#list errors as error>
+      <#list (errors![]) as error>
           <@cIcon name='alert-circle' /> ${error.message}
       </#list>
   </@cAlert>
 
   <#-- CORRECT — assign + title -->
-  <#assign errorMsg><#list errors as error>${error.message}</#list></#assign>
+  <#assign errorMsg><#list (errors![]) as error>${error.message!}</#list></#assign>
   <@cAlert type='danger' id='messages_errors_div' title=errorMsg />
   ```
 - The `<@cAlert>` macro handles its own icon according to the `type` — no need to add `<@cIcon>` manually
@@ -421,7 +421,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - The JS can then do `document.getElementById('bl-toc')` and `appendChild(li)` normally.
 
 ### jQuery → Vanilla JS - Mandatory conversion
-**The jQuery library is no longer loaded by the theme** (`page_frameset.html`, optional `library-theme-jquery` only). Any JavaScript using `$(...)`, `jQuery(...)` or jQuery plugins must be **systematically** rewritten in vanilla JS when migrating a template — it is non-negotiable, otherwise the code breaks at runtime. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) needs a manual port to a vanilla equivalent or a core macro; flag it to the user.
+**The theme does not load jQuery** (`page_frameset.html`, optional `library-theme-jquery` only). Any JavaScript using `$(...)`, `jQuery(...)` or jQuery plugins must be **systematically** rewritten in vanilla JS when migrating a template — it is non-negotiable, otherwise the code breaks at runtime. Code depending on a jQuery plugin (DataTables, Select2, jQuery UI…) needs a manual port to a vanilla equivalent or a core macro; flag it to the user.
 
 Standard mapping of the most common jQuery operations:
 

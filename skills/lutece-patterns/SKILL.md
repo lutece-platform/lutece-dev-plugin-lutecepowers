@@ -137,7 +137,7 @@ The bean extends `MVCAdminJspBean` with a CDI scope, `@Named` and a complete `@C
 
 ```java
 @SessionScoped
-@Named( "myplugin.taskJspBean" )
+@Named
 @Controller( controllerJsp = "ManageTasks.jsp", controllerPath = "jsp/admin/plugins/myplugin/",
              right = "MYPLUGIN_MANAGEMENT", securityTokenEnabled = true )
 public class TaskJspBean extends MVCAdminJspBean
@@ -194,7 +194,7 @@ public String doCreateTask( @Valid @ModelAttribute Task task, BindingResult bind
 
 ## 5. Pagination (List views) — `@Inject @Pager IPager` + `@paginationAdmin`
 
-Inject an `IPager` instead of building a `LocalizedPaginator` by hand. `@Pager` configures it; a session-scoped handler keeps the page index and page size across requests. This is the pattern of the reference JspBeans (appointment `AppointmentJspBean`, sitelabels `LabelJspBean`, xmltransformer `StylesJspBean`).
+Inject an `IPager` instead of building a `LocalizedPaginator` by hand. `@Pager` configures it; a session-scoped handler keeps the page index and page size across requests. This is the pattern of the reference JspBeans. Reference: `lutece-cms-plugin-xmltransformer/src/java/fr/paris/lutece/portal/web/style/StylesJspBean.java` (`IPager<Style, Void>`, `withListItem`), `lutece-core/src/java/fr/paris/lutece/portal/web/style/PortletTemplateJspBean.java` (`withIdList`).
 
 ### JspBean
 
@@ -202,7 +202,7 @@ Inject an `IPager` instead of building a `LocalizedPaginator` by hand. `@Pager` 
 @Inject
 @Pager( listBookmark = "task_list", defaultItemsPerPage = "myplugin.task.itemsPerPage",
         baseUrl = "jsp/admin/plugins/myplugin/ManageTasks.jsp" )
-private IPager<Task, Task> _pager;
+private IPager<Task, Void> _pager;
 
 @View( value = VIEW_MANAGE_TASKS, defaultView = true )
 public String getManageTasks( HttpServletRequest request, Models model )
@@ -231,22 +231,27 @@ Only the current page is loaded. Refresh the ID list when the filter changes, ke
 ### Template
 
 ```html
-<@paginationAdmin paginator=paginator combo=1 />
-<@table>
-  <tr><th>#i18n{myplugin.model.entity.task.attribute.title}</th><th></th></tr>
-  <#list task_list as task>
-    <tr>
-      <td>${task.title}</td>
-      <td>
-        <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=modifyTask&id=${task.idTask}' buttonIcon='pencil' title='#i18n{portal.util.labelModify}' hideTitle=['all'] size='sm' />
-        <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=confirmRemoveTask&id=${task.idTask}' buttonIcon='trash' title='#i18n{portal.util.labelDelete}' hideTitle=['all'] color='danger' size='sm' />
-      </td>
-    </tr>
-  </#list>
-</@table>
+<#if task_list?has_content>
+  <@manageFeature>
+    <#list task_list as task>
+      <@manageFeatureItem>
+        <@manageFeatureItemColumn>
+          <strong>${task.title!}</strong>
+        </@manageFeatureItemColumn>
+        <@manageFeatureItemColumn align='end'>
+          <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=modifyTask&id=${task.idTask}' buttonIcon='pencil' title='#i18n{portal.util.labelModify}' hideTitle=['all'] size='sm' />
+          <@aButton href='jsp/admin/plugins/myplugin/ManageTasks.jsp?view=confirmRemoveTask&id=${task.idTask}' buttonIcon='trash' title='#i18n{portal.util.labelDelete}' hideTitle=['all'] color='danger' size='sm' />
+        </@manageFeatureItemColumn>
+      </@manageFeatureItem>
+    </#list>
+  </@manageFeature>
+  <@paginationAdmin paginator=paginator combo=1 />
+<#else>
+  <@empty />
+</#if>
 ```
 
-`@paginationAdmin paginator class combo form nb_items_per_page showcount showall` is what every reference template uses (37 usages). The core also ships `@paginationAjax paginator columns ajaxUrl tableId combo showcount actions` with a JSON endpoint (`@Action @ResponseBody` + `@RequestParam`, `fr.paris.lutece.portal.util.mvc.commons.annotations`); no reference template uses it, so treat it as an option, not the default. For the list layout (`@manageFeature` versus `@table`) see `rules/template-back-office.md`.
+`@paginationAdmin paginator class combo form nb_items_per_page showcount showall` is what every reference template uses. The core also ships `@paginationAjax paginator columns ajaxUrl tableId combo showcount actions` with a JSON endpoint (`@Action @ResponseBody` + `@RequestParam`, `fr.paris.lutece.portal.util.mvc.commons.annotations`); no reference template uses it, so treat it as an option, not the default. For the list layout (`@manageFeature` versus `@table`) see `rules/template-back-office.md`.
 
 **`@Pager` attributes** (`fr.paris.lutece.portal.web.util.Pager`): `name` (default: the declaring class name, `PagerProducer`), `listBookmark` (default `item_list`), `defaultItemsPerPage` (property key or literal, default `50`), `baseUrl`.
 
@@ -345,7 +350,7 @@ String ds = DatastoreService.getInstanceDataValue("myplugin.setting", "default")
 DatastoreService.setInstanceDataValue("myplugin.setting", "newValue");
 
 // In Freemarker templates
-// #{dskey{myplugin.setting}}
+// #dskey{myplugin.setting}
 ```
 
 ## 10. Security Checklist

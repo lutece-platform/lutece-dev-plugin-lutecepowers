@@ -99,19 +99,19 @@ Continue until you have enough clarity to propose approaches. Typically 4-8 ques
 
 | Source | What to look for | How |
 |--------|-----------------|-----|
-| **Lutece Platform GitHub** | Official plugins and modules | `WebSearch` for `site:github.com/lutece-platform [feature keywords]` |
-| **Lutece Secteur Public GitHub** | Public-sector-specific modules | `WebSearch` for `site:github.com/lutece-secteur-public [feature keywords]` |
-| **Local references** | Already-cloned v8 repos | `Grep` / `Glob` in `~/.lutece-references/` |
-| **Lutece dev wiki** | Architecture notes, existing module docs | `WebSearch` for `site:dev.lutece.paris.fr [feature keywords]` |
+| **Lutece Platform GitHub** | Official plugins and modules | Search the web for `site:github.com/lutece-platform [feature keywords]` |
+| **Lutece Secteur Public GitHub** | Public-sector-specific modules | Search the web for `site:github.com/lutece-secteur-public [feature keywords]` |
+| **Local references** | Already-cloned v8 repos | Search the references in `~/.lutece-references/` |
+| **Lutece dev wiki** | Architecture notes, existing module docs | Search the web for `site:dev.lutece.paris.fr [feature keywords]` |
 | **Maven artifacts** | Published Lutece modules | Search for `fr.paris.lutece.plugins` + keywords |
 
 ### Search strategy
 
 1. **Identify keywords** from the Discovery phase (e.g. "notification", "workflow", "form", "directory", "appointment")
-2. **Search GitHub orgs** — both `lutece-platform` and `lutece-secteur-public`:
+2. **Search GitHub orgs** — search the web in both `lutece-platform` and `lutece-secteur-public`:
    ```
-   WebSearch: site:github.com/lutece-platform [keyword] plugin OR module
-   WebSearch: site:github.com/lutece-secteur-public [keyword] module
+   site:github.com/lutece-platform [keyword] plugin OR module
+   site:github.com/lutece-secteur-public [keyword] module
    ```
 3. **Check local references** — scan `~/.lutece-references/` for related code
 4. **Read README / plugin descriptor** of any promising match to assess fit

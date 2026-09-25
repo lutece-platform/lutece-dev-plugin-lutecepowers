@@ -48,19 +48,19 @@ If the clone is missing, the theme also ships in any assembled site under
 ## Mandatory conventions
 
 ### Detect and ignore email templates
-Some `.html` files present in `webapp/WEB-INF/templates/admin/plugins/<plugin>/` are **not** BO templates — they are **email body** templates rendered by Java code (e.g. `NewsLetterRegistrationService.java`, `NewsletterJspBean.sendNewsletter`) and sent to end users. These templates must remain **pure table-based HTML** for compatibility with mail clients (Outlook, Gmail, Apple Mail, etc.) — **never migrate them to the BO macros**.
+Some `.html` files present in `webapp/WEB-INF/templates/admin/plugins/<plugin>/` are **not** BO templates — they are **email body** templates rendered by Java code (e.g. `MyNotificationService.java`, `MyEntityJspBean.sendMail`) and sent to end users. These templates must remain **pure table-based HTML** for compatibility with mail clients (Outlook, Gmail, Apple Mail, etc.) — **never migrate them to the BO macros**.
 
 **Signs to detect an email template**:
 - The file contains `<table cellpadding="0" cellspacing="0">`, `<td>` with inline `style="..."`, comments `<!--[if mso]>` or `<!--[if gte mso 9]>`
 - Presence of a `<meta name="x-apple-disable-message-reformatting">`, of classes like `email-bg`, `darkmode-bg`, `email-container`
-- Variables like `${content_1}`, `${content_2}`, `${newsletter_content}`, `${unsubscribe_key}`, `${subscriber_email}`
+- Variables like `${content_1}`, `${content_2}`, `${mail_content}`, `${unsubscribe_key}`, `${recipient_email}`
 - The file name contains `model_`, `send_`, `confirm_mail`, `notification_`
 - Loaded from Java via `AppTemplateService.getTemplate(TEMPLATE_XXX, ...)` then sent via `MailService.sendMail*`
 
 **Action**: leave the file **strictly unchanged** and report it to the user as "out of BO migration scope". Common examples:
 - `confirm_mail.html`, `confirm_mail_css.html` — subscription confirmation email
-- `send_newsletter.html` — sent newsletter email body
-- `templates/model_newsletter.html`, `templates/model_blogs.html` — email fragments (sections)
+- `send_my_mail.html` — sent email body
+- `templates/model_my_mail.html`, `templates/model_my_section.html` — email fragments (sections)
 
 ### Overall structure of a BO page
 - **Always** structure: `<@pageContainer>` → `<@pageColumn>` → `<@pageHeader>` → content

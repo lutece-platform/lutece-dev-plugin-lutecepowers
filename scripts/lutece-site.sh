@@ -51,7 +51,7 @@ latest_release() {
     echo "${v:-$2}"
 }
 
-PARENT_VERSION=$(latest_release lutece-site-pom 8.0.1)
+PARENT_VERSION=$(latest_release lutece-site-pom 8.0.2)
 
 SITE_DIR="$OUTPUT_DIR/$SITE_NAME"
 mkdir -p "$SITE_DIR/src/conf/default/WEB-INF/conf"
@@ -96,6 +96,12 @@ cat >> "$SITE_DIR/pom.xml" << 'POMEOF'
 
     <repositories>
         <repository>
+            <snapshots><enabled>true</enabled></snapshots>
+            <id>luteceSnapshot</id>
+            <name>luteceSnapshot</name>
+            <url>https://dev.lutece.paris.fr/snapshot_repository</url>
+        </repository>
+        <repository>
             <id>lutece</id>
             <name>luteceRepository</name>
             <url>https://dev.lutece.paris.fr/maven_repository</url>
@@ -113,13 +119,13 @@ cat >> "$SITE_DIR/pom.xml" << 'POMEOF'
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
             <artifactId>plugin-liquibase</artifactId>
-            <version>[2.0.0,)</version>
+            <version>2.0.2-SNAPSHOT</version>
             <type>lutece-plugin</type>
         </dependency>
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-            <version>8.4.0</version>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>${mariadb.version}</version>
         </dependency>
 POMEOF
 
@@ -138,8 +144,8 @@ POMEOF
 
 cat > "$SITE_DIR/src/conf/default/WEB-INF/conf/db.properties" << DBEOF
 portal.poolservice=fr.paris.lutece.util.pool.service.LuteceConnectionService
-portal.driver=com.mysql.cj.jdbc.Driver
-portal.url=jdbc:mysql://$DB_HOST:$DB_PORT/$DB_NAME?autoReconnect=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+portal.driver=org.mariadb.jdbc.Driver
+portal.url=jdbc:mariadb://$DB_HOST:$DB_PORT/$DB_NAME?autoReconnect=true&useUnicode=yes&characterEncoding=utf8
 portal.user=$DB_USER
 portal.password=$DB_PASSWORD
 portal.initconns=2

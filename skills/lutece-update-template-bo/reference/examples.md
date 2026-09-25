@@ -4,7 +4,7 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 
 ## Contents
 - Management page with @manageFeature (list + creation modal)
-- Management page with @table (tabular data)
+- Report page with @table (tabular data)
 - Edit form (dedicated page)
 - Page with tabs (internal)
 - Page with tabs (URL navigation)
@@ -34,59 +34,60 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 				<@button type='submit' formId='create_item' name='action_createItem' buttonIcon='check' title='#i18n{portal.admin.message.buttonValidate}' color='primary' />
 			</@modalFooter>
 		</@modal>
-		<@messages errors=errors infos=infos />
-		<@manageFeature>
-			<#list item_list as item>
-			<@manageFeatureItem>
-				<@manageFeatureItemColumn>
-					<strong>${item.name}</strong>
-				</@manageFeatureItemColumn>
-				<@manageFeatureItemColumn auto=true align='end'>
-					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}' title='#i18n{portal.util.labelModify}' buttonIcon='edit' color='primary' class='me-1' hideTitle=['all'] />
-					<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' color='danger' size='' hideTitle=['all'] />
-				</@manageFeatureItemColumn>
-			</@manageFeatureItem>
-			</#list>
-		</@manageFeature>
-		<@paginationAdmin paginator=paginator combo=1 />
+		<@messages errors=errors![] infos=infos![] />
+		<#if item_list?has_content>
+			<@manageFeature>
+				<#list item_list as item>
+				<@manageFeatureItem>
+					<@manageFeatureItemColumn>
+						<strong>${item.name!}</strong>
+					</@manageFeatureItemColumn>
+					<@manageFeatureItemColumn auto=true align='end'>
+						<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}' title='#i18n{portal.util.labelModify}' buttonIcon='edit' color='primary' class='me-1' hideTitle=['all'] />
+						<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' color='danger' size='' hideTitle=['all'] />
+					</@manageFeatureItemColumn>
+				</@manageFeatureItem>
+				</#list>
+			</@manageFeature>
+			<@paginationAdmin paginator=paginator combo=1 />
+		<#else>
+			<@empty title='#i18n{plugin.manage_items.noResult}' subtitle=' ' />
+		</#if>
 	</@pageColumn>
 </@pageContainer>
 ```
 
-### Management page with @table (tabular data)
+### Report page with @table (tabular data)
+
+Several data columns per row and no edit/delete action: `@table`. Rows that are entities with edit/delete actions take the `@manageFeature` example above.
 
 ```freemarker
 <@pageContainer>
 	<@pageColumn>
 		<@pageHeader title='#i18n{plugin.manage_data.title}'>
-			<@aButton href='jsp/admin/plugins/myplugin/CreateData.jsp' buttonIcon='plus' color='primary' title='#i18n{plugin.manage_data.buttonCreate}' />
+			<@aButton href='jsp/admin/plugins/myplugin/ManageData.jsp?view=exportData' buttonIcon='download' color='primary' title='#i18n{plugin.manage_data.buttonExport}' />
 		</@pageHeader>
-		<@messages infos=infos />
-		<@box>
-			<@boxBody>
-				<@table headBody=true>
-					<@tr>
-						<@th>#i18n{plugin.manage_data.columnName}</@th>
-						<@th>#i18n{plugin.manage_data.columnStatus}</@th>
-						<@th>#i18n{plugin.manage_data.columnDate}</@th>
-						<@th>#i18n{portal.util.labelActions}</@th>
-					</@tr>
-					<@tableHeadBodySeparator />
-					<#list data_list as data>
-					<@tr>
-						<@td>${data.name}</@td>
-						<@td><@tag color='${data.active?then("success","danger")}'>${data.active?then("Actif","Inactif")}</@tag></@td>
-						<@td>${data.date}</@td>
-						<@td>
-							<@aButton href='jsp/admin/plugins/myplugin/ModifyData.jsp?id=${data.id}' buttonIcon='edit' color='primary' title='#i18n{portal.util.labelModify}' size='' hideTitle=['all'] />
-							<@aButton href='jsp/admin/plugins/myplugin/ManageData.jsp?view=confirmRemoveData&id=${data.id}' buttonIcon='trash' color='danger' title='#i18n{portal.util.labelDelete}' size='' hideTitle=['all'] />
-						</@td>
-					</@tr>
-					</#list>
-				</@table>
-				<@paginationAdmin paginator=paginator combo=1 />
-			</@boxBody>
-		</@box>
+		<@messages infos=infos![] />
+		<#if data_list?has_content>
+			<@table headBody=true>
+				<@tr>
+					<@th>#i18n{plugin.manage_data.columnName}</@th>
+					<@th>#i18n{plugin.manage_data.columnStatus}</@th>
+					<@th>#i18n{plugin.manage_data.columnDate}</@th>
+				</@tr>
+				<@tableHeadBodySeparator />
+				<#list data_list as data>
+				<@tr>
+					<@td>${data.name!}</@td>
+					<@td><@tag color='${data.active?then("success","danger")}'><#if data.active>#i18n{portal.util.labelEnabled}<#else>#i18n{portal.util.labelDisabled}</#if></@tag></@td>
+					<@td>${data.date!}</@td>
+				</@tr>
+				</#list>
+			</@table>
+			<@paginationAdmin paginator=paginator combo=1 />
+		<#else>
+			<@empty title='#i18n{plugin.manage_data.noResult}' subtitle=' ' />
+		</#if>
 	</@pageColumn>
 </@pageContainer>
 ```
@@ -97,24 +98,20 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 <@pageContainer>
 	<@pageColumn>
 		<@pageHeader title='#i18n{plugin.modify_item.title}' />
-		<@box>
-			<@boxBody>
-				<@messages errors=errors />
-				<@tform name='modify_item' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
-					<@input type='hidden' name='id' value='${item.id}' />
-					<@formGroup labelFor='name' labelKey='#i18n{plugin.modify_item.labelName}' mandatory=true>
-						<@input type='text' name='name' value='${item.name!}' />
-					</@formGroup>
-					<@formGroup labelFor='description' labelKey='#i18n{plugin.modify_item.labelDescription}'>
-						<@input type='textarea' name='description' value='${item.description!}' />
-					</@formGroup>
-					<@formGroup labelFor='status' labelKey='#i18n{plugin.modify_item.labelStatus}'>
-						<@select name='status' items=status_list default_value='${item.status}' />
-					</@formGroup>
-					<@actionButtons button1Name='action_modifyItem' button2Name='view_manageItems' />
-				</@tform>
-			</@boxBody>
-		</@box>
+		<@messages errors=errors![] />
+		<@tform name='modify_item' action='jsp/admin/plugins/myplugin/ManageItems.jsp' boxed=true>
+			<@input type='hidden' name='id' value='${item.id}' />
+			<@formGroup labelFor='name' labelKey='#i18n{plugin.modify_item.labelName}' mandatory=true>
+				<@input type='text' name='name' value='${item.name!}' />
+			</@formGroup>
+			<@formGroup labelFor='description' labelKey='#i18n{plugin.modify_item.labelDescription}'>
+				<@input type='textarea' name='description' value='${item.description!}' />
+			</@formGroup>
+			<@formGroup labelFor='status' labelKey='#i18n{plugin.modify_item.labelStatus}'>
+				<@select name='status' items=status_list default_value='${item.status}' />
+			</@formGroup>
+			<@actionButtons button1Name='action_modifyItem' button2Name='view_manageItems' />
+		</@tform>
 	</@pageColumn>
 </@pageContainer>
 ```
@@ -208,8 +205,8 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 				</@modalFooter>
 			</@modal>
 		</#if>
-		<@messages infos=infos />
-		<#if item_list?has_content && item_list?size gt 0>
+		<@messages infos=infos![] />
+		<#if item_list?has_content>
 			<@tform id='form_bulk_action' method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp' boxed=true>
 				<@input type='hidden' id='action' name='action' value='bulk_action' />
 				<#if permission_archive || permission_delete>
@@ -260,13 +257,11 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 			</@tform>
 			<#if item_list?size gte 10><@paginationAdmin paginator=paginator combo=1 /></#if>
 		<#else>
-			<@card>
-				<#if permission_create>
-					<@empty title='#i18n{plugin.manage_items.noResult}' iconName='inbox-off' subtitle='#i18n{plugin.manage_items.help}' actionTitle='#i18n{plugin.manage_items.buttonAdd}' actionUrl='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' />
-				<#else>
-					<@empty title='#i18n{plugin.manage_items.noResult}' iconName='inbox-off' subtitle='#i18n{plugin.manage_items.help}' />
-				</#if>
-			</@card>
+			<#if permission_create>
+				<@empty title='#i18n{plugin.manage_items.noResult}' iconName='inbox-off' subtitle='#i18n{plugin.manage_items.help}' actionTitle='#i18n{plugin.manage_items.buttonAdd}' actionUrl='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' />
+			<#else>
+				<@empty title='#i18n{plugin.manage_items.noResult}' iconName='inbox-off' subtitle='#i18n{plugin.manage_items.help}' />
+			</#if>
 		</#if>
 	</@pageColumn>
 </@pageContainer>
@@ -285,7 +280,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 					<@columns id='toolbar' class='d-flex justify-content-end align-items-center'>
 						<@button class='me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save' name='action_save' hideTitle=['xs','sm', 'md', 'lg'] />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' color='danger' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['xs','sm', 'md', 'lg'] size='' />
-						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=previewItem&id=${item.id}' title='#i18n{plugin.modify_item.labelPreview}' hideTitle=['xs','sm', 'md', 'lg'] color='default' size='' buttonIcon='eye' />
+						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=previewItem&id=${item.id}' title='#i18n{plugin.modify_item.labelPreview}' hideTitle=['xs','sm', 'md', 'lg'] color='light' size='' buttonIcon='eye' />
 						<@button type='button' class='me-1' title='#i18n{plugin.modify_item.labelProperties}' buttonIcon='cog me-2' hideTitle=['xs','sm', 'md', 'lg'] params='data-bs-toggle="modal" data-bs-target="#item-properties"' />
 					</@columns>
 				</@row>
@@ -326,7 +321,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 					</@box>
 				</@modalBody>
 			</@modal>
-			<@messages errors=errors />
+			<@messages errors=errors![] />
 			<@formGroup labelFor='title' labelKey='#i18n{plugin.create_item.labelTitle}' hideLabel=['all'] rows=2>
 				<@input name='title' id='title' value='${item.title!?trim}' class='visually-hidden' />
 				<@div id='div_title' class='content-head font-bold main-color lutece-charcounter' params='data-lutece-counter-max="75" contenteditable="true"'>${item.title!?trim}</@div>
@@ -352,22 +347,24 @@ Template included in a tab or a parent page. No `@pageContainer` / `@pageColumn`
 ```freemarker
 <@box>
 	<@boxHeader title='#i18n{plugin.panel.titleSection1}' boxTools=true>
-		<@tform action='jsp/admin/plugins/myplugin/DoAction.jsp' method='post'>
+		<@tform action='jsp/admin/plugins/myplugin/ManageItems.jsp' method='post'>
+			<@input type='hidden' name='action' value='synchronize' />
 			<@button type='submit' color='primary' buttonIcon='sync' title='#i18n{plugin.panel.buttonAction}' hideTitle=['xs','sm','md'] size='' />
 		</@tform>
 	</@boxHeader>
 	<@boxBody>
 		<@p>#i18n{plugin.panel.explainSection1}</@p>
 		<#if feature_enabled>
-			<@p><@tag color='success' tagIcon='check-circle'>#i18n{portal.util.labelEnabled}</@tag> #i18n{plugin.panel.labelEnabled}</@p>
+			<@p><@tag color='success' tagIcon='circle-check'>#i18n{portal.util.labelEnabled}</@tag> #i18n{plugin.panel.labelEnabled}</@p>
 		<#else>
-			<@p><@tag color='danger' tagIcon='times-circle'>#i18n{portal.util.labelDisabled}</@tag> #i18n{plugin.panel.labelDisabled}</@p>
+			<@p><@tag color='danger' tagIcon='circle-x'>#i18n{portal.util.labelDisabled}</@tag> #i18n{plugin.panel.labelDisabled}</@p>
 		</#if>
 	</@boxBody>
 </@box>
 <@box>
 	<@boxHeader title='#i18n{plugin.panel.titleSection2}' boxTools=true>
-		<@tform method='post' action='jsp/admin/plugins/myplugin/DoToggle.jsp'>
+		<@tform method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
+			<@input type='hidden' name='action' value='toggleFeature' />
 			<@input type='hidden' name='toggle' value='feature_key' />
 			<#if feature_enabled>
 				<@button type='submit' color='danger' buttonIcon='stop' title='#i18n{plugin.panel.buttonDisable}' hideTitle=['xs','sm','md'] size='' />
@@ -378,7 +375,7 @@ Template included in a tab or a parent page. No `@pageContainer` / `@pageColumn`
 	</@boxHeader>
 	<@boxBody>
 		<@p>#i18n{plugin.panel.explainSection2}</@p>
-		<@alert color='warning' iconTitle='exclamation-circle fa-2x'>
+		<@alert color='warning' iconTitle='exclamation-circle'>
 			#i18n{plugin.panel.warningMessage}
 		</@alert>
 	</@boxBody>

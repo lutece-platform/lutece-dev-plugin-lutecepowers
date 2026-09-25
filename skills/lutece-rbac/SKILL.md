@@ -228,8 +228,9 @@ Collection<Entity> authorizedEntities = RBACService.getAuthorizedCollection(
 ### Filter actions per entity (forms pattern)
 
 ```java
-// Each entity gets only the actions the user is authorized to perform
-for ( Entity entity : paginator.getPageItems( ) )
+// Each entity of the current page gets only the actions the user is authorized to perform
+_pager.withListItem( EntityHome.findAll( ) ).populateModels( request, model, getLocale( ) );
+for ( Entity entity : (List<Entity>) model.get( MARK_LIST ) )
 {
     List<EntityAction> listAuthorizedActions =
         (List<EntityAction>) RBACService.getAuthorizedActionsCollection(

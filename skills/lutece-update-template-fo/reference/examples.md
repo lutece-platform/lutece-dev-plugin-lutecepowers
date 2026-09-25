@@ -72,8 +72,9 @@ another template (portlet body, component) has no `cTpl` and no `cContainer`.
                 </@chItem>
             </#list>
             </@chList>
+        <#else>
+            <@cAlert type='warning' title='#i18n{mylutece.xpage.create_account.noAuthentication}' />
         </#if>
-        <@cAlert type='warning' title='#i18n{mylutece.xpage.create_account.noAuthentication}' />
     </@cCol>
 </@cRow>
 </@cContainer>
@@ -185,8 +186,8 @@ replaced by keys; a template never carries literal copy):
         <@cInput type='hidden' name='action' value='doMakeAppointment' class='' />
         <@cInput type='hidden' name='token' value='${token}' class='' />
         <@cText>#i18n{...validationText}</@cText>
-        <@cBtn type='submit' class='primary'>
-            <@cIcon name='check' /> #i18n{...labelValidate}
+        <@cBtn type='submit' class='primary' label='#i18n{...labelValidate}'>
+            <@cIcon name='check' />
         </@cBtn>
     </@cForm>
 </@cStepCurrent>
@@ -234,14 +235,14 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                             <@cInline>·</@cInline>
                             <@cInline class='reading-time' params='data-reading-time-label="${readingTimeLabel}"'></@cInline>
                         </@cBlock>
-                        <@cTitle level=1 class='hero__title'>${blog.contentLabel}</@cTitle>
+                        <@cTitle level=2 class='hero__title'>${blog.contentLabel}</@cTitle>
                         <@cText class='hero__lede'>${blog.description!}</@cText>
                     </@cBlock>
                     <#if blog.docContent?? && blog.docContent?size != 0>
                         <#list blog.docContent?sort_by('priority') as doc>
                             <#if doc.contentType.idContentType == 1>
                                 <@cFigure class='hero__img' caption=blog.contentLabel>
-                                    <@cImg src='servlet/plugins/blogs/file?id_file=${doc.id!}' alt=blog.contentLabel />
+                                    <@cImg src='servlet/plugins/myplugin/file?id_file=${doc.id!}' alt=blog.contentLabel />
                                 </@cFigure>
                                 <#break>
                             </#if>
@@ -269,7 +270,7 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                     <@cBlock class='related__title'>#i18n{plugin.relatedTitle}</@cBlock>
                     <@cBlock class='cards'>
                         <#list related_blogs as relBlog>
-                            <#assign relUrl>jsp/site/Portal.jsp?page=blog&id=${relBlog.id}<#if blog.attachedPortletId gt 0>&portlet_id=${blog.attachedPortletId}</#if></#assign>
+                            <#assign relUrl>jsp/site/Portal.jsp?page=myplugin&id=${relBlog.id}<#if blog.attachedPortletId gt 0>&portlet_id=${blog.attachedPortletId}</#if></#assign>
                             <@cLink href=relUrl class='card' label=''>
                                 <@cBlock class='card__body'>
                                     <@cTitle level=3>${relBlog.contentLabel}</@cTitle>

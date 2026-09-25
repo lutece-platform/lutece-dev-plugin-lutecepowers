@@ -16,7 +16,7 @@ Lutecepowers is a set of skills, path-scoped rules, reference sources and script
 
 1. **Before writing any Lutece code** (bean, service, DAO, XPage, daemon, template): load the `lutece-patterns` skill.
 2. **Before editing a file matching a rule glob** (table below): read that rule file. On Claude Code the rules are also loaded automatically from `.claude/rules/`.
-3. **Before writing any non-trivial pattern**: search `~/.lutece-references/` for an existing implementation (Read, Grep, Glob). The references are the living truth. They are cloned and updated in the background at session start from the `develop` branch (where v8 lives), and each one also carries the v7 branches that exist upstream (`develop_core7`, `master_core7`; `develop7.x` and `master7.x` for lutece-core), listed by `git branch -r`, to compare a pattern before and after migration. Repositories born in v8 have none. The list of repositories is the `REPOS` array of `${LUTECEPOWERS_ROOT}/hooks/sync-references`.
+3. **Before writing any non-trivial pattern**: search `~/.lutece-references/` for an existing implementation. The references are the living truth. They are cloned and updated in the background at session start from the `develop` branch (where v8 lives), and each one also carries the v7 branches that exist upstream (`develop_core7`, `master_core7`; `develop7.x` and `master7.x` for lutece-core), listed by `git branch -r`, to compare a pattern before and after migration. Repositories born in v8 have none. The list of repositories is the `REPOS` array of `${LUTECEPOWERS_ROOT}/hooks/sync-references`.
 
 ## Plugin root
 
@@ -61,7 +61,7 @@ Rules are short constraints that apply to files matching a glob. Source files li
 | Rule | Applies to | Constraint |
 |---|---|---|
 | `dao-patterns` | `**/business/**/*.java` | Lutece 8 DAO/Home constraints: DAOUtil lifecycle, generated keys, SQL constants, Home facade, CDI lookup |
-| `dependency-convergence` | `pom.xml` | Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts each parent manages, enforcer rules from 8.0.2 |
+| `dependency-convergence` | `pom.xml` | Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts the parent manages, enforcer rules |
 | `dependency-references` | always | When a task involves a dependency (Lutece or external), ensure its source/docs are available for exploration |
 | `java-conventions` | `**/*.java` | Lutece 8 global Java conventions: Jakarta EE, CDI, forbidden patterns |
 | `jsp-admin` | `**/*.jsp` | Lutece 8 JSP constraints: admin feature JSP boilerplate, bean naming, errorPage, no init() for MVC beans |

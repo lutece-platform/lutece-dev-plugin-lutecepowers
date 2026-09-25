@@ -7,7 +7,7 @@ description: "Use when creating or modifying a Lutece 8 workflow module: tasks, 
 
 Complete guide for creating and modifying Lutece 8 workflow modules.
 
-> Before writing workflow code, consult `~/.lutece-references/lutece-wf-module-workflow-forms/` (the reference module) using Read, Grep and Glob.
+> Before writing workflow code, consult `~/.lutece-references/lutece-wf-module-workflow-forms/` (the reference module) (search the references).
 
 ## Workflow Architecture
 
@@ -44,7 +44,7 @@ module-workflow-{pluginName}/
 │   │   │   └── {Name}TaskComponent.java
 │   │   └── resources/
 │   │       └── workflow-{pluginName}_messages.properties
-│   ├── sql/plugins/workflow/modules/
+│   ├── sql/plugins/workflow/modules/{pluginName}/plugin/
 │   │   └── create_db_workflow-{pluginName}.sql
 │   └── main/resources/META-INF/
 │       └── beans.xml
@@ -102,14 +102,15 @@ workflow-{pluginName}.task{Name}.taskForAutomaticAction=true
     <class>fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation</class>
     <version>1.0.0-SNAPSHOT</version>
     <description>module.workflow.{pluginName}.plugin.description</description>
-    <provider>City of Paris</provider>
+    <provider>module.workflow.{pluginName}.plugin.provider</provider>
     <provider-url>http://lutece.paris.fr</provider-url>
-    <icon-url>images/admin/skin/feature_default_icon.png</icon-url>
+    <icon-url>themes/admin/shared/images/apps.svg</icon-url>
     <copyright>Copyright (c) {currentYear}</copyright>
     <db-pool-required>1</db-pool-required>
 
     <core-version-dependency>
         <min-core-version>8.0.0</min-core-version>
+        <max-core-version/>
     </core-version-dependency>
 </plug-in>
 ```
@@ -139,6 +140,7 @@ CREATE TABLE workflow_task_{name}_config (
 ```properties
 # Plugin
 plugin.description=Workflow module for {pluginName}
+plugin.provider=City of Paris
 
 # Task {Name}
 task.{name}.title={Name} Task

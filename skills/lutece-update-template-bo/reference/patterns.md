@@ -45,7 +45,8 @@ template are in SKILL.md.
 - The button is `disabled=true` as long as no item is checked (handled by JS)
 - Pattern:
   ```freemarker
-  <@tform id='form_bulk_delete' method='post' action='...' boxed=true>
+  <@tform id='form_bulk_delete' method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp' boxed=true>
+      <@input type='hidden' name='action' value='removeSelectedItems' />
       <@input type='hidden' name='entity_id' value='${entity_id}' />
       <@row class='justify-content-end align-items-center'>
           <@columns md=3>
@@ -65,7 +66,7 @@ template are in SKILL.md.
                       <strong>${item.name}</strong>
                   </@manageFeatureItemColumn>
                   <@manageFeatureItemColumn align='end'>
-                      <@aButton href='...?action=remove&id=${item.id}' buttonIcon='trash' color='danger' hideTitle=['all'] title='#i18n{portal.util.labelDelete}' />
+                      <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' buttonIcon='trash' color='danger' hideTitle=['all'] title='#i18n{portal.util.labelDelete}' />
                   </@manageFeatureItemColumn>
               </@manageFeatureItem>
           </#list>
@@ -103,7 +104,7 @@ template are in SKILL.md.
 - In a `<@manageFeature>` or a `<@adminDashboardWidget>`, when a list item has **more than 2 action buttons**, group the actions in a dropdown menu
 - Two containers work: `<@button dropdownMenu=true>` is the native Bootstrap 5 form (`data-bs-toggle`, items wrapped in `<ul class="dropdown-menu">`, so each item is a `<@li>` holding a `<@link>`; forms `manage_forms.html`); `<@aButton dropdownMenu=true>` emits Bootstrap 4 `data-toggle="dropdown"` that `webapp/themes/admin/tabler/js/admin.js` shims (core `admin/user/manage_users.html`). The pattern below uses `@aButton`; with `@button`, wrap each `@link` in `<@li>`
 - Convert each action `<@aButton>` into a `<@link>` with `class='dropdown-item'`
-- A selection checkbox in a row: `<@checkBox orientation='switch' labelKey=<entity label> labelClass='visually-hidden' />`; `checkBox.ftl` copies `params` on both the `<label>` and the `<input>`, so `params='aria-label="..."'` would be emitted twice
+- A selection checkbox in a row: `<@checkBox orientation='switch' value='${item.id}' labelKey=<entity label> labelClass='visually-hidden' />`; `checkBox.ftl` copies `params` on both the `<label>` and the `<input>`, so `params='aria-label="..."'` would be emitted twice
 - A hierarchy of entities (parents and children in one list): one flat `<@manageFeature>`, each item showing its depth with an indent class on the first `<@manageFeatureItemColumn>` (`class='ps-3'`, `'ps-5'`...), never a `<@table>` or a `<@manageFeature>` nested in an item
 - Reorder arrows (up, down, in, out) are not actions for the dropdown: keep them visible in a `<@btnGroup size='sm' ariaLabel='#i18n{portal.util.labelActions}'>`, the dropdown takes modify, copy, export and, last with `text-danger`, delete
 - When converting to `<@link>`: remove the `buttonIcon`, `color`, `size` and `hideTitle` parameters (not applicable to dropdown links)
@@ -114,10 +115,10 @@ template are in SKILL.md.
   ```freemarker
   <@manageFeatureItemColumn align='end'>
       <@aButton class='dropdown-toggle' id='item-actions-${item.id}' dropdownMenu=true href='#' title='#i18n{portal.util.labelActions}' color='' hideTitle=['all'] buttonIcon='dots-vertical'>
-          <@link class='dropdown-item' href='jsp/admin/.../Modify.jsp?id=${item.id}' label='#i18n{...labelModify}' />
-          <@link class='dropdown-item' href='jsp/admin/.../Compose.jsp?id=${item.id}' label='#i18n{...labelCompose}' />
-          <@link class='dropdown-item' href='jsp/admin/.../Copy.jsp?id=${item.id}' label='#i18n{...labelCopy}' />
-          <@link class='dropdown-item text-danger' href='jsp/admin/.../Remove.jsp?id=${item.id}' label='#i18n{portal.util.labelDelete}' />
+          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}' label='#i18n{portal.util.labelModify}' />
+          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=composeItem&id=${item.id}' label='#i18n{...labelCompose}' />
+          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmCopyItem&id=${item.id}' label='#i18n{...labelCopy}' />
+          <@link class='dropdown-item text-danger' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' label='#i18n{portal.util.labelDelete}' />
       </@aButton>
   </@manageFeatureItemColumn>
   ```
@@ -194,13 +195,15 @@ template are in SKILL.md.
   ```freemarker
   <@pageHeader title='#i18n{...title}'>
       <#if is_import_right>
-          <@tform type='inline' method='post' action='jsp/admin/plugins/myplugin/ImportItems.jsp'>
+          <@tform type='inline' method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
+              <@input type='hidden' name='action' value='importItems' />
               <@input type='hidden' name='parent_id' value='${parent.id}' />
               <@button type='submit' buttonIcon='upload' title='#i18n{...buttonImport}' hideTitle=['xs','sm'] class='me-1' />
           </@tform>
       </#if>
       <#if items?has_content && is_export_right>
-          <@tform type='inline' method='post' action='jsp/admin/plugins/myplugin/ExportItems.jsp'>
+          <@tform type='inline' method='post' action='jsp/admin/plugins/myplugin/ManageItems.jsp'>
+              <@input type='hidden' name='action' value='exportItems' />
               <@input type='hidden' name='parent_id' value='${parent.id}' />
               <@button type='submit' buttonIcon='download' title='#i18n{...buttonExport}' hideTitle=['xs','sm'] />
           </@tform>
@@ -261,7 +264,7 @@ The primary button (creation) stays visually the rightmost. The secondary button
                       <@box>...</@box>
                   </@modalBody>
               </@modal>
-              <@messages errors=errors />
+              <@messages errors=errors![] />
               ...editable fields...
               <@button class='my-3 action' type='submit' buttonIcon='check me-2' title='#i18n{...save}' />
           </@tform>
@@ -284,9 +287,9 @@ No `<@offcanvas>` (blocking: `verify-migration.sh` TM10, scanner TD48). Two repl
 
 ```freemarker
 <@manageFeatureItemColumn align='end'>
-    <@aButton href='jsp/admin/.../Modify.jsp?key=${item.key}' title='#i18n{portal.util.labelModify}' buttonIcon='edit' color='' class='me-1' hideTitle=['xs','sm'] />
-    <@aButton href='jsp/admin/.../ManageUsers.jsp?key=${item.key}' title='#i18n{...labelManageUsers}' buttonIcon='users' color='' class='me-1' hideTitle=['xs','sm'] />
-    <@aButton href='jsp/admin/.../Remove.jsp?key=${item.key}' title='#i18n{...labelRemove}' hideTitle=['all'] buttonIcon='trash' color='danger' />
+    <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&key=${item.key}' title='#i18n{portal.util.labelModify}' buttonIcon='edit' color='' class='me-1' hideTitle=['xs','sm'] />
+    <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=manageItemUsers&key=${item.key}' title='#i18n{...labelManageUsers}' buttonIcon='users' color='' class='me-1' hideTitle=['xs','sm'] />
+    <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&key=${item.key}' title='#i18n{portal.util.labelDelete}' hideTitle=['all'] buttonIcon='trash' color='danger' />
 </@manageFeatureItemColumn>
 ```
 
@@ -344,6 +347,7 @@ Put it in `<@boxFooter>`, not in the body.
 
 ## Models to copy
 
-forms `admin/plugins/forms/manage_forms.html`, core `admin/role/manage_roles.html` and `admin/user/manage_users.html`
-(actions dropdown). The core is not flawless: `admin/rbac/manage_roles.html` wraps `@empty` in `@box` and tests
-`?size gt 1`, so a single role shows the empty state. The rule above wins over the model.
+For the `@manageFeature` item layout: forms `admin/plugins/forms/manage_forms.html`, core `admin/rbac/manage_roles.html`,
+`admin/role/manage_roles.html` and `admin/user/manage_users.html` (actions dropdown). The core pages still open
+their create and modify screens in an `@offcanvas` and wrap `@empty` in `@box`: those two parts are not copied, the
+rules above win.

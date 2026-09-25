@@ -6,6 +6,7 @@ This repository is a plugin for coding agents (Claude Code, Codex, Cursor, Grok 
 
 - What Lutece 8 really does lives in `~/.lutece-references/` (cloned by `hooks/sync-references`). A statement in a skill, rule or pattern is right when the reference code does it, wrong otherwise. Verify by grep before writing.
 - Versions are never hardcoded: the parent POM is the latest released `lutece-global-pom` 8.x read from the release repository (`rules/dependency-convergence.md`).
+- One supported Lutece 8 level, set once in `skills/lutece-migration-v8-agent-teams/scripts/v8-floor.conf` and enforced by `check-v8-floor.sh`. Everything written here describes that level; nothing describes, branches on or works around an older v8.
 - Only coding agents verified with a live session are declared as supported (README). No manifest, install command or claim for a tool that was not exercised.
 
 ## Single source per topic
@@ -33,6 +34,12 @@ bash tests/scripts/test-bundles.sh
 bash tests/scripts/test-fix-i18n-bundles.sh
 bash tests/scripts/test-server-log-oracle.sh
 bash tests/scripts/test-coverage-keys.sh
+bash tests/scripts/test-v8-floor.sh
+bash tests/scripts/test-i18n-keys.sh
+bash tests/scripts/test-version-tags.sh
+bash tests/scripts/test-sql-literal.sh
+bash tests/scripts/test-structure-checks.sh
+bash tests/scripts/test-e2e-mvc-inheritance.sh
 claude plugin validate .
 ```
 

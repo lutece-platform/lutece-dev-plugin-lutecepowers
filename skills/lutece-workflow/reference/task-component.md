@@ -149,17 +149,17 @@ public class {Name}TaskComponent extends AbstractTaskComponent
 ```html
 <@row>
     <@columns>
-        <@formGroup labelKey="module.workflow.{pluginName}.task.{name}.config.title" mandatory=true>
+        <@formGroup labelKey="#i18n{module.workflow.{pluginName}.task.{name}.config.title}" mandatory=true>
             <@input type="text" name="title" id="title" value=config.title!'' />
         </@formGroup>
 
-        <@formGroup labelKey="module.workflow.{pluginName}.task.{name}.config.targetState">
+        <@formGroup labelKey="#i18n{module.workflow.{pluginName}.task.{name}.config.targetState}">
             <@input type="text" name="target_state" id="target_state" value=config.targetState!'' />
         </@formGroup>
 
         <@formGroup>
-            <@checkBox name="notify_user" id="notify_user"
-                labelKey="module.workflow.{pluginName}.task.{name}.config.notifyUser"
+            <@checkBox name="notify_user" id="notify_user" orientation='switch' value='true'
+                labelKey="#i18n{module.workflow.{pluginName}.task.{name}.config.notifyUser}"
                 checked=config.notifyUser!false />
         </@formGroup>
     </@columns>
@@ -171,12 +171,12 @@ public class {Name}TaskComponent extends AbstractTaskComponent
 **`task_{name}_form.html`**
 
 ```html
-<div class="alert alert-info">
-    <#if config??>
+<#if config??>
+    <@alert color='info'>
         #i18n{module.workflow.{pluginName}.task.{name}.form.info}
         <strong>${config.targetState!}</strong>
-    </#if>
-</div>
+    </@alert>
+</#if>
 ```
 
 ### Information (history)

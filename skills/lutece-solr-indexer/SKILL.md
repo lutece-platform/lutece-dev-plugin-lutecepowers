@@ -359,13 +359,16 @@ solr.server.address=http://localhost:8983/solr/
     <name>myentity-solr</name>
     <class>fr.paris.lutece.plugins.myentity.modules.solr.service.MyEntitySolrPlugin</class>
     <version>1.0.0-SNAPSHOT</version>
-    <description>Solr indexer for MyEntity plugin</description>
+    <description>module.myentity.solr.module.description</description>
     <core-version-dependency>
         <min-core-version>8.0.0</min-core-version>
+        <max-core-version/>
     </core-version-dependency>
     <db-pool-required>0</db-pool-required>
 </plug-in>
 ```
+
+`<description>` is an i18n key: `module.description=Solr indexer for MyEntity plugin` in the module bundle (`rules/plugin-descriptor.md`).
 
 No daemons or admin features needed — the plugin-solr framework provides them.
 
@@ -402,7 +405,7 @@ These providers are auto-discovered via CDI and called by `SolrIndexerService` b
 | `MyEntitySolrPlugin.java` | Plugin class (only if dynamic resource types needed) |
 | `module-myentity-solr.properties` | Indexer name, description, enable flag |
 | `WEB-INF/plugins/myentity-solr.xml` | plugin.xml descriptor |
-| `webapp/WEB-INF/classes/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
+| `src/main/resources/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
 
 No daemon, no DAO, no SQL table needed — plugin-solr provides all infrastructure.
 

@@ -393,13 +393,16 @@ elasticdata.bulk_batch_size=10000
     <name>myentity-elasticdata</name>
     <class>fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation</class>
     <version>1.0.0-SNAPSHOT</version>
-    <description>ElasticData module for MyEntity plugin</description>
+    <description>module.myentity.elasticdata.module.description</description>
     <core-version-dependency>
         <min-core-version>8.0.0</min-core-version>
+        <max-core-version/>
     </core-version-dependency>
     <db-pool-required>0</db-pool-required>
 </plug-in>
 ```
+
+`<description>` is an i18n key: `module.description=ElasticData module for MyEntity plugin` in the module bundle (`rules/plugin-descriptor.md`).
 
 No daemons or admin features needed — the plugin-elasticdata framework provides them.
 
@@ -448,7 +451,7 @@ Providers are auto-discovered via CDI and called during full indexing (`complete
 | `MyEntityIndexerEventListener.java` | `@ObservesAsync` CDI listener |
 | `elasticdata-myentity.properties` | `@ConfigProperty` values (id, name, index, mappings) |
 | `WEB-INF/plugins/myentity-elasticdata.xml` | plugin.xml descriptor |
-| `webapp/WEB-INF/classes/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
+| `src/main/resources/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
 
 No daemon, no DAO, no SQL table needed — plugin-elasticdata provides all infrastructure.
 

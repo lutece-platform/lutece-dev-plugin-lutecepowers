@@ -287,7 +287,7 @@ No changes needed in `plugin.xml` or `messages.properties` — cache is infrastr
 
 | Need | File to consult |
 |------|----------------|
-| CDI cache service (v8 pattern) | `~/.lutece-references/lutece-form-plugin-forms/src/java/**/service/FormsCacheService.java` |
+| CDI cache service (v8 pattern) | `~/.lutece-references/lutece-form-plugin-forms/src/java/fr/paris/lutece/plugins/forms/service/cache/FormsCacheService.java` |
 | Core AbstractCacheableService | `~/.lutece-references/lutece-core/src/java/**/service/cache/AbstractCacheableService.java` |
 | Core CacheService (static facade) | `~/.lutece-references/lutece-core/src/java/**/service/cache/CacheService.java` |
 | Cache manager (JSR-107) | `~/.lutece-references/lutece-core/src/java/**/service/cache/Lutece107CacheManager.java` |

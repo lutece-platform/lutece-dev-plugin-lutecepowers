@@ -56,16 +56,16 @@ If the clone is missing, the theme also ships in any assembled site under
 
 ### Global structure
 - **Always** wrap a page template in `<@cTpl>...</@cTpl>`: it is the theme override hook (`skin/themes/<code>/tpl/<same path>`, `global_theme_commons.ftl`). Page-local `<#macro>` and `<#assign>` live inside it; FreeMarker hoists macro definitions, their position is style
-- A page is `<@cTpl>` → `<@cContainer>` → `<@cRow>` → `<@cCol cols=...>` → content: the shape of every core `skin/site/*.html` since LUT-33132 and of every recent front-end rewrite (examples.md § Page skeleton). Only a fragment included by another template (portlet body, component) skips `cTpl` and `cContainer`
+- A page is `<@cTpl>` → `<@cContainer>` → `<@cRow>` → `<@cCol cols=...>` → content: the shape of every core `skin/site/*.html` (examples.md § Page skeleton). Only a fragment included by another template (portlet body, component) skips `cTpl` and `cContainer`
 - Titles: `level=2` for the page title (the `h1` belongs to the frameset), `level=3` below
 - Forms: `<@cForm>` → `<@cField for= required=true>` → input → a `<@cRow>` of `<@cBtn>` at the end. No `<@cFieldset>` around a whole form
-- Models to copy: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/site/*.html` and `skin/search/search_results.html`; the live catalogue of every macro is `skin/site/page_template_component.html`
+- Models to copy: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/site/*.html` and `skin/search/search_results.html`
 - The theme ships component CSS under `webapp/themes/skin/lutece/css/{components,layout}` and `themes/skin/shared/css` (`bl-*`, `search-*`, `tile*`, `lutece-ds-empty`): target those classes through `class=`, never inline styles
 
 ### Bootstrap 3 → Bootstrap 5 classes
 - `help-block` → `form-text` (help text under a field)
 - `control-label` → remove (handled by the macro)
-- `col-xs-*` → `col-*` (the `xs` breakpoint no longer exists in BS5)
+- `col-xs-*` → `col-*` (BS5 has no `xs` breakpoint)
 - `has-error` → `is-invalid` (validation)
 - `btn-default` → `btn-secondary`
 
@@ -175,8 +175,8 @@ If the clone is missing, the theme also ships in any assembled site under
 - Remove `<!-- TOC -->`, `<!-- BODY -->` etc. comments whose intent is obvious in the structured FreeMarker code
 
 ### What NOT to do
-- Do not copy a front-end commit blindly: the reference commits also carry defects. Seen upstream and rejected: `imgTitle=` on `cCard` (not a parameter, svg dropped), `@parisIcon` (undefined in the core), `cBtn class='btn btn-primary'` (renders `btn btn-btn btn-primary`), `cCol class='12 col-sm-5'`, stray `" />` text after an icon, `name='back'` on `cBtn`, `arrow-right` for a back button, French copy in `home=`/`title=`, `<@cIcon name='#i18n{...}'>`
-- Do not flip the line endings of a file (CRLF stays CRLF) and do not overwrite a plugin's templates with wholesale copies of the theme's: both widen the diff and have reintroduced fixed bugs upstream
+- Mistakes not to copy: `imgTitle=` on `cCard` (not a parameter, svg dropped), `@parisIcon` (undefined in the core), `cBtn class='btn btn-primary'` (renders `btn btn-btn btn-primary`), `cCol class='12 col-sm-5'`, stray `" />` text after an icon, `name='back'` on `cBtn`, `arrow-right` for a back button, French copy in `home=`/`title=`, `<@cIcon name='#i18n{...}'>`
+- Do not flip the line endings of a file (CRLF stays CRLF) and do not overwrite a plugin's templates with wholesale copies of the theme's: both widen the diff
 - Do not add JavaScript unless requested or required by a macro
 - Do not use deprecated macro parameters
 - Do not wrap a `<@cAlert>` in an unnecessary `<@cBlock>` or `<@cCard>`
@@ -185,7 +185,7 @@ If the clone is missing, the theme also ships in any assembled site under
 - Do not wrap each `<@chItem>` in a `<@cRow>`/`<@cCol>` — list items go directly inside `<@chList>`
 - **Do not leave raw HTML tags** (`<br>`, `<hr>`, `<b>`, `<i>`, etc.) when a macro exists or when they are unnecessary — remove formatting `<br>`
 - **Do not use `<@cCol cols='xs-12'>`** — simply use `<@cCol>` (full-width column by default)
-- **Do not use `&nbsp;`** — replace with a normal space or remove if unnecessary
+- **Do not use `&nbsp;`** — replace with a normal space or remove if unnecessary; a required `label` with no visible title keeps its real text with `labelClass='visually-hidden'`
 - **Do not use `style='...'`** on macros — use `class` with Bootstrap utilities or `params='style="..."'` as a last resort
 - **Do not mix BO and FO macros** — check that all the macros used exist in the skin/FO context
 - **Do not use `&gt;` / `&lt;`** in FreeMarker conditions — use `gt` / `lt`
@@ -195,5 +195,5 @@ If the clone is missing, the theme also ships in any assembled site under
 - **Do not keep a separate `<figcaption>`** — use the `caption` parameter of `<@cFigure>`
 - **Do not use `<@cBtn>` for clickable cards** — use `<@cLink class='ma-card' label=''>` when it is a clickable area not styled as a button
 - **Do not keep duplicated/dead code** during the migration — re-read the result to spot buggy copy-paste and unnecessary `<!-- ... -->` comments
-- **NEVER keep jQuery** in a migrated template (`$(...)`, `jQuery(...)`, `.on()`, `.addClass()`, `.animate()`, `$(document).ready()`, etc.) — the jQuery lib is no longer loaded by the theme, the code would crash at runtime. Always rewrite in vanilla JS (see the dedicated section)
+- **NEVER keep jQuery** in a migrated template (`$(...)`, `jQuery(...)`, `.on()`, `.addClass()`, `.animate()`, `$(document).ready()`, etc.) — the theme does not load jQuery, the code would crash at runtime. Always rewrite in vanilla JS (see the dedicated section)
 
