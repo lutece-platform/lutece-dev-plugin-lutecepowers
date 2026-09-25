@@ -52,6 +52,10 @@ def test_scenario_rule_rejects_unproven_mutation():
     assert not test_scenarios.validate(seen), test_scenarios.validate(seen)
     assert not test_scenarios.validate(good), test_scenarios.validate(good)
     assert not test_scenarios.validate(refusal), test_scenarios.validate(refusal)
+    js_proof = {"id": "j", "steps": [{"click": "button[type=submit]"}, {"js": {"script": "localStorage.k", "expect": "v"}}]}
+    js_arrange = {"id": "k", "steps": [{"click": "button[type=submit]"}, {"js": "localStorage.k = 1"}]}
+    assert not test_scenarios.validate(js_proof), test_scenarios.validate(js_proof)
+    assert test_scenarios.validate(js_arrange), "a js step without expect accepted as a proof"
 
 
 def test_classifier_requires_footer(bo):

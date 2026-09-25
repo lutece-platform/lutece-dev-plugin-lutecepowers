@@ -95,6 +95,9 @@ def observe(page):
                 mvcs = mvc_names(body)
             except Exception:  # noqa: BLE001 - binary body
                 pass
+            pending = obs.pop("form_mvcs", [])
+            if not mvcs and getattr(req, "method", "") == "POST":
+                mvcs = pending
             obs["nav"].append({"url": resp.url, "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs,
                                "ttfb_ms": round(t["responseStart"] - t["requestStart"], 1) if t["responseStart"] >= 0 else None,
                                "server_us": _server_us(resp)})
@@ -428,11 +431,20 @@ def fill_form(page, form, values=None, seed="e2e"):
 
 def submit(page, form, button=None):
     """Submits a form (the given submit control, else its first one, else form.submit) and waits for the
-    navigation. A missing form is an assertion failure, never a silent no-op."""
+    navigation. A missing form is an assertion failure, never a silent no-op. The MVC names the form carries are
+    noted for the navigation first: Chromium hands no body of a multipart POST with a file to the observer."""
     loc = page.locator(form).first
     assert loc.count(), "no form matches %s on %s" % (form, normalize(page.url))
     if button:
         assert page.locator(form + " " + button).count(), "no control %s in %s" % (button, form)
+    if hasattr(page, "obs"):
+        page.obs["form_mvcs"] = loc.evaluate("""(f, btn) => {
+            const b = btn ? f.querySelector(btn) : f.querySelector('button[type=submit], input[type=submit], button:not([type])');
+            const names = [...f.querySelectorAll('input[name=action], input[name=view]')].filter(i => i.value).map(i => i.name + '=' + i.value);
+            const m = b && b.name && /^(action|view)_(.+)$/.exec(b.name);
+            if (m) names.unshift(m[1] + '=' + m[2]);
+            if (b && (b.name === 'action' || b.name === 'view') && b.value) names.unshift(b.name + '=' + b.value);
+            return names; }""", button)
     try:
         with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
             loc.evaluate("""(f, btn) => {

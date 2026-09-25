@@ -70,6 +70,10 @@ Step vocabulary (one key per step):
   sql_set: {var: name, query: ...} store the first cell of the query in a variable
   sql_exec: <statement>            arrange data directly in the database (only for what the UI cannot create)
   set: {var: value}                define variables; {{rand}} is a per-scenario random token
+  js: <expression>                 evaluate a JavaScript expression in the page (arrange client state: localStorage,
+                                   a mocked fetch); {script: ..., expect: v | contains: text | var: name} compares
+                                   the result (as a string) or stores it: with expect/contains it is a state oracle
+                                   of the browser (what a client-side script did), without it is navigation
   shot: <name>                     screenshot
   upload: {selector: ..., file: ...}   set a file input (path relative to e2e/)
   select: {selector: ..., label: text | option_contains: text | value: v}   pick an option by its label, the first
@@ -142,6 +146,8 @@ HIDING_MARKUP = re.compile(r"\[hidden\]|\[style\*?=[^\]]*(display|none|block)", 
 def validate(sc):
     """Returns the list of rule violations of a scenario (empty when it is acceptable)."""
     steps = [(list(st)[0], st[list(st)[0]]) for st in sc.get("steps", [])]
+    steps = [("expect_dom" if k == "js" and isinstance(v, dict) and ("expect" in v or "contains" in v) else "set" if k == "js" else k, v)
+             for k, v in steps]
     errors = []
     unproven = False
     for i, (k, arg) in enumerate(steps):
@@ -633,6 +639,16 @@ def run_step(page, step, vars_, record):
         vars_[arg["var"]] = rows[0][0] if rows else None
     elif key == "set":
         vars_.update(arg)
+    elif key == "js":
+        spec = arg if isinstance(arg, dict) else {"script": arg}
+        value = page.evaluate(spec["script"])
+        text = "" if value is None else value if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else str(value)
+        if "var" in spec:
+            vars_[spec["var"]] = text
+        if "expect" in spec:
+            assert text == str(spec["expect"]), "js %s returned %r, expected %r" % (spec["script"][:80], text[:200], spec["expect"])
+        if "contains" in spec:
+            assert str(spec["contains"]) in text, "js %s returned %r, which does not contain %r" % (spec["script"][:80], text[:200], spec["contains"])
     elif key == "shot":
         record.setdefault("screenshots", []).append(lutece.shot(page, arg, "jpg"))
         record.setdefault("review_shots", []).append({"shot": record["screenshots"][-1], "url": lutece.normalize(page.url)})

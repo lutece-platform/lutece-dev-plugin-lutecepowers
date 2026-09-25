@@ -39,6 +39,21 @@ def annotation_name(args):
     m = re.match(r"\s*(\w+|\"[^\"]+\")\s*(?:,|$)", args)
     return m.group(1) if m and "=" not in m.group(0) else ""
 CONST = re.compile(r"String\s+(\w+)\s*=\s*\"([^\"]+)\"")
+ALIAS = re.compile(r"String\s+(\w+)\s*=\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*;")
+"""A constant defined as another constant (ACTION_CREATE = VIEW_CREATE, the core's own idiom for a view and its action)."""
+
+
+def string_constants(text, known=None):
+    """NAME -> value of the String constants of a source, following the ones defined as another constant (of the same
+    source, or found in known)."""
+    consts = dict(CONST.findall(text))
+    aliases = ALIAS.findall(text)
+    for _ in range(len(aliases)):
+        for name, target in aliases:
+            value = consts.get(target) or consts.get(target.split(".")[-1]) or ( known or {} ).get(target)
+            if name not in consts and value is not None:
+                consts[name] = value
+    return consts
 FORM_ACTION = re.compile(r"<(?:form|@tform)\b[^>]*?action\s*=\s*['\"]([^'\"]*)['\"]", re.I | re.S)
 HREF_ADMIN = re.compile(r"(?:href|action)\s*=\s*['\"]([^'\"]*jsp/admin/[^'\"#]*)", re.I)
 TEMPLATE_REF = re.compile(r"TEMPLATE_\w+\s*=\s*\"([^\"]+\.html)\"")
@@ -375,7 +390,7 @@ def constant_table(root):
     table = {}
     for java, _ in app_java(root):
         text = java.read_text(errors="replace")
-        for name, value in CONST.findall(text):
+        for name, value in string_constants(text).items():
             table.setdefault(name, value)
             table["%s.%s" % (java.stem, name)] = value
     return table
@@ -436,7 +451,7 @@ def mvc_inventory(root):
         chain = lineage(text)
         consts = {}
         for t in reversed(chain):
-            consts.update(dict(CONST.findall(t)))
+            consts.update(string_constants(t, table))
         text = "\n".join(t for t in chain if t is text or MVC_IMPORT.search(t))
         attrs = annotation_args(ctl.group(1), consts, table)
         if not MVC_IMPORT.search(text):
@@ -492,13 +507,38 @@ def java_package(root):
     return ".".join(prefix) or None
 
 
+PLATFORM_PACKAGES = ("fr.paris.lutece.portal", "fr.paris.lutece.util")
+"""The core's own namespaces: a plugin that keeps classes there (xmltransformer took the core's style classes with
+their packages) shares them with core classes, so the package alone would attribute core exceptions to it."""
+
+
+def shares_platform_package(root, pkg):
+    """Whether the artefact's package prefix is the core's namespace (or broader) while the artefact is not the core."""
+    pom = root / "pom.xml"
+    if pom.exists() and "<packaging>lutece-core</packaging>" in pom.read_text(errors="replace"):
+        return False
+    return any(p == pkg or pkg.startswith(p + ".") or p.startswith(pkg + ".") for p in PLATFORM_PACKAGES)
+
+
+def own_classes(root):
+    """Fully qualified names of the artefact's own classes: its markers when it lives in the core's namespace."""
+    names = set()
+    for java, rel in app_java(root):
+        m = re.search(r"^\s*package\s+([\w.]+)\s*;", java.read_text(errors="replace"), re.M)
+        if m:
+            names.add("%s.%s" % (m.group(1), java.stem))
+    return names
+
+
 def artefact_markers(root, pkg):
     """Strings that identify the artefact in a server-log line, so an exception can be attributed to it even when no
     Java frame of its own appears: its package, the plugin names it declares, its template directories and the
     prefixes of the tables its SQL creates. A plugin breaks the core through its own templates, SQL or descriptor
     just as often as through a direct call."""
     marks = set()
-    if pkg:
+    if pkg and shares_platform_package(root, pkg):
+        marks.update(own_classes(root))
+    elif pkg:
         marks.add(pkg)
     names = set()
     for xml in root.rglob("WEB-INF/plugins/*.xml"):

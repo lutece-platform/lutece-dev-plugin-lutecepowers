@@ -6,7 +6,8 @@ Liberty expands lutece.war again at every start (autoExpand), so a jar copied in
 on the restart a Java change needs; the patched war is what the restarted server expands. The bench's own war is left
 as it is: its date is what tells run.sh whether the image must be rebuilt.
 
-    patch-war.py <source war> <jar> <webapp dir or ''> <output war> [<src/java dir>]
+    patch-war.py <source war> <jar> <webapp dir or ''> <output war> [<src/java dir> [<site overlay dir>]]
+The site overlay (the bench site's own webapp files) is applied last, so its files win over the artefact's.
 """
 import os
 import sys
@@ -24,12 +25,18 @@ def main():
             for name in files:
                 path = os.path.join(root, name)
                 overlay[os.path.relpath(path, webapp).replace(os.sep, "/")] = path
+    site = sys.argv[6] if len(sys.argv) > 6 else ""
     if java and os.path.isdir(java):
         for root, _, files in os.walk(java):
             for name in files:
                 if not name.endswith(".java"):
                     path = os.path.join(root, name)
                     overlay["WEB-INF/classes/" + os.path.relpath(path, java).replace(os.sep, "/")] = path
+    if site and os.path.isdir(site):
+        for root, _, files in os.walk(site):
+            for name in files:
+                path = os.path.join(root, name)
+                overlay[os.path.relpath(path, site).replace(os.sep, "/")] = path
     with zipfile.ZipFile(source) as src, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as out:
         for item in src.infolist():
             if item.filename not in overlay:

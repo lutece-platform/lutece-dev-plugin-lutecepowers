@@ -424,6 +424,9 @@ cmd_deploy() {
   [ "$(health)" = healthy ] || { echo "no healthy application: start one with KEEP=1 ./run.sh (or ./run.sh up)"; exit 1; }
   local war=/opt/wlp/usr/servers/defaultServer/apps/expanded/lutece.war stamp=artifacts/.deployed ref jar
   [ -d "$E2E_SRC/webapp" ] && docker cp -q "$E2E_SRC/webapp/." "$APP:$war/"
+  # The bench site's own files (db.properties on the JNDI pool...) win over the artefact's, as in the assembled war:
+  # the core ships a db.properties on localhost that would break the next start.
+  [ -d harness/site/webapp ] && docker cp -q harness/site/webapp/. "$APP:$war/"
   ref=$stamp; [ -f "$ref" ] || ref=harness/site/target/lutece.war
   if [ -n "$(find "$E2E_SRC/src" "$E2E_SRC/pom.xml" -type f -newer "$ref" 2>/dev/null | grep -v '/src/test/' | head -1)" ]; then
     (cd "$E2E_SRC" && ${MVN:-mvn} -q -o install -DskipTests)
@@ -432,7 +435,7 @@ cmd_deploy() {
     # Liberty expands lutece.war again at start: the restarted server must find the new jar, the webapp files
     # copied above and the bundles of src/java (WEB-INF/classes, not in the jar) in the war itself, a copy into the
     # expanded directory would be overwritten.
-    python3 tools/patch-war.py harness/site/target/lutece.war "$jar" "$E2E_SRC/webapp" artifacts/.deploy.war "$E2E_SRC/src/java" >/dev/null || exit 1
+    python3 tools/patch-war.py harness/site/target/lutece.war "$jar" "$E2E_SRC/webapp" artifacts/.deploy.war "$E2E_SRC/src/java" harness/site/webapp >/dev/null || exit 1
     docker cp -q artifacts/.deploy.war "$APP:/opt/wlp/usr/servers/defaultServer/apps/lutece.war"
     rm -f artifacts/.deploy.war
     docker restart "$APP" >/dev/null

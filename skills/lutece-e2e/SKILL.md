@@ -153,7 +153,7 @@ Harness-side causes (fix them in the bench, not in the app):
 **Mechanical rule, enforced at collection:** every mutation (`submit`, `submit_novalidate`, `confirm`,
 `confirm_if`, a `click` on a Do*/action control) must be followed, within the next three steps, by a **state**
 oracle — `sql` (`expect`, `not_expect`, `expect_var`, `not_expect_var`, `min`), `expect_dom`, `mail`, `fake_log`,
-`http`, `download`. `expect_text`, `expect_message`, `expect_kind` and `expect_html` read the screen that
+`http`, `download`, and `js` with `expect`/`contains` for what a client-side script did. `expect_text`, `expect_message`, `expect_kind` and `expect_html` read the screen that
 followed, not what the application did: alone after a mutation they are a *weak* oracle and the scenario is
 rejected. A refusal is written `expect_message: error` **then** `sql` counting that nothing was created.
 `expect_text` on a url or a JSP name is rejected too (assert on what the page says, not where it is), and
