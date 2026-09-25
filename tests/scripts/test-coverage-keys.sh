@@ -23,4 +23,14 @@ check "multipart button name" 'echo "$out" | sed -n 2p | grep -qF "action=save"'
 check "body name replaces the url routing" 'echo "$out" | sed -n 3p | grep -qF "Manage.jsp?action=copy"'
 check "@View name whatever the attribute order" '[ "$(echo "$out" | sed -n 4p)" = "VIEW_MANAGE VIEW_X" ]'
 check "url key kept" 'echo "$out" | sed -n 3p | grep -qF "Manage.jsp?view=manage"'
-if [ $fail = 0 ]; then echo "PASS: coverage keys credit every MVC name of a form body"; else echo "$out"; exit 1; fi
+T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/tools" "$T/artifacts/results" "$T/scenarios"
+cp "$HERE/../../skills/lutece-e2e/tools/coverage.py" "$T/tools/"
+printf '{"screens": [{"id": "S1", "url": "jsp/admin/plugins/p/ManageP.jsp?view=manage"}], "actions": []}\n' > "$T/artifacts/inventory.json"
+printf '{"id": "test_scenario[p.red]", "suite": "scenarios", "status": "failed", "visited": ["jsp/admin/plugins/p/ManageP.jsp?view=manage"]}\n' > "$T/artifacts/results/w.jsonl"
+printf 'exclusions: []\n' > "$T/scenarios/coverage-exclusions.yaml"
+( cd "$T" && python3 tools/coverage.py >/dev/null 2>&1 )
+check "a red scenario credits the screen it reached as a defect" 'python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if any(x[\"status\"]==\"defect\" for x in d[\"screens\"]) else 1)" "$T/artifacts/coverage.json"'
+
+if [ $fail = 0 ]; then echo "PASS: coverage keys credit every MVC name of a form body, a red scenario credits a defect"; else echo "$out"; exit 1; fi

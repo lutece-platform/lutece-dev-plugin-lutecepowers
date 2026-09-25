@@ -1,139 +1,146 @@
-# Bench e2e Lutece — décisions de conception
+# Lutece e2e bench — design decisions
 
-Un dossier `e2e/` autoportant, produit par un skill générique : environnement isolé, inventaire de **tous** les
-écrans et actions, tests rapides, rapport lisible par un humain comme par un agent en quelques centaines de tokens.
-À lire avant de changer un choix d'outil.
+A self-contained `e2e/` folder, produced by a generic skill: an isolated environment, an inventory of **every**
+screen and action, fast tests, a report a human and an agent both read in a few hundred tokens.
+Read before changing a tool choice.
 
-## Ce qui est retenu, et pourquoi
+## What is kept, and why
 
-| Brique | Choix | Raison |
+| Part | Choice | Reason |
 |---|---|---|
-| Pilotage navigateur | **Playwright Python 1.62** (`sync_api`) + pytest 9 + pytest-xdist | Parallélisme par processus, JUnit XML natif pour Jenkins. Les tests sont paramétrés par des JSON : le langage compte peu, la stabilité du runner compte. |
-| Runner | Image officielle `mcr.microsoft.com/playwright/python:v1.62.0-noble`, épinglée | Zéro dépendance sur l'agent Jenkins ; `RUNNER=local` pour itérer sur le poste. |
-| Environnement | **Docker Compose v2** (db, app, dbinit, tests, k6) | Une pile e2e est un stack complet monté une fois ; Testcontainers vise l'isolation par test (intégration Java), hors sujet ici. |
-| Serveur d'application | **Open Liberty 26.0.0.9 sur Temurin 21 (HotSpot)**, zip Maven Central | Les images ICR sont OpenJ9 uniquement ; OpenJ9 0.61 **plante** (assertion `VMAccess.cpp:133`) sous échantillonnage JFR et n'accepte pas `dumponexit`. HotSpot donne JFR complet, `jcmd JFR.dump` à chaud, `jfr view`. Différence JIT assumée : les goulots (SQL, N+1, verrous) sont les mêmes. |
-| Base | **MariaDB 11.8** en mémoire (`tmpfs`) + `performance_schema` + slow log | Digests natifs (top requêtes par temps cumulé, lignes lues, sans index), zéro outil externe. `pt-query-digest`/PMM écartés : une image de plus pour la même info. |
-| Schéma | plugin-liquibase au premier boot, comme en production v8 | Générique pour tout plugin/site : chaque jar apporte ses SQL ; pas de scripts à collecter à la main. |
-| Volume synthétique | SQL pur, moteur **SEQUENCE** de MariaDB (`seq_1_to_N`) | 100 000 utilisateurs en quelques secondes côté serveur, idempotent, sans générateur externe (Datafaker, Misata… : dépendance et lenteur pour zéro gain sur des tables de référentiel). |
-| Timings serveur | **Access log Liberty** (`%D` µs par requête) + `/metrics` (mpMetrics 5.1 / monitor-1.0 : pool JDBC, servlets, GC) | Mesure côté serveur sans instrumentation applicative ; p50/p95 par chemin dérivés par script. |
-| Profil JVM | **JFR** à la demande (`E2E_JFR=1`, `settings=profile`), dumpé à chaud, résumé par `jfr view hot-methods / allocation-by-class / gc-pauses / contention-by-site` | Texte compact, lisible par un agent. Coupé par défaut : il coûte du CPU sur tout le run. |
-| Charge | **k6 1.5** (conteneur `grafana/k6`) sur les écrans d'entrée, seuils p95 / taux d'erreur | Binaire unique, seuils = code de sortie. Gatling écarté (JVM, rapport HTML lourd) : la charge n'est qu'une phase courte du bench. |
-| Empreinte d'écran | **Aria snapshot** (YAML de l'arbre d'accessibilité) + capture JPEG | Le diff structurel est textuel, stable entre machines, et coûte quelques lignes ; les pixels servent aux humains, pas aux assertions. |
-| Console navigateur | `console` (error/warning), `pageerror`, `requestfailed`, réponses ≥ 400 sur chaque page | « Console 100 % propre » est une assertion, pas une option. |
-| Exigences | **EARS** générées depuis l'inventaire + scénarios (`requirements.ears.md`) | Une phrase testable par écran/action ; la couverture se lit par exigence. Générées, jamais maintenues à la main. |
-| Rapport | `summary.md` (compact) + `report.html` (galerie) + `junit-*.xml` | Le markdown est ce que lit l'agent ; JUnit est ce que lit Jenkins ; l'HTML est ce que regarde le chef de projet. |
+| Browser driver | **Playwright Python 1.62** (`sync_api`) + pytest 9 + pytest-xdist | Process-level parallelism, native JUnit XML for Jenkins. The tests are parametrised by JSON: the language matters little, the stability of the runner matters. |
+| Runner | Official image `mcr.microsoft.com/playwright/python:v1.62.0-noble`, pinned | No dependency on the Jenkins agent; `RUNNER=local` to iterate on the workstation. |
+| Environment | **Docker Compose v2** (db, lutece, mail, dbinit, tests, k6) | An e2e stack is a full stack mounted once; Testcontainers targets per-test isolation (Java integration), out of scope here. |
+| Application server | **Open Liberty 26.0.0.9 on Temurin 21 (HotSpot)**, Maven Central zip | The ICR images are OpenJ9 only; OpenJ9 0.61 **crashes** (assertion `VMAccess.cpp:133`) under JFR sampling and refuses `dumponexit`. HotSpot gives full JFR, live `jcmd JFR.dump`, `jfr view`. The JIT difference is accepted: the bottlenecks (SQL, N+1, locks) are the same. |
+| Database | **MariaDB 11.8** in memory (`tmpfs`) + `performance_schema` | Native digests (top statements by total time, rows read, no index), no external tool. `pt-query-digest`/PMM rejected: one more image for the same information. |
+| Schema | plugin-liquibase at first boot, as in v8 production | Generic for any plugin or site: each jar brings its SQL; no script collected by hand. |
+| Synthetic volume | Plain SQL, MariaDB **SEQUENCE** engine (`seq_1_to_N`) | 100,000 users in a few seconds server-side, idempotent, no external generator (Datafaker, Misata…: a dependency and slowness for no gain on reference tables). |
+| Server timings | **Liberty access log** (`%D` µs per request) + `/metrics` (mpMetrics / monitor-1.0: JDBC pool, servlets, GC) | Server-side measure without application instrumentation; p50/p95 per path derived by `tools/metrics.py`. |
+| JVM profile | **JFR** on demand (`E2E_JFR=1`, `settings=profile`), dumped live, summarised by `jfr view hot-methods / allocation-by-class / gc-pauses / contention-by-site` | Compact text an agent reads. Off by default: it costs CPU over the whole run. |
+| Load | **k6 1.5** (`grafana/k6` container) on the entry screens, p95 / error-rate thresholds | Single binary, thresholds = exit code. Gatling rejected (JVM, heavy HTML report): load is only a short phase of the bench. |
+| Screen fingerprint | **Aria snapshot** (YAML of the accessibility tree) + JPEG capture | The structural diff is textual, stable across machines, and costs a few lines; pixels are for humans, not for assertions. |
+| Browser console | `console` (error/warning), `pageerror`, `requestfailed`, responses ≥ 400 on every page | "Console 100 % clean" is an assertion, not an option. |
+| Requirements | **EARS** generated from the inventory + scenarios (`requirements.ears.md`) | One testable sentence per screen or action; coverage reads per requirement. Generated, never maintained by hand. |
+| Report | `summary.md` (compact) + `report.html` (gallery) + `junit-*.xml` | The markdown is what the agent reads; JUnit is what Jenkins reads; the HTML is what the project manager looks at. |
 
-## Ce qui est écarté, et pourquoi
+## What is rejected, and why
 
-- **Playwright Agents (planner / generator / healer), Playwright MCP** : génération de tests par LLM depuis VS Code. Coût en tokens élevé, non déterministe, à l'opposé du but (tests dérivés de l'inventaire par script). Le skill génère la structure, l'agent n'écrit que du YAML.
-- **Allure** (2 Java / 3 Node) : demandé pour Jenkins. Allure 3 exige Node + `allure` dans le PATH des agents ; Allure 2 est un « global tool » Java. Le plugin JUnit de Jenkins lit `junit-*.xml` sans rien installer, HTML Publisher affiche `report.html`. Allure apporte l'historique/tendances : à ajouter seulement si un projet le demande (`allure-pytest` écrit `allure-results`, une ligne dans `run.sh`).
-- **Grafana otel-lgtm / Prometheus** : superbe en exploration interactive, inutile pour un bench qui doit produire un rapport texte et s'éteindre.
-- **Captures pixel comme oracle** : dépendantes des polices, de l'antialiasing, de l'OS ; faux positifs garantis en CI.
-- **Testcontainers** : isolation par test, langage Java, pas un stack e2e.
-- **Images ICR OpenJ9** pour le bench : voir ci-dessus (JFR). Restent la référence pour la production.
-- **Rendu intégral en un seul rapport PDF** : `report.html` avec `content-visibility:auto` suffit ; un PDF peut être dérivé par Chromium si un projet l'exige.
+- **Playwright Agents (planner / generator / healer), Playwright MCP**: LLM test generation from VS Code. High token cost, non-deterministic, the opposite of the goal (tests derived from the inventory by script). The skill generates the structure, the agent writes only YAML.
+- **Allure** (2 Java / 3 Node): asked for Jenkins. Allure 3 needs Node + `allure` in the agents' PATH; Allure 2 is a Java "global tool". The Jenkins JUnit plugin reads `junit-*.xml` with nothing to install, HTML Publisher shows `report.html`. Allure brings history and trends: add it only when a project asks (`allure-pytest` writes `allure-results`, one line in `run.sh`).
+- **Grafana otel-lgtm / Prometheus**: great for interactive exploration, useless for a bench that must produce a text report and shut down.
+- **Pixel captures as an oracle**: dependent on fonts, antialiasing, OS; guaranteed false positives in CI.
+- **Testcontainers**: per-test isolation, Java, not an e2e stack.
+- **ICR OpenJ9 images** for the bench: see above (JFR). They remain the reference for production.
+- **A single PDF report of everything**: `report.html` with `content-visibility:auto` is enough; a PDF can be derived by Chromium if a project requires one.
 
-## Flux `run.sh`
+## `run.sh` flow
 
 ```
-build      mvn install (cible) → site e2e (pom généré) → war → image app
-up         compose up db+app → healthcheck → dbinit (post-init + seed)
+build      floor check → mvn install (target) → e2e site (generated pom) → war → app image
+up         compose up db+lutece → healthcheck → dbinit (post-init + seed)
 inventory  inventory.py (SQL rights, plugin.xml, JSP, @Controller/@View/@Action, templates) → EARS
-discover   crawl authentifié : liens GET depuis le menu et les entrées (jamais Do*/action=) → urls concrètes
-test       screens (parallèle) → scenarios → forms ; /metrics avant/après ; un seul conteneur runner (docker exec)
-perf       [k6] → [JFR] → access log → digests SQL → perf.json
+discover   authenticated crawl: GET links from the menu and the entry points (never Do*/action=) → concrete urls
+test       harness → screens → fo → scenarios → forms; /metrics before/after; one runner container (docker exec)
+perf       [k6] → [JFR] → access log → SQL digests → perf.json
 report     summary.md + report.html + results.json
 down       compose down -v
 ```
 
-## Invariants du harnais
+## Harness invariants
 
-Ce que les scripts imposent, et qu'aucune modification ne doit relâcher :
+What the scripts enforce, and no change may loosen:
 
-1. **Oracle positif** (`lutece.classify`) : un écran n'est réussi que si le DOM porte la barre de menu admin
-   (`#main-menu`) sans texte d'erreur ; toute autre page est classée (`confirmation`, `error`, `auth`, `login`,
-   `error-page`, `fo`, `fragment`, `http-NNN`) et l'attendu est explicite par type d'écran. L'absence de marqueur
-   d'erreur n'est jamais une réussite : « Veuillez vous authentifier » et « Internal error » se rendent en HTTP 200.
-2. **Auto-tests de l'oracle** (`tests/test_harness.py`) exécutés en premier ; `run.sh` s'arrête (code 3) s'ils échouent.
-3. **Classification visible** : le rapport compte les types de page des tests *réussis* (`auth ×40` saute aux yeux).
-4. **Alarme de contenu identique** : des URL différentes réussies avec le même texte de page sont signalées.
-5. **Garde de session** : un écran classé `auth` déclenche une reconnexion et un second essai ; les écrans publics
-   (AdminForgot*, AdminFormContact, AdminResetPassword) tournent en contexte anonyme car ils invalident la session.
-6. **Pas de no-op** : `fill_form`, `submit`, `click`, `fill` échouent sur un élément absent, résolvent l'élément par
-   le locator Playwright (jamais `document.querySelector` avec `:has()` / `:text-is()`).
-7. **Couverture par élément d'inventaire** (`tools/coverage.py`) : chaque écran/action est atteint, exclu avec une
-   raison écrite (`scenarios/coverage-exclusions.yaml`), ou listé « à couvrir ». Prouvé ≠ atteint : ne sont prouvées
-   que les pages qu'un oracle réussi a couvertes (`record.proven`) ; le reste est une dette listée, jamais soustraite.
-8. **Cause serveur par échec** (`tools/causes.py`) : exceptions de `messages.log` corrélées par fenêtre de temps et
-   confirmées par le nom de la JSP/du bean.
-9. **Bare vs paramétré** : un écran appelé sans ses paramètres peut répondre un message Lutece, jamais une erreur
-   interne ; le rapport sépare les deux populations.
-10. **Une mutation sans oracle d'état** dans les trois pas suivants rend le scénario invalide (test rouge nommant le
-    pas). Oracles d'état : `sql`, `expect_dom`, `mail`, `fake_log`, `http`, `download` ; `expect_text`, `expect_message`,
-    `expect_kind`, `expect_html` lisent l'écran, pas l'état : faibles, jamais suffisants seuls après une mutation.
-    `expect_text` sur une URL ou un nom de JSP est refusé ; `sql_exec` n'est permis qu'avant la première mutation ou
-    après le dernier oracle.
-11. **Négatif et droits obligatoires** : refus d'accès, CSRF sans jeton, doublons, champs obligatoires vides
-    (`submit_novalidate` contourne le HTML5 pour atteindre le contrôle serveur).
-12. **Trois populations d'échecs** : fonctionnels (écran paramétré, scénario, formulaire), front (JS, console) et
-    robustesse (écran appelé sans paramètres). La propreté console est jugée par la suite écrans, une fois par écran.
-13. **Découverte** : profondeur 8, 25 variantes par écran (chemin + `view`), formulaires collectés à toutes les
-    profondeurs, formulaires GET suivis.
-14. **Invariants du banc** : le fuzzer ne touche jamais les comptes du banc (`PROTECTED_SCREEN`, `protected`) ;
-    `run.sh` vérifie après les tests que le compte administrateur existe encore, sinon code 4 et alerte en tête de rapport.
-15. **Isolation des scénarios parallèles** : tout ce qui modifie un formulaire partagé (attributs, paramètres) choisit
-    des valeurs neutres ou passe en `serial`.
-16. **Un constat doit survivre à une base propre** : le seed de référence se rejoue avant chaque `test`, et un constat
-    sur une donnée seedée n'est retenu qu'après vérification de sa présence.
-17. **Un saut ne prouve rien** : une suite qui avait quelque chose à prouver et dont tous les tests sont ignorés fait
-    échouer le run (code 8) ; le résumé la marque. Exception : une exclusion écrite et justifiée dans le banc
-    (`screens.yaml` clé `skip`, ou `versions` d'un scénario) reste verte, avec sa raison dans le résumé.
-18. **Le rapport dit ce qui a été testé** (`artifacts/fingerprint.json`) : commit des sources, hash du war, digests des
-    images. Les codes de retour distinguent les causes (3 oracle, 4 invariant, 5 erreurs serveur,
-    6 smoke, 7 revue, 8 suite ignorée) ; `compare` propage le code de la jambe v8.
+1. **Positive oracle** (`lutece.classify`): a screen passes only when the DOM carries the admin menu bar
+   (`#main-menu`) with no error wording; any other page is classified (`confirmation`, `error`, `auth`, `login`,
+   `error-page`, `fo`, `fragment`, `http-NNN`) and the expected kind is explicit per screen type. The absence of an
+   error marker is never a success: "please authenticate" and "Internal error" render in HTTP 200.
+2. **Oracle self-tests** (`tests/test_harness.py`) run first; when they fail no other suite runs and `run.sh` ends
+   with code 3.
+3. **Visible classification**: the report counts the page kinds of the *passed* tests (`auth ×40` stands out).
+4. **Duplicate-content alarm**: different urls passing with the same page text are flagged.
+5. **Session guard**: a screen classified `auth` triggers a new login and a second try; the public screens
+   (AdminForgot*, AdminFormContact, AdminResetPassword) run in an anonymous context because they invalidate the session.
+6. **No no-op**: `fill_form`, `submit`, `click`, `fill` fail on a missing element and resolve the element through
+   the Playwright locator (never `document.querySelector` with `:has()` / `:text-is()`).
+7. **Coverage per inventory element** (`tools/coverage.py`): each screen or action is reached, excluded with a
+   written reason (`scenarios/coverage-exclusions.yaml`), or listed "to cover". Proven ≠ reached: only the pages a
+   passing oracle covered are proven (`record.proven`); the rest is listed debt, never subtracted.
+8. **Server cause per failure** (`tools/causes.py`): exceptions of `messages.log` correlated by time window and
+   confirmed by the name of the JSP or bean.
+9. **Bare vs parametrised**: a screen called without its parameters may answer a Lutece message, never an internal
+   error; the report separates the two populations.
+10. **A mutation without a state oracle** in the next three steps makes the scenario invalid (a red test naming the
+    step). State oracles: `sql`, `expect_dom`, `mail`, `fake_log`, `http`, `download`; `expect_text`, `expect_message`,
+    `expect_kind`, `expect_html` read the screen, not the state: weak, never enough alone after a mutation.
+    `expect_text` on a url or a JSP name is refused; `sql_exec` is refused between a mutation and its state oracle.
+11. **Negative and rights scenarios are mandatory**: access refusal, CSRF without token, duplicates, empty mandatory
+    fields (`submit_novalidate` bypasses HTML5 to reach the server-side check).
+12. **Three failure populations**: functional (parametrised screen, scenario, form), front (JS, console) and
+    robustness (screen called without parameters). Console cleanliness is judged by the screens suite, once per screen.
+13. **Discovery**: depth 8, 25 variants per screen (path + `view`), forms collected at every depth, GET forms followed.
+14. **Bench invariants**: the fuzzer never touches the bench accounts (`PROTECTED_SCREEN`, `protected`); after the
+    tests `run.sh` checks that the admin account still exists, otherwise code 4 and an alert at the top of the report.
+15. **Isolation of parallel scenarios**: anything that changes a shared form (attributes, parameters) picks neutral
+    values or goes `serial`.
+16. **A finding must survive a clean database**: the reference seed is replayed before every `test`, and a finding
+    on seeded data is kept only after checking the data is there.
+17. **A skip proves nothing**: a suite that had something to prove and whose every test is skipped fails the run
+    (code 8); the summary marks it. Exception: an exclusion written and justified in the bench (`screens.yaml` key
+    `skip`, or a scenario's `versions`) stays green, with its reason in the summary.
+18. **The report says what was tested** (`artifacts/fingerprint.json`): source commit, war hash, image digests. The
+    exit codes tell the causes apart: 1 stack, 2 usage, 3 oracle, 4 invariant (the admin account altered, or a
+    security key switched off in `conf/override` and not named in `E2E_ALLOW_SECURITY_OFF`), 5 server errors,
+    6 smoke, 7 review, 8 suite skipped, 9 an action of the artefact proven by no scenario, 10 lutece-core below the
+    supported Lutece 8 level; `compare` returns the v8 leg's code, else the comparison's.
 
-## Pièges rencontrés (à conserver dans le skill)
+## Traps (kept in the skill)
 
-- `configure.sh` de l'image Liberty échoue (code 22) si `jvm.options` contient `-XX:StartFlightRecording` (populate_scc).
-- OpenJ9 : `dumponexit` invalide ; le dump se fait à l'arrêt de la JVM ; assertion VM sous échantillonnage → HotSpot.
-- Le `dataSource` Liberty est résolu **avant** l'expansion du war : le driver JDBC doit être extrait à la construction de l'image (`shared/resources/jdbc`), pas lu dans `apps/expanded`.
-- Bind mount `/logs` : créé root par Docker → `chmod 777` avant `up`, et l'app tourne avec l'uid hôte (`user:`) pour que logs et access log soient lisibles.
-- `form.action` n'est pas une chaîne quand un champ s'appelle `action` : lire `getAttribute('action')`.
-- `plugins.dat.tpl` posé dans `webapp/` finit dans le war : garder les templates hors de l'arborescence copiée.
-- Le healthcheck sur `AdminLogin.jsp` passe avant la fin de l'init Lutece si Liquibase échoue : lire `messages.log`, pas seulement l'état `healthy`.
-- Ne jamais nommer le service Compose `app` : `.app` est un TLD de la liste HSTS préchargée de Chromium, `http://app:9090` est réécrit en https → `ERR_SSL_PROTOCOL_ERROR` dans le runner (l'IP et `localhost` passent, d'où un diagnostic trompeur vers l'entête HSTS du core, qui n'y est pour rien : un entête HSTS reçu en HTTP est ignoré). Le service s'appelle `lutece`.
-- Le core envoie une CSP avec `upgrade-insecure-requests` : sur une origine non « potentially trustworthy » (tout sauf localhost/https) Chromium réécrit chaque sous-ressource en https. `--unsafely-treat-insecure-origin-as-secure` n'a pas suffi dans le headless shell ; la solution robuste : le runner (et k6) partagent le namespace réseau du conteneur applicatif (`network_mode: service:lutece`) et parlent à `http://localhost:9090`, origine de confiance pour Chromium, exactement comme depuis le poste.
-- Le formulaire public « identifiant oublié » invalide la session : les écrans sans session tournent dans un contexte anonyme, sinon toute la suite du worker retombe sur `AdminMessage.jsp`.
-- `DoCreateWorkgroup` affecte le créateur au groupe : la suppression est refusée tant qu'il n'est pas désaffecté (scénario réaliste : refus attendu, puis désaffectation, puis suppression).
-- Ne jamais passer un sélecteur Playwright (`:has()`, `:text-is()`) à `document.querySelector` dans un `evaluate` : il lève une erreur qu'un `except` large avalait, et la soumission devenait un no-op silencieux. Résoudre l'élément par `locator(...).evaluate(...)`, et ne rattraper que le délai de navigation.
-- `expect_message` : le thème n'expose que la couleur de la carte (`bg-danger`/`bg-warning`) ; la confirmation se reconnaît à ses deux formulaires (valider / annuler).
+- The Liberty image's `configure.sh` fails (code 22) when `jvm.options` holds `-XX:StartFlightRecording` (populate_scc).
+- OpenJ9: `dumponexit` invalid; the dump happens at JVM stop; VM assertion under sampling → HotSpot.
+- The Liberty `dataSource` is resolved **before** the war expands: the JDBC driver is extracted at image build (`shared/resources/jdbc`), not read from `apps/expanded`.
+- Bind mount `/logs`: created root by Docker → `chmod 777` before `up`, and the app runs with the host uid (`user:`) so logs and access log stay readable.
+- `form.action` is not a string when a field is named `action`: read `getAttribute('action')`.
+- `plugins.dat.tpl` placed in `webapp/` ends up in the war: keep templates outside the copied tree.
+- The healthcheck on `AdminLogin.jsp` passes before the end of the Lutece init when Liquibase fails: read `messages.log`, not only the `healthy` state.
+- Never name the Compose service `app`: `.app` is a TLD of Chromium's preloaded HSTS list, `http://app:9090` is rewritten to https → `ERR_SSL_PROTOCOL_ERROR` in the runner (the IP and `localhost` work, which points the diagnosis at the core's HSTS header, which plays no part: an HSTS header received over HTTP is ignored). The service is named `lutece`.
+- The core sends a CSP with `upgrade-insecure-requests`: on an origin that is not "potentially trustworthy" (anything but localhost/https) Chromium rewrites every sub-resource to https. `--unsafely-treat-insecure-origin-as-secure` is not enough in the headless shell; the robust answer: the runner (and k6) share the application container's network namespace (`network_mode: service:lutece`) and talk to `http://localhost:9090`, a trusted origin for Chromium, exactly as from the workstation.
+- The public "forgotten login" form invalidates the session: session-less screens run in an anonymous context, otherwise the rest of the worker's suite falls back to `AdminMessage.jsp`.
+- `DoCreateWorkgroup` assigns the creator to the group: removal is refused until the creator is unassigned (realistic scenario: refusal expected, then unassignment, then removal).
+- Never pass a Playwright selector (`:has()`, `:text-is()`) to `document.querySelector` inside an `evaluate`: it throws, a broad `except` swallows it, and the submission becomes a silent no-op. Resolve the element through `locator(...).evaluate(...)`, and catch only the navigation timeout.
+- `expect_message`: the theme exposes only the card colour (`bg-danger`/`bg-warning`); a confirmation is recognised by its two forms (validate / cancel).
 
-### Pièges des benchs de plugin
-- Un plugin assemblé côté v8 mais absent de la jambe v7 arrive sur une base où ses tables existent déjà, sans
-  version enregistrée pour lui : il est installé comme neuf, son script de création est marqué appliqué et ses
-  montées ne tournent jamais. Le schéma reste en forme v7 et le site échoue sur une colonne que la montée aurait
-  ajoutée — cela se lit comme un défaut de migration. Les deux jambes listent les mêmes plugins.
-- Une sonde du bench écrite avec les API v8 ne compile pas sur la jambe v7 : les scénarios qui passent par elle
-  s'arrêtent avec une raison écrite au lieu de virer au rouge, sinon la comparaison lit « corrigé » sur du code
-  de bench. Sur la version visée par le bench, la même sonde cassée reste rouge.
-- La configuration d'un site v7 vit dans ses `.properties` et ses contextes Spring : aucune variable
-  d'environnement ne l'atteint. `harness/v7-overlay/` est posé sur la webapp v7 assemblée pour la pointer vers
-  les doublures, comme `app.env` le fait côté v8.
-- Éprouver un plugin corrigé en local : `mvn install` dans son clone, puis `E2E_MVN_OFFLINE=1` pour que les
-  jambes v8 prennent le dépôt local plutôt que le snapshot distant plus récent. Le hors-ligne ne doit pas
-  atteindre la jambe v7, qui télécharge ses propres artefacts ; vérifier ensuite dans le war que le changement
-  y est, sinon le run a prouvé l'ancien build.
-- Un pom v7 déclare souvent ses dépendances en intervalles ouverts dont le haut a bougé : la jambe ne compile
-  plus. `E2E_V7_DEP_PINS` fige ces versions dans le worktree jetable, en intervalle à une valeur (une version
-  simple perd face à un intervalle).
-- Le créneau de ports d'un bench est enregistré, pas choisi sur les ports libres du moment : sinon tous les bancs
-  initialisés sur une machine au repos prennent le créneau 0 et deux d'entre eux ne peuvent jamais tourner
-  ensemble.
-- `gen-site.sh` prenait `project.parent.version` pour le core : c'est la version du global-pom, pas du core. Résolu par `mvn dependency:list`.
-- Un bench de plugin scanne aussi la webapp éclatée du site : sans marquage `origin`, 80 rouges du core noyaient les 4 du plugin dans le rapport.
-- TinyMCE recopie le contenu de l'éditeur dans le textarea au submit : un `fill` DOM sur le textarea caché est écrasé. Le pas `fill` alimente aussi l'éditeur.
-- Les données d'exemple d'un plugin (`init_db_<p>_data_sample.sql`) sont consommées par le fuzzer dès le premier run : les scénarios ne s'y fient jamais, ils lisent `seed-<plugin>.sql`.
-- Sans puits SMTP, `MailService.sendMailHtml` lève `MailConnectException` (localhost:25) et le flux métier qui l'appelle avant d'écrire en base échoue : Mailpit dans la stack, adressé par variables d'environnement (MicroProfile Config lit `MAIL_SERVER` pour `mail.server`).
-- Un bench de plugin ne doit ouvrir que les écrans du plugin : `E2E_SCOPE=target` filtre découverte, suites et k6 sur l'inventaire `origin=target`.
-- Sous pytest-xdist, `pytest_runtest_makereport` se déclenche sur chaque worker et sur le contrôleur : sans garde, chaque résultat est écrit deux fois (gwN.jsonl + main.jsonl) et le rapport double les compteurs. Garde : n'écrire que si worker (numprocesses défini ⇒ exiger PYTEST_XDIST_WORKER).
-
+### Traps of plugin benches
+- A plugin assembled on the v8 side but absent from the v7 leg arrives on a database where its tables already
+  exist, with no version recorded for it: it is installed as new, its creation script is marked applied and its
+  upgrades never run. The schema stays in v7 shape and the site fails on a column the upgrade would have added —
+  which reads as a migration defect. Both legs list the same plugins.
+- A bench probe written with the v8 APIs does not compile on the v7 leg: the scenarios that go through it stop with
+  a written reason instead of turning red, otherwise the comparison reads "corrigé" on bench code. On the version
+  the bench targets, the same broken probe stays red.
+- The v7 core reads its `.properties` through MicroProfile Config, so the environment reaches them; a literal in a
+  Spring context reaches nothing. `harness/v7-overlay/` is laid over the assembled v7 webapp for those literals, to
+  point it at the stand-ins.
+- Proving a plugin fixed locally: `mvn install` in its clone, then `E2E_MVN_OFFLINE=1` so the v8 legs take the local
+  repository rather than the newer remote snapshot. Offline must not reach the v7 leg, which downloads its own
+  artefacts; check afterwards that the change is in the war, otherwise the run proved the old build.
+- A v7 pom often declares its dependencies as open ranges whose top has moved: the leg no longer compiles.
+  `E2E_V7_DEP_PINS` freezes those versions in the disposable worktree, as a one-value range (a plain version loses
+  against a range).
+- A bench's port slot is recorded, not chosen from the ports free at the moment: otherwise every bench initialised on
+  a quiet machine takes slot 0 and two of them can never run together.
+- `gen-site.sh` resolves the core with `mvn dependency:list`: `project.parent.version` is the global-pom version, not
+  the core's.
+- A plugin bench also scans the site's exploded webapp: every element carries `origin`, otherwise the core's reds
+  drown the plugin's in the report.
+- TinyMCE copies the editor content into the textarea at submit: a DOM `fill` on the hidden textarea is overwritten.
+  The `fill` step feeds the editor too.
+- A plugin's sample data (`init_db_<p>_data_sample.sql`) is consumed by the fuzzer from the first run: scenarios never
+  rely on it, they read `seed-<plugin>.sql`.
+- Without an SMTP sink, `MailService.sendMailHtml` throws `MailConnectException` (localhost:25) and the business flow
+  that calls it before writing to the database fails: Mailpit in the stack, addressed by environment variables
+  (MicroProfile Config reads `MAIL_SERVER` for `mail.server`).
+- A plugin bench opens only the plugin's screens: `E2E_SCOPE=target` filters discovery, suites and k6 on the
+  `origin=target` inventory.
+- Under pytest-xdist, `pytest_runtest_makereport` fires on every worker and on the controller: without a guard each
+  result is written twice (gwN.jsonl + main.jsonl) and the report doubles the counters. Guard: write only on a worker
+  (numprocesses set ⇒ require PYTEST_XDIST_WORKER).

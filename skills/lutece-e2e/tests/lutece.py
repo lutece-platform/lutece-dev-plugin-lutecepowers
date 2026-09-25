@@ -77,7 +77,7 @@ def observe(page):
             obs["requests"].append({"status": resp.status, "url": resp.url[:200]})
         req = resp.request
         if not req.is_navigation_request() and "/jsp/" in resp.url and resp.status < 400 and len(obs["subs"]) < 200:
-            obs["subs"].append(resp.url[:200])
+            obs["subs"].append(resp.url)
         if req.resource_type in ("fetch", "xhr") and "/jsp/" in resp.url and resp.status < 400 and len(obs["xhr"]) < 200:
             try:
                 raw = req.post_data_buffer
@@ -85,7 +85,7 @@ def observe(page):
             except Exception:  # noqa: BLE001 - binary body
                 mvcs = []
             if mvcs or re.search(r"[?&](action|view)=", resp.url):
-                obs["xhr"].append({"url": resp.url[:200], "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs})
+                obs["xhr"].append({"url": resp.url, "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs})
         if req.is_navigation_request() and req.frame == page.main_frame:
             t = req.timing
             mvcs = []
@@ -95,7 +95,7 @@ def observe(page):
                 mvcs = mvc_names(body)
             except Exception:  # noqa: BLE001 - binary body
                 pass
-            obs["nav"].append({"url": resp.url[:200], "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs,
+            obs["nav"].append({"url": resp.url, "status": resp.status, "mvc": mvcs[0] if mvcs else "", "mvcs": mvcs,
                                "ttfb_ms": round(t["responseStart"] - t["requestStart"], 1) if t["responseStart"] >= 0 else None,
                                "server_us": _server_us(resp)})
 
@@ -164,7 +164,7 @@ def classify(page, status=None):
       'http-NNN'      a 4xx/5xx status, 'blank' an empty body, 'unknown' none of the above."""
     if status and status >= 400:
         return "http-%d" % status
-    info = page.evaluate("""() => ({
+    probe = """() => ({
         menu: !!document.querySelector('#main-menu, #main-nav'),
         footer: !!document.querySelector('footer, .footer, #footer'),
         login: !!document.querySelector('form input[name="access_code"]') && !!document.querySelector('form input[name="password"]'),
@@ -176,7 +176,14 @@ def classify(page, status=None):
         foAlert: (() => { const t = document.querySelector('.alert .alert-title'); const box = t && t.closest('.alert');
                           return box && document.querySelector('.btn-back, form button[type=submit]') ? box.className : ''; })(),
         layout: !!document.querySelector('html > head > link[rel=stylesheet], html > head > script'),
-        text: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, 4000)})""")
+        text: (document.body ? document.body.innerText : '').replace(/\\s+/g, ' ').trim().slice(0, 4000)})"""
+    try:
+        info = page.evaluate(probe)
+    except Exception as e:  # noqa: BLE001 - the page navigated by itself (script redirect, auto-submitted form)
+        if "context was destroyed" not in str(e):
+            raise
+        page.wait_for_load_state("domcontentloaded")
+        info = page.evaluate(probe)
     # header[role=banner] is the front-office page of a v7 site, where none of the v8 markers exist: without it
     # every front-office page of the older leg reads as a bare form and the comparison shows a rendering change
     # on pages nothing touched.
@@ -486,7 +493,8 @@ def render_check(page, kind=None):
     unresolved template expression or i18n key shown to the user, a page served without its stylesheet, a broken
     image, a horizontal overflow, an empty content area. Returns a list of short findings, empty when the page
     renders cleanly. `kind` is the DOM classification: a fragment carries no layout of its own, so the stylesheet
-    and empty-content rules do not apply to it."""
+    and empty-content rules do not apply to it. A modal or offcanvas opener whose target is missing or of the other
+    component is reported too: the click does nothing and no screenshot shows it."""
     findings = page.evaluate("""(kind) => {
         const out = [];
         const body = document.body;
@@ -513,6 +521,20 @@ def render_check(page, kind=None):
         const mains = [...document.querySelectorAll('main, [role=main], #main, #content, .page-body')];
         const tallest = mains.length ? Math.max(...mains.map(m => m.getBoundingClientRect().height)) : null;
         if (standalone && tallest !== null && tallest < 40) { out.push('content area is empty'); }
+        // A Bootstrap opener only works on its own component: data-bs-toggle="offcanvas" on a .modal (or the reverse)
+        // or on an id the page does not carry does nothing when clicked, and no screenshot shows it.
+        for (const el of document.querySelectorAll('[data-bs-toggle="modal"], [data-bs-toggle="offcanvas"]')) {
+            const type = el.getAttribute('data-bs-toggle');
+            const sel = el.getAttribute('data-bs-target') || ((el.getAttribute('href') || '').startsWith('#') ? el.getAttribute('href') : '');
+            if (!sel || !sel.startsWith('#')) { continue; }
+            let target = null;
+            try { target = document.querySelector(sel); } catch (e) { target = null; }
+            const who = el.id ? '#' + el.id : el.tagName.toLowerCase();
+            if (!target) { out.push('dialog opener ' + who + ' targets ' + sel + ', absent from the page'); }
+            else if (!target.classList.contains(type)) {
+                out.push('dialog opener ' + who + ' opens ' + sel + ' as ' + type + ' but it is a ' + (target.classList.contains('modal') ? 'modal' : target.classList.contains('offcanvas') ? 'offcanvas' : target.tagName.toLowerCase()));
+            }
+        }
         return out;
     }""", kind)
     return [f for f in findings if not _render_allowed(f)]
@@ -560,20 +582,15 @@ V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
     # A v7 template asking for an empty asset path resolves to the site root, which the browser aborts. It is the
     # v7 theme's own markup, not a request the artefact makes.
     r"^https?://[^/]+/[^/]*/?$", r"ERR_ABORTED",
-    # Assets and jQuery plugins the Lutece 7 theme used to ship and the site under test does not: a plugin
+    # Assets and jQuery plugins the Lutece 7 theme ships and the site under test does not: a plugin
     # template written for v7 legitimately calls them, and their absence says nothing about the migration.
     r"bootstrap[\w.-]*\.(css|js)", r"\.tooltip is not a function", r"is not a function",
     r"images/poweredby\.svg", r"/images/[\w.-]+\.(svg|png|gif)$",
 ))
 
 
-# The core's own assets, missing from the core itself: every bench of every artefact sees them, and no artefact
-# can fix them. `page_template_styles_admin.min.css` imports `tabler-icons-filled.min.css`, which the core's
-# webapp does not ship. Reported upstream; kept here so 25 benches do not each rediscover it as a defect.
+# Console noise of the core's own pages: every bench of every artefact sees it, and no artefact can fix it.
 CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
-    r"themes/shared/css/tabler-icons-filled\.min\.css",
-    # _theme.ftl (LUT-33522) falls back to images/logo-footer.png for the header logo, a file the core does not ship.
-    r"themes/skin/lutece/images/logo-footer\.png",
     # The theme loads theme.js on every front page, which reads the global xssChars; page_frameset.html declares it,
     # the minimal page of a site message (page_site_message.html) does not: every SiteMessage page logs it.
     r"^xssChars is not defined$",

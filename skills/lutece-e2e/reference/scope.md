@@ -12,12 +12,12 @@ Read when deciding what a plugin's bench must cover, and when interpreting what 
 - **Ports**: `init-e2e.sh` takes the first free slot and shifts every port by 100 (app 18080, db 13306, mail
   18025, then 18180/13406/18125…). Benches stay up with `KEEP=1`, so a second bench on a fixed default would
   fail to bind. `--port` forces a slot.
-- **SQL order across plugins**: the site installs every plugin's SQL in one Liquibase run at first boot, in
-  alphabetical order, unless `plugin-liquibase` is recent enough to honour the `--lutece runAfter:<plugin>`
-  directive (`LuteceRunAfterComparator`, present from 2.0.2; 2.0.0 and 2.0.1 ignore it). A plugin whose `init_db`
-  script depends on another plugin's tables carries that directive; under an older plugin-liquibase its inserts run
-  before the tables exist, the install dies at boot, the site answers 500 on every page and the container never
-  turns healthy. The harness pins 2.0.2-SNAPSHOT; `E2E_LIQUIBASE_VERSION` overrides it. Symptom to recognise in the container log:
+- **SQL order across plugins**: the site installs every plugin's SQL in one Liquibase run at first boot. A plugin
+  whose `init_db` script depends on another plugin's tables carries the `-- lutece runAfter:<plugin>` directive; the
+  harness pins `plugin-liquibase` 2.0.2-SNAPSHOT, which honours it (`LuteceRunAfterComparator`), and
+  `E2E_LIQUIBASE_VERSION` overrides it. Without the directive the inserts run before the tables exist, the install
+  dies at boot, the site answers 500 on every page and the container never turns healthy. Symptom to recognise in
+  the container log:
   `Table 'lutece.<x>' doesn't exist [Failed SQL: INSERT INTO <x>]` followed by
   `AdminAuthenticationService._authentication is null` on every request.
 - **Core version**: `tools/gen-site.sh` resolves the lutece-core the plugin's pom really depends on
@@ -30,7 +30,7 @@ Read when deciding what a plugin's bench must cover, and when interpreting what 
   bodies and front-office standalone documents: `AnswerSelection\.jsp`), `console_allow` (console noise the
   deployment owns, such as a third-party host the site's CSP has to allow — never an error of the artefact),
   `confirm`, `protected` (never fuzzed: the reference rows the scenarios rely on,
-  e.g. `faq_id=9001`), `deny` (never posted). No Python change for a new plugin.
+  e.g. `myplugin_id=9001`), `deny` (never posted). No Python change for a new plugin.
 - **A screen behind an RBAC permission needs the role in the seed.** The bench's admin holds the functional
   right (`core_user_right`) but not the resource permissions, so the artefact answers "access denied" and every
   scenario on that screen reads as a defect. Give the admin the role the artefact ships for its resource type
@@ -113,7 +113,7 @@ A plugin with a front office is covered too, automatically:
 
 ## How the mechanics measure the target
 
-The detection rules are the ones lutecedata uses over the whole estate; the obvious proxies are wrong:
+The detection rules avoid the obvious proxies, which are wrong:
 - **An admin JSP is an entry point, not a screen** (it over-counts screens several fold). A **back-office screen**
   is an `admin/` template **named from a Java string literal** (falling back to the back controllers' `@View`); a
   **front-office screen** is a front controller's `@View`, else a declared XPage.
@@ -140,8 +140,8 @@ genuinely expected — a refusal the bench's own negative scenarios provoke — 
 **Each scenario is also judged on the server log it leaves.** An error entry logged while a scenario runs fails
 it, whatever its stack names: a download written through a JSP that
 still flushes its writer (`SRVE0199E: OutputStream already obtained`) leaves only container frames, which the
-package fingerprint misses, and the file still reaches the browser. Such an entry fails the scenario. The core
-errors every 8.0.2 bench logs are left out (`CORE_LOG_NOISE` in tests/lutece.py, reported upstream), then the
+package fingerprint misses, and the file still reaches the browser. Such an entry fails the scenario. The client
+connection noise (Broken pipe) is left out (`CORE_LOG_NOISE` in tests/lutece.py), then the
 patterns of `harness/server-errors-allow.txt`, then the scenario's own `server_log_allow`. The parallel pass runs
 several scenarios against one log, so an error one of them provokes on purpose would fail its neighbours: a scenario
 declaring `server_log_allow` therefore runs in the serial pass. A refusal many scenarios provoke (the token check of

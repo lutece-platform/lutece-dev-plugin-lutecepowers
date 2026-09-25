@@ -10,7 +10,7 @@ if [ "${E2E_V7_INIT_DB:-1}" = 1 ] && [ ! -f "$MARK" ]; then
   echo ">> v7 schema: ant all (connector: ${JAR:-none})"
   ( cd "$APP/WEB-INF/sql" && ant -q -f build.xml all -Dmysql.connector.jar.path="$JAR" ) 2>&1 | tee /logs/ant-dbinit.log
   # `ant all` runs the plugins in alphabetical order, core scripts first: a plugin whose init fills a table another
-  # plugin creates later (appointment's entry types in genericattributes' genatt_entry_type) loses those rows,
+  # plugin creates later (a plugin's rows in a table of a plugin sorted after it) loses those rows,
   # which a real v7 site installed over the years does carry. Replay the init scripts once every table exists;
   # the rows already there fail on their key and change nothing.
   if grep -q "doesn't exist" /logs/ant-dbinit.log; then

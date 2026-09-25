@@ -18,6 +18,8 @@ Step vocabulary (one key per step):
   confirm_if:                      same, only when a confirmation is displayed (some toggles ask only one way)
   expect_text: <substring>         the visible text must contain it (case-insensitive)
   expect_not_text: <substring>
+  expect_html: <substring>         the rendered HTML must contain it (case-insensitive): content the visible text does
+                                   not carry (a collapsed accordion, an attribute)
   expect_message: <kind>           Lutece AdminMessage of that kind (confirmation, error, warning, info)
   expect_kind: <kind>              the DOM classification must be exactly this kind (auth, login, fo, fragment...)
   expect_ok:                       a real screen or Lutece message (never error/auth/login/error-page); console noise is
@@ -73,7 +75,9 @@ Step vocabulary (one key per step):
   select: {selector: ..., label: text | option_contains: text | value: v}   pick an option by its label, the first
                                    whose label or value contains the text, or the one of that exact value
   download: <form or link selector> submit the form, or click the link or button, that answers with a file; records
-                                   its name and size
+                                   its name and size. {selector: ..., type: pdf|xls|xlsx|ods, min_bytes: n, timeout: ms}
+                                   also checks the file is of that type from its first bytes: an error page saved under
+                                   a .pdf name is not an export
   login: {user: ..., password: ...}    log out then sign in as another admin (use with isolated: true)
   login_fo: {user: ..., password: ..., provider: mylutece-database}
                                    sign a front-office user in through mylutece (use with anonymous: true); the
@@ -94,10 +98,14 @@ Variables: {{rand}} (6 lowercase alphanumerics), {{rand_int}} (5-6 digits, for n
 A scenario with `serial: true` changes global settings and runs alone after the parallel pass; a scenario declaring `server_log_allow` runs there too, so the errors it provokes cannot fail its neighbours. A scenario with `anonymous: true` runs without any session (public screens). A scenario with `isolated: true` logs in on its own session (mandatory when it logs out or changes the password),
 so it never invalidates the session shared by the other tests of the worker.
 
-Mechanical rule (checked at collection, before any browser starts): every mutation step (submit, confirm,
-download, a click on a Do*/action/button control) must be followed, within the next two non-navigation steps,
-by a state oracle: sql, expect_dom, expect_text, expect_not_text or expect_message. A scenario that breaks the
-rule is collected as a failing test that names the step: "the screen looked normal" is never a proof.
+Mechanical rule (checked at collection, before any browser starts): every mutation step (submit,
+submit_novalidate, confirm, confirm_if, a click or click_if on a Do*/action/button control) must be followed,
+within the next three steps that are not navigation (goto, expect_ok, shot, expect_url, sql_set, set, wait,
+dom_set), by a state oracle: sql, expect_dom, mail, fake_log, http or download. expect_text, expect_not_text,
+expect_html, expect_message and expect_kind read the screen that followed, not the state: a weak oracle, never
+enough alone after a mutation. Also rejected: expect_text on a url or a JSP name, expect_dom on the markup that
+hides an element (judge it with visible:), and sql_exec between a mutation and its state oracle. A scenario that
+breaks the rule is collected as a failing test that names the step: "the screen looked normal" is never a proof.
 """
 import os
 import pathlib
@@ -631,19 +639,26 @@ def run_step(page, step, vars_, record):
     elif key == "upload":
         page.locator(arg["selector"]).first.set_input_files(str(lutece.E2E / arg["file"]))
     elif key == "download":
-        assert page.locator(arg).count(), "download: nothing matches %s on %s" % (arg, lutece.normalize(page.url))
-        with page.expect_download(timeout=30000) as dl:
-            if page.locator(arg).first.evaluate("e => e.tagName") == "FORM":
+        opts = arg if isinstance(arg, dict) else {"selector": arg}
+        sel = opts["selector"]
+        assert page.locator(sel).count(), "download: nothing matches %s on %s" % (sel, lutece.normalize(page.url))
+        with page.expect_download(timeout=int(opts.get("timeout", 30000))) as dl:
+            if page.locator(sel).first.evaluate("e => e.tagName") == "FORM":
                 page.evaluate("""(sel) => { const f = document.querySelector(sel);
-                    const b = f.querySelector('button[type=submit], input[type=submit]'); if (b) b.click(); else f.submit(); }""", arg)
+                    const b = f.querySelector('button[type=submit], input[type=submit]'); if (b) b.click(); else f.submit(); }""", sel)
             else:
-                page.locator(arg).first.click()
+                page.locator(sel).first.click()
         d = dl.value
         path = lutece.ARTIFACTS / "downloads" / (vars_["rand"] + "_" + d.suggested_filename)
         path.parent.mkdir(parents=True, exist_ok=True)
         d.save_as(str(path))
-        record.setdefault("downloads", []).append({"name": d.suggested_filename, "bytes": path.stat().st_size})
-        assert path.stat().st_size > 0, "empty download %s" % d.suggested_filename
+        head = path.read_bytes()[:8]
+        record.setdefault("downloads", []).append({"name": d.suggested_filename, "bytes": path.stat().st_size, "head": head[:4].hex()})
+        assert path.stat().st_size > int(opts.get("min_bytes", 0)), "download %s: %d bytes" % (d.suggested_filename, path.stat().st_size)
+        magic = {"pdf": [b"%PDF"], "xls": [b"\xd0\xcf\x11\xe0", b"PK\x03\x04"], "xlsx": [b"PK\x03\x04"], "ods": [b"PK\x03\x04"]}
+        if opts.get("type"):
+            assert any(head.startswith(m) for m in magic[opts["type"]]), \
+                "download %s is not a %s file (starts with %r)" % (d.suggested_filename, opts["type"], head)
     elif key == "login_fo":
         provider = arg.get("provider", "mylutece-database")
         page.goto(lutece.url("jsp/site/Portal.jsp?page=mylutece&action=login&auth_provider=" + provider), wait_until="domcontentloaded")

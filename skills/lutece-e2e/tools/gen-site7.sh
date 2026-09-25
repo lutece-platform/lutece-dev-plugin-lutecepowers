@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Assembles harness/site7/target/lutece.war: the artefact BEFORE its migration, on a Lutece 7 site, for the
-# before/after comparison (run.sh compare). The v7 sources are the git ref the clone still carries — HEAD when
-# the migration is staged and not committed, which is how the campaign works — checked out in a worktree and
+# before/after comparison (run.sh compare). The v7 sources are the git ref the clone still carries — HEAD while
+# the migration is staged and not committed — checked out in a worktree and
 # built with plain mvn (the site pom declares the Lutece repositories), or with E2E_MVN7 when a developer keeps separate settings.
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")/.." && pwd)
-# The environment wins over e2e.conf, as in run.sh: a caller that exported E2E_… (run.sh compare assembling the
-# site without the authentication plugin, for instance) must not have its choice overwritten by the file.
+# The environment wins over e2e.conf, as in run.sh: a caller that exported E2E_… (E2E_MYLUTECE=0 for one run, for
+# instance) must not have its choice overwritten by the file.
 _e2e_env=$(export -p | grep -E "^(declare -x |export )E2E_" || true)
 . "$E2E/e2e.conf"
 eval "$_e2e_env"
@@ -141,11 +141,10 @@ echo ">> assemble v7 war"
 ( cd "$SITE" && $MVN7 -B -q clean package lutece:site-assembly )
 FINAL=$(find "$SITE/target" -maxdepth 1 -type d -name "e2e-site7-*" | head -1)
 [ -n "$FINAL" ] || { echo "site-assembly produced no exploded directory under $SITE/target" >&2; exit 1; }
-# v7 configuration is not reachable from the environment: an endpoint often sits as a literal in a Spring context
-# XML, or in a .properties the artefact ships, and neither reads the variables the v8 leg is configured with. The
-# v7 leg then calls the real outside system while the v8 leg calls the stand-in, and the comparison reads the
-# difference as "corrigé". `harness/v7-overlay` is laid over the assembled v7 webapp, after assembly so the
-# artefact's own files are already there: same paths, same purpose as app.env on the v8 leg.
+# The v7 core reads its .properties through MicroProfile Config, so the environment reaches them; a literal in a
+# Spring context XML reads nothing. The v7 leg then calls the real outside system while the v8 leg calls the
+# stand-in, and the comparison reads the difference as "corrigé". `harness/v7-overlay` is laid over the assembled
+# v7 webapp, after assembly so the artefact's own files are already there, for what only a file can change.
 if [ -d "$E2E/harness/v7-overlay" ]; then
   cp -a "$E2E/harness/v7-overlay/." "$FINAL/"
   echo ">> v7 overlay applied: $(cd "$E2E/harness/v7-overlay" && find . -type f | sed 's|^\./||' | tr '\n' ' ')"
@@ -154,7 +153,7 @@ fi
 # Written after the overlay so a bench that ships its own file still wins.
 if [ -f "$FINAL/WEB-INF/conf/plugins/search-solr.properties" ] && [ ! -f "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties" ]; then
   mkdir -p "$FINAL/WEB-INF/conf/override/plugins"
-  printf '# e2e bench: reach the real Solr container (SKILL.md, Search engines)\nsolr.server.address=http://solr:8983/solr/%s\nsolr.indexer.commit.size=10000\n' \
+  printf '# e2e bench: reach the real Solr container (reference/external-systems.md, Search engines)\nsolr.server.address=http://solr:8983/solr/%s\nsolr.indexer.commit.size=10000\n' \
     "${E2E_SOLR_CORE:-lutece}" > "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties"
   echo ">> solr address overridden on the v7 leg: http://solr:8983/solr/${E2E_SOLR_CORE:-lutece}"
 fi

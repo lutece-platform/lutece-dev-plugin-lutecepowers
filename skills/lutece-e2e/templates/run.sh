@@ -18,11 +18,12 @@
 #   ./run.sh py <script> [args]  a Python script in the test runner, with the bench's own environment (a hand-made
 #                        `docker compose run` with another environment recreates the running app and db)
 #
-# Variables: E2E_VOLUME=small|large (seed size), E2E_WORKERS=n (default: from the free cores), RUNNER=local (host venv instead of the container),
+# Variables: E2E_VOLUME=none|small|large (seed size, none by default), E2E_WORKERS=n (default: from the free cores), RUNNER=local (host venv instead of the container),
 # KEEP=1 (do not stop the stack after a full run). Everything else lives in e2e.conf.
 # Exit codes: 1 stack, 2 usage, 3 the bench's own oracle fails, 4 bench invariant broken, 5 unexpected server
 # errors, 6 smoke test, 7 visual review missing, 8 a suite with something to prove was entirely skipped,
-# 9 an action of the artefact proven by no scenario (COVERAGE=skip to iterate);
+# 9 an action of the artefact proven by no scenario (COVERAGE=skip to iterate), 10 the artefact resolves a lutece-core
+# below the Lutece 8 level lutecepowers supports (tools/v8-floor.conf);
 # otherwise pytest's code (1 = a red test).
 set -euo pipefail
 E2E=$(cd "$(dirname "$0")" && pwd)
@@ -49,9 +50,9 @@ auto_workers() {
 }
 # E2E_JFR=1 records the application with the flight recorder (hot methods in the report).
 [ "${E2E_JFR:-}" = 1 ] && export E2E_JVM_ARGS="${E2E_JVM_ARGS:-} -XX:StartFlightRecording=filename=/logs/lutece.jfr,dumponexit=true,settings=profile -XX:FlightRecorderOptions=stackdepth=128"
-export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-small} E2E_WORKERS=${E2E_WORKERS:-$(auto_workers)}
+export E2E_UID=$(id -u) E2E_VOLUME=${E2E_VOLUME:-none} E2E_WORKERS=${E2E_WORKERS:-$(auto_workers)}
 APP="${E2E_NAME}-lutece-1"
-# E2E_FAKES=1 starts the stand-ins of the external systems (harness/fakes, SKILL.md § Fakes),
+# E2E_FAKES=1 starts the stand-ins of the external systems (harness/fakes, reference/external-systems.md),
 # E2E_SEARCH=1 the search engines (solr, elastic).
 COMPOSE=(docker compose -f harness/docker-compose.yml ${E2E_FAKES:+--profile fakes} ${E2E_SEARCH:+--profile search})
 START=$SECONDS
@@ -100,9 +101,12 @@ runner() {
 
 cmd_build() {
   step "build: install $E2E_TARGET, assemble war, build image"
-  bash tools/gen-site.sh
-  # Report only: a shipped SQL file Liquibase will never see (unparseable name, missing header) is a finding
-  # to write down, not a reason to stop the bench — the core itself ships one.
+  bash tools/check-v8-floor.sh "$E2E_SRC" || [ $? -eq 2 ] || { echo "build: refused, the artefact is below the Lutece 8 level lutecepowers supports"; exit 10; }
+  if [ "$E2E_TARGET" = site ]; then
+    [ -f harness/site/target/lutece.war ] || { echo "build: E2E_TARGET=site assembles with the site's own pom: run 'mvn ... lutece:site-assembly' in the site, then 'jar -cf harness/site/target/lutece.war' from its exploded directory (SKILL.md, PHASE 1)"; exit 2; }
+  else
+    bash tools/gen-site.sh
+  fi
   bash tools/liquibase-visibility.sh || true
   "${COMPOSE[@]}" build lutece
 }
@@ -111,7 +115,7 @@ cmd_build() {
 # networking error naming an endpoint, which reads like a Docker problem and is not one. Say who holds the port.
 ports_free() {
   local p busy=""
-  for p in "${E2E_PORT}" "${E2E_PORT7:-18081}" "${E2E_DB_PORT:-13306}" "${E2E_MAIL_PORT:-18025}" ${E2E_FAKES:+${E2E_FAKES_PORT:-19030} ${E2E_OAUTH2_PORT:-19080}} ${E2E_SEARCH:+${E2E_SOLR_PORT:-18983} ${E2E_ES_PORT:-19200}}; do
+  for p in "${E2E_PORT}" "${E2E_PORT7:-18081}" "${E2E_DB_PORT:-13306}" "${E2E_MAIL_PORT:-18025}" ${E2E_FAKES:+${E2E_FAKES_PORT:-19030} ${E2E_OAUTH2_PORT:-19085}} ${E2E_SEARCH:+${E2E_SOLR_PORT:-18983} ${E2E_ES_PORT:-19200}}; do
     (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3<&- 3>&-; busy="$busy $p($(docker ps --format '{{.Names}} {{.Ports}}' | grep -m1 ":$p->" | cut -d' ' -f1))"; }
   done
   [ -z "$busy" ] && return 0
@@ -153,8 +157,8 @@ cmd_up() {
   step "seed ($E2E_VOLUME)"
   "${COMPOSE[@]}" run --rm dbinit
   # The application is already healthy when the seed lands, so anything it cached from the tables at boot —
-  # a plugin's form list, a reference list, a type registry — holds the state of an empty database, and with
-  # a 24 h time-to-live it holds it for the whole run. A bench whose target reads such a cache asks for one
+  # a plugin's form list, a reference list, a type registry — holds the state of an empty database, for 1000 s
+  # with the core's default time-to-live (lutece.cache.default.timeToLiveSeconds), longer than most runs. A bench whose target reads such a cache asks for one
   # restart here, after the rows exist, rather than chasing a race that depends on how fast dbinit ran.
   if [ -n "${E2E_RESTART_AFTER_SEED:-}" ]; then
     step "restart the application on the seeded database"
@@ -306,7 +310,7 @@ invariants() {
   rm -f artifacts/INVARIANT-BROKEN.txt
 }
 
-# (#3) True when the war/image are missing OR a source file changed since the war was built: prevents testing a
+# True when the war/image are missing OR a source file changed since the war was built: prevents testing a
 # stale build (a green run on code that is not in the image).
 needs_build() {
   [ -f harness/site/target/lutece.war ] || return 0
@@ -324,7 +328,7 @@ needs_build() {
   return 1
 }
 
-# (#4) Fast fail before the full suite: log in and open a few of the artefact's own entry screens; if every one is an
+# Fast fail before the full suite: log in and open a few of the artefact's own entry screens; if every one is an
 # error page, the build is broadly broken (a missing method, a bad template) — abort with a clear message.
 smoke() {
   step "smoke test"
@@ -347,7 +351,7 @@ smoke() {
   return 0
 }
 
-# (#2) A run is red when the server log holds an exception outside harness/server-errors-allow.txt.
+# A run is red when the server log holds an exception outside harness/server-errors-allow.txt.
 check_server_errors() {
   local u; u=$(python3 -c "import json;print(json.load(open('artifacts/perf.json'))['server_errors'].get('unexpected_total',0))" 2>/dev/null || echo 0)
   [ "${u:-0}" -gt 0 ] || return 0
@@ -448,26 +452,10 @@ snapshot() {
 }
 cmd_compare() {
   COMPOSE+=(--profile v7)
-  # The v8 site takes over a v7 database, so every plugin of the site replays its own v7→v8 upgrades — including
-  # the ones the bench added for its own comfort. plugin-mylutece's `update_db_core_mylutece-5.0.0-5.0.1.sql`
-  # deletes rows from core_style* with no precondition, and the core's 7→8 step has already dropped those tables:
-  # the v8 site never starts. Front-office authentication is not what a before/after compares, so the comparison
-  # runs without it — unless the artefact under test itself depends on mylutece: then the module is the subject,
-  # not a comfort, and it stays. E2E_MYLUTECE_FORCE=1 in the environment keeps it for any other reason.
-  if [ "${E2E_MYLUTECE:-1}" != 0 ] && [ -z "${E2E_MYLUTECE_FORCE:-}" ]; then
-    if grep -qE '<artifactId>(plugin-mylutece|module-mylutece-[a-z]+)</artifactId>' ../pom.xml 2>/dev/null; then
-      echo ">> compare keeps plugin-mylutece: the artefact under test depends on it"
-    elif case ",${E2E_PLUGINS:-}," in *:plugin-mylutece:*) true ;; *) false ;; esac; then
-      echo ">> compare keeps plugin-mylutece: the bench names it in E2E_PLUGINS, so its scenarios need a signed-in user"
-    else
-      export E2E_MYLUTECE=0
-      echo ">> compare runs without plugin-mylutece (its v7→v8 upgrade script is not guarded, upstream defect)"
-    fi
-  fi
   # A plugin assembled on the v8 leg but absent from the v7 one arrives on a database where its tables already
   # exist (the v7 core created them) with no version recorded for it: plugin-liquibase installs it as new, marks
   # its creation script as already applied and never runs its upgrades, so the schema stays at the v7 shape and
-  # the site fails on a column that upgrade would have added. Cost a front office reading as a migration defect.
+  # the site fails on a column that upgrade would have added, which reads as a migration defect.
   for dep in ${E2E_PLUGINS//,/ }; do
     IFS=':' read -r _ art _ _ <<< "$dep"
     [ -n "${art:-}" ] || continue
@@ -478,9 +466,8 @@ cmd_compare() {
   step "compare 1/6: v7 site and image, v8 image"
   bash tools/gen-site7.sh
   "${COMPOSE[@]}" build lutece7
-  # Always rebuild the v8 site here, never `needs_build`: the comparison changes what the site is assembled with
-  # (no authentication plugin), and a war left from a previous `run.sh all` would carry plugins this run excluded
-  # — their v7→v8 scripts would then run on the v7 database and the site would not start.
+  # Always rebuild the v8 site here, never `needs_build`: a war left from an earlier run may carry plugins the
+  # current e2e.conf does not assemble, and their v7→v8 scripts would then run on the v7 database.
   cmd_build
   step "compare 2/6: v7 on a fresh database, seeded"
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
@@ -557,10 +544,10 @@ WARN
   # An upgrade script whose name SqlPathInfo cannot parse is not even copied to the classpath: Liquibase will
   # never run it, on this bench or on a site. Applying it by hand here is what a site would have to do too —
   # and it is written down as a finding, because the bench must show the v8 artefact on a migrated base, not
-  # the hole a core file name leaves in it (the 7.1.x-8.0.0 core script drops the front office: globalTheme null).
+  # the hole an unparseable file name leaves in it.
   local exploded; exploded=$(find harness/site/target -maxdepth 1 -type d -name "e2e-site-*" | head -1)
   bash tools/liquibase-visibility.sh "$exploded" > artifacts/liquibase-invisible.txt 2>&1 || true
-  # `|| true`: under pipefail, a grep that finds nothing would end the script here (it did, silently).
+  # `|| true`: under pipefail, a grep that finds nothing would end the script here.
   { grep -oE 'sql/([^ ]+/)?upgrade/[^ ]+\.sql' artifacts/liquibase-invisible.txt || true; } | sort | while read -r rel; do
     echo ">> HAND-APPLIED (Liquibase will never see it, unparseable name): $rel"
     docker exec -i "$db" mariadb -ulutece -plutece lutece < "$exploded/WEB-INF/$rel" || echo ">> hand-apply of $rel reported errors (see above)"

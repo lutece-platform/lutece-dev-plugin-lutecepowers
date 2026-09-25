@@ -5,7 +5,7 @@
 scenarios:
 
   # Two forgeries, both mandatory. The POST without token is what the core filter refuses. The GET is a link or an
-  # <img> in any page: core 8.0.x runs an @Action on GET without checking the token, so this scenario is RED until
+  # <img> in any page: the core runs an @Action on GET without checking the token, so this scenario is RED until
   # the core is fixed. Keep it red and labelled, never exclude it, never work around it in the plugin.
   # A forgery that goes through deletes its target: point the forged calls at a row of their own (a sql_exec before
   # the call creates it), never at a seed row the other scenarios read in parallel.

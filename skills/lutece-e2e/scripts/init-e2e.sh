@@ -5,7 +5,7 @@
 #
 # Ports: without --port the bench takes the first free slot, every port shifted by 100 per slot (18080/13306/18025,
 # then 18180/13406/18125...). Benches are left running with KEEP=1, so a fixed default would make the second one
-# fail to bind, which is how a campaign migrating one artefact after another hits it.
+# fail to bind.
 #
 # Copies the harness, tools, tests and run.sh, writes e2e.conf and a scenario skeleton. Idempotent on the
 # generic files (they are overwritten from the skill), never touches an existing e2e.conf, scenarios/ or baselines/.
@@ -61,7 +61,7 @@ S=$(( SLOT * 100 ))
 PORT=${PORT:-$(( 18080 + S ))}
 DBPORT=${DBPORT:-$(( 13306 + S ))}
 # Every base ends on a different pair of digits: two ports of different families are then never equal, whatever
-# the slots (18080 + 1000 and 19080 + 0 were the same port before oauth2 moved to 19085).
+# the slots.
 MAILPORT=$(( 18025 + S )); FAKESPORT=$(( 19030 + S )); OAUTH2PORT=$(( 19085 + S )); PORT7=$(( 18081 + S ))
 SOLRPORT=$(( 18983 + S )); ESPORT=$(( 19200 + S ))
 
@@ -80,6 +80,7 @@ rsync -a --exclude app.env --exclude 'db/seed*.sql' --exclude 'db/post-init.sql'
 [ -f "$E2E/harness/app.env" ] || cp "$SKILL/harness/app.env" "$E2E/harness/app.env"
 [ -f "$E2E/harness/db/post-init.sql" ] || cp "$SKILL/harness/db/post-init.sql" "$E2E/harness/db/post-init.sql"
 cp -a "$SKILL/tools/." "$E2E/tools/"
+cp "$SKILL/../lutece-migration-v8-agent-teams/scripts/check-v8-floor.sh" "$SKILL/../lutece-migration-v8-agent-teams/scripts/v8-floor.conf" "$E2E/tools/"
 cp -a "$SKILL/tests/." "$E2E/tests/"
 cp "$SKILL/templates/run.sh" "$E2E/run.sh"; chmod +x "$E2E/run.sh" "$E2E/tools/gen-site.sh"
 cp "$SKILL/reference/DESIGN.md" "$E2E/DESIGN.md"

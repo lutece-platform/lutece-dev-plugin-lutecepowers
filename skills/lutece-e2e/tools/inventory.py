@@ -42,8 +42,9 @@ CONST = re.compile(r"String\s+(\w+)\s*=\s*\"([^\"]+)\"")
 FORM_ACTION = re.compile(r"<(?:form|@tform)\b[^>]*?action\s*=\s*['\"]([^'\"]*)['\"]", re.I | re.S)
 HREF_ADMIN = re.compile(r"(?:href|action)\s*=\s*['\"]([^'\"]*jsp/admin/[^'\"#]*)", re.I)
 TEMPLATE_REF = re.compile(r"TEMPLATE_\w+\s*=\s*\"([^\"]+\.html)\"")
-# Detection rules of lutecedata (lutece_surface): the obvious proxies are wrong.
+# Detection rules: the obvious proxies are wrong.
 MVC_IMPORT = re.compile(r"import\s+fr\.paris\.lutece\.portal\.util\.mvc\.(commons|xpage|admin)\.annotations")
+EXTENDS = re.compile(r"\bclass\s+\w+(?:\s*<[^{]*?>)?\s+extends\s+(\w+)")
 """@View/@Action count only when the platform MVC annotations are imported: a plugin declaring its own @Action
 would otherwise inject phantom actions."""
 MVC_FRAMEWORK = re.compile(r"/portal/util/mvc/|/portal/service/content/XPageEventObserver\.java$")
@@ -414,12 +415,29 @@ def mvc_inventory(root):
     the file imports the platform MVC annotations."""
     screens, actions = [], []
     table = constant_table(root)
+    sources = {java.stem: java.read_text(errors="replace") for java, _ in app_java(root)}
+
+    def lineage(text):
+        """The class and its parents found in the artefact's sources, the class first: a controller inherits the
+        @View/@Action methods and the constants of an abstract parent."""
+        chain, seen = [text], set()
+        while True:
+            m = EXTENDS.search(chain[-1])
+            if not m or m.group(1) in seen or m.group(1) not in sources:
+                return chain
+            seen.add(m.group(1))
+            chain.append(sources[m.group(1)])
+
     for java, rel in app_java(root):
         text = java.read_text(errors="replace")
         ctl = CONTROLLER.search(text)
         if not ctl:
             continue
-        consts = dict(CONST.findall(text))
+        chain = lineage(text)
+        consts = {}
+        for t in reversed(chain):
+            consts.update(dict(CONST.findall(t)))
+        text = "\n".join(t for t in chain if t is text or MVC_IMPORT.search(t))
         attrs = annotation_args(ctl.group(1), consts, table)
         if not MVC_IMPORT.search(text):
             continue

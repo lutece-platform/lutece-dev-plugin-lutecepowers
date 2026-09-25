@@ -46,13 +46,13 @@ must show the change, otherwise the run proved the old build. List the fixed plu
 and `E2E_V7_PLUGINS`) so the upgrade path runs; `run.sh compare` is the proof, a fresh install never runs an
 upgrade script.
 
-**On the v7 leg, the environment reaches nothing.** A v7 site takes its configuration from the `.properties` it
-ships and from the Spring context XML, where an endpoint is often a literal value; neither reads the variables the
-v8 leg is configured with. The v7 leg then calls the real outside system, the v8 leg calls the stand-in, and the
-comparison reads the difference as a fix the migration did not make. Two ways out, both bench-side: the property
-override directory above (it is copied to the v7 site too), and `harness/v7-overlay/`, laid over the assembled v7
-webapp after assembly — same paths as the webapp, for what only a file can change, a `<plugin>_context.xml` whose
-endpoint is written in the bean definition. Check the key the artefact really reads: a module may read
+**On the v7 leg, a Spring literal reaches nothing.** The v7 core reads its `.properties` through MicroProfile
+Config (`AppPropertiesService`), so the environment the v8 leg is configured with reaches those values too. An
+endpoint written as a literal in a Spring context XML reads nothing: the v7 leg then calls the real outside system,
+the v8 leg calls the stand-in, and the comparison reads the difference as a fix the migration did not make. The
+way out is bench-side: `harness/v7-overlay/`, laid over the assembled v7 webapp after assembly — same paths as the
+webapp, for what only a file can change, a `<plugin>_context.xml` whose endpoint is written in the bean
+definition. The property override directory above is copied to the v7 site too. Check the key the artefact really reads: a module may read
 `oauth2.issuer` in v7 and `oauth2.server.issuer` in v8, and setting the wrong one changes nothing.
 
 **The v7 leg builds against today's repositories, not against 2020's.** An artefact whose pom carries an open

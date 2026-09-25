@@ -32,7 +32,7 @@
     <applicationManager autoExpand="true"/>
     <applicationMonitor dropinsEnabled="false" updateTrigger="disabled"/>
 
-    <!-- Server-side timing of every request: %D = elapsed microseconds. Parsed by tools/perf.py. -->
+    <!-- Server-side timing of every request: %D = elapsed microseconds. Parsed by tools/metrics.py. -->
     <httpEndpoint host="*" httpPort="${http.port}" httpsPort="${https.port}" id="defaultHttpEndpoint">
         <accessLogging filePath="/logs/http_access.log" logFormat="%t %m %U%q %s %b %D"/>
     </httpEndpoint>

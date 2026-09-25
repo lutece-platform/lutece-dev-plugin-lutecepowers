@@ -10,5 +10,5 @@ A module exposes `PREFIXES = {"/myprefix/": handle}`; `handle(handler, method, p
 by the loader), so `fake_log` steps can assert on it. Keep the module free of business rules: it answers the
 shape the client parses, nothing more.
 
-Point the application at it the same way as for the shipped fakes (`SKILL.md` § Fakes):
+Point the application at it the same way as for the shipped fakes (`reference/external-systems.md`, Fakes):
 `<key the plugin reads>=http://fakes:9030/myprefix`.

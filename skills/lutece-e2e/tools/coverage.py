@@ -32,13 +32,13 @@ def main():
             # (older run) falls back on every page it visited.
             if r["status"] == "passed" and r["suite"] == "scenarios" and "proven" not in r:
                 proven_hits.setdefault(v, set()).add(r["id"])
-        if r["status"] == "passed" and r["suite"] == "scenarios":
-            for v in r.get("proven", []):
-                proven_hits.setdefault(v, set()).add(r["id"])
             if r["status"] != "passed" and not r.get("bare"):
                 red_hits.setdefault(v, set()).add(r["id"])
             if r["status"] != "passed" and r.get("bare"):
                 bare_hits.setdefault(v, set()).add(r["id"])
+        if r["status"] == "passed" and r["suite"] == "scenarios":
+            for v in r.get("proven", []):
+                proven_hits.setdefault(v, set()).add(r["id"])
 
     for r in rows:
         if r["status"] == "passed" and r["suite"] == "scenarios":

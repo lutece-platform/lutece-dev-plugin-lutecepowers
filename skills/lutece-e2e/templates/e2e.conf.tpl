@@ -7,8 +7,8 @@ E2E_SRC=..
 E2E_NAME=@@NAME@@
 # Servlet context and host ports.
 E2E_CONTEXT=lutece
-# plugin-liquibase runs the plugins' SQL at first boot. Before 2.0.2-SNAPSHOT it sorts the files alphabetically and
-# ignores `--lutece runAfter:<plugin>`, so a plugin whose SQL feeds another plugin's tables installs too early.
+# plugin-liquibase runs the plugins' SQL at first boot. Empty = 2.0.2-SNAPSHOT, which honours
+# `-- lutece runAfter:<plugin>` (a plugin whose SQL feeds another plugin's tables).
 E2E_LIQUIBASE_VERSION=
 
 E2E_PORT=@@PORT@@
@@ -29,13 +29,13 @@ E2E_SCOPE=target
 E2E_MAIL_PORT=@@MAILPORT@@
 # Stand-ins for the external systems (CAS, Mon compte, identitystore, notifygru, CRM, API Particulier, TIPI/PayFiP,
 # OpenID Connect for a citizen account and FranceConnect, an organisation's own under harness/fakes/extra/): 1 starts them, the site reaches them as
-# http://fakes:9030/<service> and http://oauth2:8080/<issuer>. Empty = off. See SKILL.md § Fakes.
+# http://fakes:9030/<service> and http://oauth2:8080/<issuer>. Empty = off. See reference/external-systems.md.
 E2E_FAKES=
 # Host ports of the stand-ins, for a look from the browser (fakes: /health, /cas/login ; oauth2: /<issuer>/debugger).
 E2E_FAKES_PORT=@@FAKESPORT@@
 E2E_OAUTH2_PORT=@@OAUTH2PORT@@
 # Search engines (real ones, not stand-ins): 1 starts solr and elasticsearch, the site reaches them as
-# http://solr:8983/solr/<core> and http://elastic:9200. Empty = off. See SKILL.md § Search engines.
+# http://solr:8983/solr/<core> and http://elastic:9200. Empty = off. See reference/external-systems.md.
 E2E_SEARCH=
 E2E_SOLR_PORT=@@SOLRPORT@@
 E2E_ES_PORT=@@ESPORT@@
@@ -67,10 +67,9 @@ E2E_PORT7=@@PORT7@@
 # The forms fuzzer never runs there; the scenarios do, and they create rows.
 #E2E_BASE_URL=https://recette.example.org/lutece
 #E2E_DB_HOST= E2E_DB_USER= E2E_DB_PASSWORD= E2E_DB_NAME=
-# Synthetic volume loaded by dbinit: small (fast) | large (bottleneck hunting).
+# Synthetic volume loaded by dbinit: none (default) | small | large (bottleneck hunting).
 E2E_VOLUME=none
-# pytest workers.
-E2E_WORKERS=4
+# pytest workers: computed from the free cores unless E2E_WORKERS is set.
 # Security keys the bench is allowed to switch off in harness/site/webapp/WEB-INF/conf/override (comma-separated), each
 # with its reason in a comment above: any other disabled security key fails the run (code 4), its refusals untested.
 E2E_ALLOW_SECURITY_OFF=

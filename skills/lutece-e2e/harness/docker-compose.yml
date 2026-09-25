@@ -117,7 +117,7 @@ services:
   # Stand-ins for the external systems a Lutece site calls (E2E_FAKES=1, compose profile `fakes`):
   # CAS, OIDC, identitystore, notifygru, CRM, TIPI/PayFiP, ANTS, plus an organisation's own (fakes/extra/), all
   # served by one Python process on port 9030. Every call is logged as
-  # JSON lines in artifacts/fakes/<channel>.log, so scenarios assert on them like on mail. See SKILL.md § Fakes.
+  # JSON lines in artifacts/fakes/<channel>.log, so scenarios assert on them like on mail. See reference/external-systems.md.
   fakes:
     build: ./fakes
     profiles: [fakes]
@@ -148,7 +148,7 @@ services:
     volumes:
       - ./fakes/oauth2.json:/config/oauth2.json:ro
     ports:
-      - "${E2E_OAUTH2_PORT:-19080}:8080"
+      - "${E2E_OAUTH2_PORT:-19085}:8080"
     networks: [e2e]
 
   # Search engines, real ones: a stand-in cannot answer a query the way an index does (E2E_SEARCH=1,
@@ -194,12 +194,12 @@ services:
       retries: 60
     networks: [e2e]
 
-  # One-shot: post-schema fixes + synthetic volume (E2E_VOLUME=small|large). Idempotent.
+  # One-shot: post-schema fixes + synthetic volume (E2E_VOLUME=none|small|large). Idempotent.
   dbinit:
     image: mariadb:11.8
     restart: "no"
     environment:
-      E2E_VOLUME: ${E2E_VOLUME:-small}
+      E2E_VOLUME: ${E2E_VOLUME:-none}
       E2E_VERSION: ${E2E_VERSION:-v8}
     volumes:
       - ./db:/db:ro

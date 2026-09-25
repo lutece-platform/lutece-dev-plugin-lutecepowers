@@ -1,6 +1,6 @@
 """Self-checks of the bench's own oracle: the classifier must recognise a real screen, a confirmation, a
 lost session, a login form and a missing page. Runs first; when one of these fails, no other verdict of
-the run can be trusted (that is how a "please authenticate" page once passed as a success)."""
+the run can be trusted: a "please authenticate" page renders in HTTP 200 and would pass as a success."""
 import lutece
 
 

@@ -3,7 +3,7 @@
 
   metrics.py snapshot before|after   -> artifacts/metrics-<tag>.json (Liberty /metrics: JVM, servlet, pool, threads)
   metrics.py perf                    -> artifacts/perf.json: per-url server timings from the access log (p50/p95/max),
-                                        top SQL digests by total time (performance_schema), slow queries, k6 summary,
+                                        top SQL digests by total time (performance_schema), k6 summary,
                                         JFR text views, and the before/after metrics delta.
 Stdlib + pymysql only. Runs in the tests container or on the host (RUNNER=local)."""
 import json
@@ -62,7 +62,7 @@ def access_log():
 
 
 def db_digests():
-    """Top statements by total time since the last reset, and the slow-log tail."""
+    """Top statements by total time since the last reset, and the full scans among them."""
     try:
         rows = lutece.sql("""SELECT DIGEST_TEXT, COUNT_STAR, ROUND(SUM_TIMER_WAIT/1e9,1) total_ms, ROUND(AVG_TIMER_WAIT/1e9,2) avg_ms,
                                     ROUND(MAX_TIMER_WAIT/1e9,1) max_ms, SUM_ROWS_EXAMINED, SUM_ROWS_SENT, SUM_NO_INDEX_USED, SUM_CREATED_TMP_DISK_TABLES
@@ -72,8 +72,7 @@ def db_digests():
         top = [{"sql": r[0][:200], "count": r[1], "total_ms": float(r[2]), "avg_ms": float(r[3]), "max_ms": float(r[4]),
                 "rows_examined": r[5], "rows_sent": r[6], "no_index": r[7], "tmp_disk": r[8]} for r in rows]
         full_scans = [t for t in top if t["no_index"] and t["rows_examined"] > 10000]
-        slow = lutece.sql("SELECT COUNT(*) FROM mysql.slow_log") if False else []
-        return {"top": top, "full_scans_over_10k_rows": full_scans, "slow_log_note": "see artifacts/logs/db-slow.log"}
+        return {"top": top, "full_scans_over_10k_rows": full_scans}
     except Exception as e:  # noqa: BLE001
         return {"error": str(e)[:200]}
 

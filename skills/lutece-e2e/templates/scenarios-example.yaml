@@ -70,7 +70,7 @@ scenarios:
   #     - expect_kind: fo
   #     - expect_dom: {selector: '.myplugin-list li', min: 1}
 
-  # A front-office flow behind mylutece: `login_fo` signs the seeded user in (see SKILL.md, FO authentication).
+  # A front-office flow behind mylutece: `login_fo` signs the seeded user in (see the "Front-office authentication" paragraph of SKILL.md).
   # - id: myplugin_signed_in_user_sees_the_page
   #   title: Un usager connecté voit sa page
   #   req: MYPLUGIN_MANAGEMENT

@@ -4,7 +4,9 @@ Read for `run.sh compare` (the v7 leg, the upgrade path) and `run.sh external`. 
 
 ## Contents
 - Before / after — the artefact in v7, then in v8 on the same database
+- Before / after — my working tree against HEAD
 - An instance already deployed
+- compare invalidates the visual review
 
 ## Before / after — the artefact in v7, then in v8 on the same database
 
@@ -47,7 +49,7 @@ reads back with its children, still accepts the everyday actions. Phase 2 counts
 artefact's own tables (those its `plugin/create*.sql` creates) and warns when there are none: the migration is then
 proven on the schema only. Two v7 traps to know when writing that seed: `ant all` runs the plugins in alphabetical
 order (the entrypoint replays the init scripts once every table exists), and a file row needs its `origin` (a v7
-core since 7.0.7 refuses a file whose origin is NULL, and the 7.0.7 upgrade backfills none).
+core ≥ 7.0.7 refuses a file whose origin is NULL, and its upgrade backfills none).
 
 **The same parcours on both legs.** A scenario is written once and plays on both versions; where the
 migration changed a url or a selector, the step value is a per-version mapping:
@@ -64,8 +66,8 @@ leg proves nothing about the migration.
 **Read a "corrigé" before believing it.** A green v8 against a red v7 means the migration fixed something *only
 when the same parcours really ran on both sides*. Four things make a v7 leg fail for reasons that have nothing to
 do with the artefact, and each one turns every affected function into a false "corrigé": the bench's probe missing
-from the v7 site or not compiling there (never import a servlet class in it), the bench's properties not reaching
-the v7 container (they do now, same `app.env`), the stand-ins not started on that leg, and a scenario written
+from the v7 site or not compiling there (never import a servlet class in it), the bench's configuration not reaching
+the v7 site (a literal of a Spring context, `reference/external-systems.md`), the stand-ins not started on that leg, and a scenario written
 against a v8 form that has no v7 equivalent (`versions: [v8]`, or per-version values). Before writing a
 "corrigé" in a hand-over, open the v7 failure and check it is the plugin's, not the bench's.
 
@@ -83,20 +85,15 @@ each, and the v8 leg would look poorer than the v7 one for no reason.
 
 **What Liquibase will never see.** `tools/liquibase-visibility.sh` (run at every `build`) lists the SQL files
 of the assembled site that are absent from `WEB-INF/classes/sql`: unparseable name (versions must be digits and
-dots — `SqlPathInfo`), or no `-- liquibase formatted sql` first line. The core itself ships one:
-`update_db_lutece_core-7.1.x-8.0.0.sql`, the whole 7 → 8 schema step, dropped at assembly because of the `x` —
-a 7.1.x site upgraded under Liquibase gets no front office (`globalTheme is null`). `compare` applies such
-scripts by hand before the v8 start and prints `HAND-APPLIED` for each: the bench shows the plugin on a
-migrated base, the finding goes to the core.
+dots — `SqlPathInfo`), or no `-- liquibase formatted sql` first line. `compare` applies such upgrade scripts by
+hand before the v8 start and prints `HAND-APPLIED` for each: the bench shows the plugin on a migrated base, and
+the file is reported to the artefact that ships it.
 
 **The site around the artefact replays its own upgrades too.** The v8 site takes over a v7 database, so every
 plugin assembled with it runs its v7→v8 scripts — including the ones the bench added for its own comfort. One
-unguarded `DELETE` in any of them stops the whole start (`plugin-mylutece`'s `update_db_core_mylutece-5.0.0-5.0.1.sql`
-deletes rows from `core_style*`, which the core's 7→8 step has already dropped: `globalTheme is null`, empty
-site). `compare` therefore runs **without** the bench's front-office authentication, except when the artefact
-under test depends on mylutece itself or the bench names it in `E2E_PLUGINS`: there the module is the subject
-or a fixture the scenarios sign in with, and it stays (`E2E_MYLUTECE_FORCE=1` keeps it for any other reason).
-A bench keeps `E2E_PLUGINS` to what the artefact really needs.
+statement without a precondition on a table an earlier step dropped stops the whole start, and the failure is
+not the artefact's. A bench keeps `E2E_PLUGINS` to what the artefact really needs, and reads
+`artifacts/logs/unhealthy-*.log` for the changeset that stopped.
 
 **The v7 side is not neutral either.** A v7 plugin's `init_core` may target tables a later 7.x core dropped
 (a portlet plugin writes its XSL style into `core_style*`, removed in core 7.1.9): pick `E2E_V7_CORE` where

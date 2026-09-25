@@ -1,7 +1,7 @@
 """Every back-office screen (static inventory + dynamic discovery) opens as a normal screen: HTTP 200,
 no Lutece/Liberty error page, no session loss, clean browser console, no failed sub-request. Each screen
 leaves a screenshot, an aria snapshot (structural fingerprint compared to baselines/aria when present)
-and its timing in results.json."""
+and its timing in artifacts/results/<worker>.jsonl."""
 import difflib
 import json
 import re
@@ -98,7 +98,7 @@ def test_screen(bo, record, target):
     if expected is not None:
         assert kind in expected, "expected %s, got %s: %s (final url %s)" % ("/".join(expected), kind, lutece.page_text(bo)[:160], record["final"])
     record["render"] = lutece.render_check(bo, kind)
-    hard = [x for x in record["render"] if x.startswith(("unresolved", "i18n key", "no stylesheet"))]
+    hard = [x for x in record["render"] if x.startswith(("unresolved", "i18n key", "no stylesheet", "dialog opener"))]
     assert not hard, "rendering: %s" % hard
     errs, noise, bad = lutece.console_noise(bo)
     assert not errs, "uncaught JS errors: %s" % errs[:3]

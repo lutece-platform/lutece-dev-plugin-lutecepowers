@@ -24,22 +24,22 @@ The agent writes only `e2e.conf` and the YAML scenarios. Everything else is a sc
 to the project's `.gitignore`. Hand over what it produced (`summary.md`, `compare.md`, `review.md`) as
 attachments to the report, never as files of the repository.
 
-Prerequisites: Docker + Compose v2, Maven with the Lutece repositories, JDK 17+ on the host (to run `mvn` and
-`jar`), network access to Maven Central once.
+Prerequisites: Docker + Compose v2, Maven 3.9.x (not 4) with the Lutece repositories, JDK 17+ on the host (to run `mvn` and
+`jar`), network access to Maven Central once. The artefact resolves a lutece-core at or above the level of
+`tools/v8-floor.conf`; `run.sh build` stops with rc=10 otherwise.
 
 **`run.sh build` installs the artefact under test in `~/.m2`.** That is how the bench proves a fix before it is
 published, but the patched build then shadows the published snapshot for **every other project on the machine**,
 silently and until someone notices. On a plugin it is usually harmless; on `lutece-core` it changes what every
-plugin resolves. After a bench on the core, put the published build back:
+plugin resolves. After a bench on the core, put the published build back: delete the local snapshot (the jar and
+the `-webapp.zip` are both shadowed), then let the next `mvn -U` build download the published one.
 
 ```bash
-V=lutece-core-8.0.2-<timestamp>-<build>   # the latest of maven-metadata.xml on the snapshots repository
-curl -sO "<snapshots-repo>/fr/paris/lutece/lutece-core/8.0.2-SNAPSHOT/$V.jar"   # and .pom, and -webapp.zip
-mvn install:install-file -Dfile=$V.jar -DpomFile=$V.pom \
-  -DgroupId=fr.paris.lutece -DartifactId=lutece-core -Dversion=8.0.2-SNAPSHOT -Dpackaging=jar
+rm -rf ~/.m2/repository/fr/paris/lutece/lutece-core/8.0.2-SNAPSHOT
 ```
 
-Check with `md5sum` that the local `lutece-core-8.0.2-SNAPSHOT.jar` matches the downloaded one.
+Check with `md5sum` that the local `lutece-core-8.0.2-SNAPSHOT.jar` matches the latest jar of `maven-metadata.xml`
+on the snapshots repository.
 
 ## Additional resources
 
@@ -55,7 +55,7 @@ Read these only when the case applies — none is needed for a plain bench.
 - **Scope of a plugin bench** — what extra artefacts to assemble (`E2E_PLUGINS`, `E2E_ENABLE`), front-office
   coverage, how the mechanics measure: [reference/scope.md](reference/scope.md). Read at PHASE 1.
 - **Why each tool was chosen, and what was rejected**: [reference/DESIGN.md](reference/DESIGN.md). Read before
-  changing a tool choice. Its § Pièges lists the platform traps the scripts already work around (Liberty image
+  changing a tool choice. Its § Traps lists the platform traps the scripts already work around (Liberty image
   and JFR, OpenJ9, JDBC driver location, `/logs` ownership, `form.action` shadowing, session-killing public
   forms) — do not re-diagnose them; fix the script if one resurfaces.
 
@@ -101,9 +101,8 @@ Then edit `e2e/e2e.conf`:
 - Ports when several benches run on the same machine.
 
 **Front-office authentication comes with the bench.** `plugin-mylutece` and `module-mylutece-database` are
-assembled and enabled by default (`E2E_MYLUTECE=1`; 5.0.1-SNAPSHOT / 7.0.1-SNAPSHOT, because the 5.0.0 release
-still installs `core_style*` rows the v8 core has no table for and the site never turns healthy; the v7 side of
-`compare` gets the last v7 releases), the plugin's own `mylutece.properties` turns authentication on without making the
+assembled and enabled by default (`E2E_MYLUTECE=1`; 5.0.1-SNAPSHOT / 7.0.1-SNAPSHOT, the latest v8 snapshots;
+the v7 side of `compare` gets the last v7 releases), the plugin's own `mylutece.properties` turns authentication on without making the
 site private, and `harness/db/post-init-mylutece.sql` seeds the account **test / testtest** (role `e2e_user`).
 A scenario signs in with one step, `login_fo: {user: test, password: testtest, provider: mylutece-database}`
 (it fails when the login form is still there afterwards), under `anonymous: true`. A bench that needs another
@@ -117,7 +116,7 @@ under `skip` with that reason, it is the module's behaviour and not the artefact
 no error wording), `confirmation`, `error`, `warning`, `info`, `auth` (session lost), `login`, `error-page`,
 `fo`, `fragment`, `http-NNN`. A screen test passes only when the kind matches what that screen must show.
 `tests/test_harness.py` checks the classifier on a real screen, a confirmation, a lost session, a login form
-and a 404 before anything else; `run.sh` stops with code 3 when it fails. Never weaken it: the absence of an
+and a 404 before anything else; when it fails no other suite runs and `run.sh` ends with code 3. Never weaken it: the absence of an
 error marker is not a success — "please authenticate" and "Internal error" render in HTTP 200.
 
 `summary.md` carries three guardrails to read on every run: the count of kinds among **passed** tests
@@ -158,7 +157,7 @@ oracle — `sql` (`expect`, `not_expect`, `expect_var`, `not_expect_var`, `min`)
 followed, not what the application did: alone after a mutation they are a *weak* oracle and the scenario is
 rejected. A refusal is written `expect_message: error` **then** `sql` counting that nothing was created.
 `expect_text` on a url or a JSP name is rejected too (assert on what the page says, not where it is), and
-`sql_exec` is allowed before the first mutation or after the last oracle, never in between. "The next screen
+`sql_exec` is never allowed between a mutation and its state oracle. "The next screen
 looked normal" (`expect_ok`) is navigation, not proof. Prefer deterministic values (a named group, a fixed
 column) so the oracle can state the expected value; use `sql_set` before and `not_expect_var` after when the
 value cannot be chosen. State that lives outside the database (a badge, a datastore key) is read where it is.
@@ -176,7 +175,7 @@ links of the previous screen): a screen called without a parameter it expects is
 functional one — the two are reported apart.
 
 **The artefact's own actions are the point of the bench, and a run does not end green without them.** A plugin
-exists for one or two workflows — files2docs imports files, a form plugin submits a form — and a bench that opens its
+exists for one or two workflows — an import plugin imports files, a form plugin submits a form — and a bench that opens its
 listings and stops has proved the menu, not the plugin. `run.sh all` fails with **rc=9** while an action of the
 artefact (`Do*`, an MVC `action=`, an upload endpoint) is neither proven by a green scenario, tested red, nor
 excluded with a written reason; `COVERAGE=skip` bypasses it to iterate, never to hand over. Start the scenarios

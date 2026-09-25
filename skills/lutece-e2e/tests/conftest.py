@@ -1,5 +1,5 @@
 """pytest wiring: one browser per worker, one authenticated back-office session reused by every test
-(storage state), observability collectors on every page, and a results.json record per test (status,
+(storage state), observability collectors on every page, and one record per test in artifacts/results/<worker>.jsonl (status,
 duration, server timing, console, screenshot) that tools/report.py turns into the reports."""
 import json
 import os

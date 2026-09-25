@@ -10,6 +10,9 @@ Read at PHASE 2, when a screen fails or a suite is green too easily. Each of the
 - An artefact with no screen of its own
 - Order between scenarios, and state they share
 - The bench protects itself
+- Naming a rendering defect (PHASE 4b)
+- A full-page capture resizes the page under a responsive widget
+- A mail sent by a workflow task waits for the next daemon run
 
 ## A screen is never opened without what it requires
 
@@ -92,13 +95,13 @@ when every scenario is green.
 ## The seed lands on a running application
 
 `run.sh up` waits for the application to be **healthy**, then seeds. So anything the artefact cached from the
-tables while booting holds the state of an **empty** database — and a Lutece cache lives 24 h by default, which
-means for the whole run. It bites in a specific shape: a daemon that makes one pass shortly after boot, reading
+tables while booting holds the state of an **empty** database — and a Lutece cache lives 1000 s by default
+(`lutece.cache.default.timeToLiveSeconds`), longer than most runs. It bites in a specific shape: a daemon that makes one pass shortly after boot, reading
 a list the cache has already frozen.
 
-`plugin-forms` is such a case: it warms `formsCacheService` with its form list at boot, its indexer daemon
-makes its single full pass 20 s later, and its multiview reads a Lucene index rather than the tables — the
-bench is green or empty depending on whether the seed landed inside those 20 s.
+A plugin that warms its cache with its entity list at boot, runs an indexer daemon whose single full pass comes
+20 s later, and serves its listing from that index rather than from the tables gives a bench that is green or
+empty depending on whether the seed landed inside those 20 s.
 
 ```
 E2E_RESTART_AFTER_SEED=1
@@ -119,9 +122,9 @@ with their url and their **authentication binding**.
 That last column is the point. A v8 REST resource is protected by a `@NameBinding` `ContainerRequestFilter` of
 its own plugin, and a class that carries no such annotation is served unauthenticated with nothing in the build
 to report it — `surface.rest_unbound` names those classes. Treat it as a question, not a verdict: the plugin may
-never have protected anything, or its protection may have fallen during the migration. The descriptor filter that
-used to do the job no longer runs under `/rest/` (`rules/rest-resource.md`), so a module that had one and lost it
-looks exactly like a module that never had one.
+never have protected anything, or its protection may have fallen during the migration. A filter of the plugin
+descriptor never runs under `/rest/` (`rules/rest-resource.md`), so a module that relies on one looks exactly like
+a module that has none.
 
 **A REST endpoint is tested with the `http` step, never with the screens suite**: a browser negotiates a
 representation nobody asked for and judges markup that does not exist. Write scenarios that call it as a client
@@ -221,10 +224,3 @@ wakes the mail daemon before that transaction commits: the daemon finds an empty
 next scheduled run (`daemon.mailSender.interval`, a day by default). A `mail:` step after a workflow action is then
 red while the application is right. Run the mailSender daemon from the daemons screen (`ManageDaemons.jsp`, action
 run) in the scenario before the `mail:` step, and report the ordering as a core defect.
-
-## Seeding plugin-forms for a front-office bench
-
-A form row the front office cannot render answers 500 or "unavailable" with nothing pointing at the seed:
-`breadcrumb_name` must name an existing bean (`forms.horizontalBreadcrumb`, `forms.verticalBreadcrumb`),
-`composite_type` is lower case (`question`, `group`), `css_class` must not be NULL (the geolocation entry reads
-`entry.CSSClass`), and the availability dates must frame the run, or the form shows as unavailable.

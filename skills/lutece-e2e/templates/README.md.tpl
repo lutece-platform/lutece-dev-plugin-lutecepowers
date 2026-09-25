@@ -1,90 +1,103 @@
-# e2e — banc de test du back office @@NAME@@
+# e2e — test bench of @@NAME@@
 
-Un seul point d'entrée :
+One entry point:
 
 ```bash
-./run.sh            # tout : build si besoin, pile Docker, seed, inventaire, découverte, tests, perf, rapport, arrêt
-KEEP=1 ./run.sh     # idem, la pile reste montée (itération)
-./run.sh test       # les trois suites sur une pile déjà montée
-./run.sh report     # régénère summary.md / report.html depuis les artefacts
-./run.sh down       # arrêt + suppression du volume base
+./run.sh            # everything: build if needed, Docker stack, seed, inventory, discovery, tests, perf, report, stop
+KEEP=1 ./run.sh     # same, the stack stays up (iteration)
+./run.sh test       # the five suites on a stack already up
+./run.sh report     # rebuilds summary.md / report.html from the artifacts
+./run.sh down       # stop + drop the database volume
 ```
 
-Lire ensuite **`artifacts/summary.md`** (≈ 200 lignes) : couverture de l'inventaire (**prouvée** par un scénario avec
-oracle / seulement atteinte / exclue avec raison / à couvrir), dette visible, ce que montrent les tests réussis (types
-d'écrans), alarme de contenu identique, échecs en trois sections (fonctionnels, front, robustesse) avec leur cause
-serveur, temps, SQL, JFR. Captures et détails dans `artifacts/report.html`, JUnit dans `artifacts/junit-*.xml`.
+Then read **`artifacts/summary.md`** (about 200 lines): inventory coverage (**proven** by a scenario with an oracle /
+only reached / excluded with a reason / to cover), visible debt, what the passed tests show (screen kinds),
+duplicate-content alarm, failures in three sections (functional, front, robustness) with their server cause,
+timings, SQL, JFR. Screenshots and details in `artifacts/report.html`, JUnit in `artifacts/junit-*.xml`.
 
-Un échec est un constat sur l'application jusqu'à preuve du contraire : le banc a trouvé sur le core develop des
-JSP qui ne compilent plus, des liens morts, des erreurs JS, des écrans en « Internal error » et un formulaire de
-confirmation sans jeton CSRF. Les exclusions de couverture (`scenarios/coverage-exclusions.yaml`) documentent
-ce que le banc ne peut pas atteindre et pourquoi.
+A failure is a finding about the application until proven otherwise: JSP that do not compile, dead links, JS
+errors, screens answering "Internal error", a confirmation form without its CSRF token. The coverage exclusions
+(`scenarios/coverage-exclusions.yaml`) record what the bench cannot reach and why.
 
-## Ce que le banc vérifie
+## What the bench checks
 
-| Suite | Source | Vérification par élément |
+| Suite | Source | Check per element |
 |---|---|---|
-| `screens` | inventaire statique (`tools/inventory.py`) + découverte dynamique (`tools/discover.py`) | HTTP 200, pas de page d'erreur Lutece/Liberty, pas de perte de session, **console navigateur vide** (erreurs, warnings, exceptions JS), aucune sous-requête en échec, temps de navigation, capture JPEG, empreinte aria (diff avec `baselines/aria/` si présent) |
-| `scenarios` | `scenarios/*.yaml` (cycles CRUD métier, scénarios négatifs et de droits) | **règle mécanique** : chaque mutation est suivie d'un oracle d'état (SQL, datastore, DOM) sinon le scénario est rejeté à la collecte ; un compte de niveau 3 (`e2e_level3`) sert aux refus de droits |
-| `forms` | formulaires découverts sur les écrans | soumission avec valeurs générées : jamais d'erreur serveur ; liste `DENY` pour les actions qui verrouilleraient le banc |
-| `harness` | `tests/test_harness.py` | l'oracle lui-même : reconnaît un écran, une confirmation, une session perdue, le login, un 404 ; bloque le run sinon |
-| `perf` | access log Liberty, `/metrics`, `performance_schema`, JFR, k6 | p50/p95 par chemin, top SQL par temps cumulé et lignes lues, méthodes chaudes, pool JDBC, seuils de charge |
+| `harness` | `tests/test_harness.py` | the oracle itself: recognises a screen, a confirmation, a lost session, the login, a 404; blocks the run otherwise |
+| `screens` | static inventory (`tools/inventory.py`) + dynamic discovery (`tools/discover.py`) | HTTP 200, no Lutece/Liberty error page, no session loss, **empty browser console** (errors, warnings, JS exceptions), no failed sub-request, navigation time, JPEG capture, aria snapshot (diffed with `baselines/aria/` when present) |
+| `fo` | front-office pages of the inventory and of the anonymous crawl | renders as a front-office page, clean console, no error page |
+| `scenarios` | `scenarios/*.yaml` (business CRUD lifecycles, negative and rights scenarios) | **mechanical rule**: every mutation is followed by a state oracle (SQL, DOM, mail, fake log, http, download), otherwise the scenario is rejected at collection |
+| `forms` | forms discovered on the screens | submission with generated values: never a server error; `DENY` list for the actions that would lock the bench |
 
-## Arborescence
+`perf` (Liberty access log, `/metrics`, `performance_schema`, JFR, k6) adds p50/p95 per path, top SQL by total time
+and rows read, hot methods, JDBC pool, load thresholds.
+
+## Layout
 
 ```
-e2e.conf              cible (core|plugin), plugins, ports, volume
-run.sh                orchestrateur
-harness/              docker-compose.yml, Dockerfile.app (Temurin 21 + Open Liberty), liberty/, db/ (my.cnf, seed), site/ (pom généré)
-tools/                inventory.py, discover.py, coverage.py, causes.py, forms.sh, ears.py, metrics.py, report.py, load.js, gen-site.sh
-tests/                lutece.py (bibliothèque), conftest.py, test_screens.py, test_scenarios.py, test_forms.py
-scenarios/            core.yaml, core-admin.yaml (scénarios métier), coverage-exclusions.yaml (inatteignable, avec raison)
-baselines/aria/       empreintes de référence (copier depuis artifacts/aria pour figer)
-artifacts/            sortie d'un run (ignoré par git)
+e2e.conf              target (core|plugin|site), plugins, ports, volume
+run.sh                orchestrator
+DESIGN.md             tool choices and platform traps
+harness/              docker-compose.yml, Dockerfile.app (Temurin 21 + Open Liberty), Dockerfile.tomcat (v7 leg), liberty/,
+                      tomcat/, db/ (my.cnf, post-init, seed.sh, seed-*.sql), site/ and site7/ (generated poms), fakes/,
+                      search/, app.env, server-errors-allow.txt
+tools/                inventory.py, discover.py, coverage.py, causes.py, forms.sh, ears.py, metrics.py, report.py,
+                      report_page.py, review.py, compare.py, patch-war.py, load.js, gen-site.sh, gen-site7.sh,
+                      liquibase-visibility.sh, check-v8-floor.sh, v8-floor.conf, requirements.txt
+tests/                lutece.py (library), conftest.py, test_harness.py, test_screens.py, test_fo.py, test_scenarios.py,
+                      test_forms.py
+scenarios/            <artefact>.yaml.example and <artefact>-negative.yaml.example (models), screens.yaml (per-bench
+                      screen rules), coverage-exclusions.yaml (unreachable, with a reason)
+fixtures/             files the scenarios upload
+baselines/aria/       reference snapshots (seeded from the first run)
+artifacts/            output of a run (ignored by git)
 ```
 
-## Comptes et accès
+## Accounts and access
 
-| Quoi | Valeur |
+| What | Value |
 |---|---|
-| Back office | http://localhost:18080/lutece/jsp/admin/AdminLogin.jsp — `admin` / `adminadmin` |
-| MariaDB | localhost:13306 — `lutece` / `lutece`, base `lutece` |
-| Métriques Liberty | http://localhost:18080/metrics |
+| Back office | http://localhost:<E2E_PORT>/lutece/jsp/admin/AdminLogin.jsp — `admin` / `adminadmin` |
+| Front office (mylutece) | `test` / `testtest`, provider `mylutece-database` |
+| MariaDB | localhost:<E2E_DB_PORT> — `lutece` / `lutece`, database `lutece` |
+| Mailpit | http://localhost:<E2E_MAIL_PORT> |
+| Liberty metrics | http://localhost:<E2E_PORT>/metrics |
 | Logs, access log, JFR | `artifacts/logs/` |
 
-## Volume synthétique
+## Synthetic volume
 
-`E2E_VOLUME=small` (défaut : 2 000 utilisateurs, 200 pages) ou `large` (100 000 utilisateurs, 500 groupes,
-…) — `harness/db/seed-<cible>.sql`, écrit pour les tables que cet artefact lit vraiment, généré côté serveur
-par le moteur SEQUENCE, idempotent. Le harnais générique ne seede rien.
-Un plugin ajoute ses propres tables dans `harness/db/seed-<plugin>.sql` (même contrat : variables `@users`…, garde d'idempotence).
+`E2E_VOLUME=none` (default), `small` (2,000 users, 200 pages) or `large` (100,000 users, 500 groups, …) sizes the
+`@users`/`@groups`/`@roles`/`@lists`/`@pages` variables that `harness/db/seed-<target>.sql` reads. That seed is written
+for the tables this artefact really reads, generated server-side by the SEQUENCE engine, idempotent. The generic
+harness seeds nothing.
 
-## Ajouter un scénario
+## Adding a scenario
 
-Dans `scenarios/<feature>.yaml` :
+In `scenarios/<feature>.yaml`:
 
 ```yaml
+scenarios:
   - id: workgroup_crud
-    title: Groupes de travail — créer, modifier, supprimer
-    req: CORE_WORKGROUPS_MANAGEMENT        # exigence EARS (droit Lutece)
+    title: Workgroups — create, then remove
+    req: CORE_WORKGROUPS_MANAGEMENT        # EARS requirement (Lutece right)
     steps:
       - goto: jsp/admin/workgroup/CreateWorkgroup.jsp
-      - fill: {'input[name="workgroup_key"]': 'E2E_{{rand}}', 'input[name="workgroup_description"]': 'Groupe {{rand}}'}
+      - fill: {'input[name="workgroup_key"]': 'E2E_{{rand}}', 'input[name="workgroup_description"]': 'Group {{rand}}'}
       - submit: 'form[action*="DoCreateWorkgroup"]'
       - expect_ok:
       - sql: {query: "SELECT COUNT(*) FROM core_admin_workgroup WHERE workgroup_key='E2E_{{rand}}'", expect: 1}
       - goto: jsp/admin/workgroup/RemoveWorkgroup.jsp?workgroup_key=E2E_{{rand}}
       - expect_message: confirmation
       - confirm:
+      - sql: {query: "SELECT COUNT(*) FROM core_admin_workgroup WHERE workgroup_key='E2E_{{rand}}'", expect: 0}
 ```
 
-Vocabulaire complet en tête de `tests/test_scenarios.py`. Drapeaux : `isolated: true` (session propre :
-déconnexion, mot de passe), `anonymous: true` (écrans publics), `serial: true` (réglages globaux, joué seul après
-la passe parallèle).
+Full vocabulary at the top of `tests/test_scenarios.py`. Flags: `isolated: true` (own session: logout, password),
+`anonymous: true` (public screens), `serial: true` (global settings, run alone after the parallel pass).
 
 ## Jenkins
 
-Le runner est un conteneur : l'agent n'a besoin que de Docker et Maven. Pipeline minimal :
+The runner is a container: the agent only needs Docker and Maven. Minimal pipeline:
 
 ```groovy
 sh './e2e/run.sh'
@@ -93,4 +106,4 @@ publishHTML(target: [reportDir: 'e2e/artifacts', reportFiles: 'report.html', rep
 archiveArtifacts 'e2e/artifacts/summary.md, e2e/artifacts/perf.json'
 ```
 
-Allure n'est pas requis (voir `DESIGN.md`) ; `allure-pytest` s'ajoute en une ligne si un projet l'exige.
+Allure is not required (see `DESIGN.md`); `allure-pytest` is one line to add when a project asks for it.

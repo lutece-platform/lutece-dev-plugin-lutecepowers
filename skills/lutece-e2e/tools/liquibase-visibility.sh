@@ -6,9 +6,7 @@
 # `lutece:site-assembly` copies every plugin's src/sql to WEB-INF/sql, but plugin-liquibase scans the classpath
 # (WEB-INF/classes/sql), and the lutece-maven-plugin copies a file there only when SqlPathInfo can parse its name
 # and its first line is `-- liquibase formatted sql`. A file that fails either test is dropped without a log
-# line: the core's own `update_db_lutece_core-7.1.x-8.0.0.sql` (the whole 7 → 8 schema step) is absent from
-# every assembled v8 site because of the `x`. This lists what is missing, so a missing upgrade script is caught
-# at build time rather than on a site.
+# line. This lists what is missing, so a missing upgrade script is caught at build time rather than on a site.
 set -uo pipefail
 SITE="${1:-$(find "$(dirname "$0")/../harness/site/target" -maxdepth 1 -type d -name "e2e-site-*" 2>/dev/null | head -1)}"
 [ -n "$SITE" ] && [ -d "$SITE/WEB-INF/sql" ] || { echo "liquibase-visibility: no exploded site (expected <site>/WEB-INF/sql)"; exit 2; }
