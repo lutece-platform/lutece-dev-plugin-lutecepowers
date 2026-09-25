@@ -199,6 +199,24 @@ v7 installs SQL via the Ant `build.xml` (runs every plugin `.sql` regardless of 
 | Works in v7 fresh install, not in v8 cluster | Relying on the Ant build instead of Liquibase changesets | Header every `.sql` |
 | Creation script replayed on an existing site, `Duplicate entry` or `DROP TABLE` | A SQL directory was renamed, changing the changeset identity | `logicalFilePath` on the changeset line — see `sql-rename.md` |
 | `ValidationFailedException`, `1 changesets check sum`, **and the webapp does not start** | The content of an already-shipped changeset was edited, and the file is still included — no `core.plugins.status.<plugin>.version` | Append a new changeset instead of editing. Sites already broken need `MD5SUM` fixed or `clearCheckSums` |
+| One screen fails on a column or a table that does not exist, while the webapp started and the core upgrade ran | The plugin's own upgrade chain did not run — or the object was never shipped at all | Ask `DATABASECHANGELOG` before reading the code, see below |
+
+### A missing column on one screen: ask the changelog first
+
+The stack names the DAO, so it already names the plugin, and the core is out of the picture. Read what
+that plugin actually ran, then the sources:
+
+```bash
+grep -rn "<column>" src/sql
+mysql <db> -e "SELECT ID, FILENAME, EXECTYPE FROM DATABASECHANGELOG WHERE FILENAME LIKE '%<plugin>%' ORDER BY ORDEREXECUTED"
+```
+
+- No row at all for the plugin → the SQL directory name does not match the plugin `<name>`
+  (`sql-rename.md`), or a script has no Liquibase header (above): one skipped file stops the whole plugin.
+- Rows stop before the script that adds the column → that upgrade script is missing, or the file it lives
+  in was skipped.
+- The object appears nowhere under `src/sql` → it was never shipped. The defect is the missing upgrade
+  script, not the deployment: write it rather than patch the schema by hand on each environment.
 
 ## How to verify
 

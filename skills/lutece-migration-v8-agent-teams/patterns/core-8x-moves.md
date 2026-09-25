@@ -12,6 +12,7 @@ reference clone: an open range `[8.0.0,)` resolves the latest core available.
 | `ContentService extends AbstractCacheableService` | `ContentService` is a plain abstract class in v8: `initCache`, `getFromCache`, `putInCache`, `isCacheEnable` are gone | Drop the cache, or move it to a cache service of its own (`lutece-cache` skill). Check `CS02`. |
 | `fr.paris.lutece.portal.service.parser.Parser` and `ParserException` | `library-core-utils` (a transitive dependency of the core; the package name still says `portal`) | Resolves as before; know where it lives before reporting it missing. Resolve implementations through `Instance<Parser>` and test `isResolvable()`: a site without a parsing plugin has none. |
 | `library-jmx-api` | No longer a dependency of the core | A plugin implementing `MBeanExporter` declares it (`config-migrator.md` step 13). |
+| `net.sf.opencsv:opencsv` 2.3, package `au.com.bytecode.opencsv` | `com.opencsv:opencsv` 5.12.0, package `com.opencsv` (core 8.0.2) | Move to `com.opencsv`: the coordinates, the package and the 5.x API all change. Re-adding 2.3 puts two CSV libraries on the classpath and keeps the plugin on a version the core no longer carries. |
 | Spring (`SpringContextService`, `*_context.xml`) | Gone | CDI (`cdi-patterns.md`). |
 | EhCache API | JCache through `AbstractCacheableService` | `cache-patterns.md`. |
 
