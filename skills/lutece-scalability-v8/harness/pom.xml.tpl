@@ -5,7 +5,7 @@
     <parent>
         <artifactId>lutece-site-pom</artifactId>
         <groupId>fr.paris.lutece.tools</groupId>
-        <version>8.0.1</version>
+        <version>8.0.2</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <groupId>fr.paris.lutece</groupId>
@@ -30,21 +30,11 @@
         </repository>
     </repositories>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>fr.paris.lutece.starters</groupId>
-                <artifactId>lutece-bom</artifactId>
-                <version>8.0.0-SNAPSHOT</version>
-                <scope>import</scope><type>pom</type>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
     <dependencies>
         <dependency>
             <groupId>fr.paris.lutece</groupId>
             <artifactId>lutece-core</artifactId>
+            <version>[8.0.0,)</version>
             <type>lutece-core</type>
         </dependency>
 
@@ -57,43 +47,34 @@
         </dependency>
         <!-- ============================ -->
 
-        <!-- Provides core_style/core_stylesheet/core_style_mode_stylesheet, absent from
-             core v8 but required by some plugins' core SQL (e.g. plugin-mylutece);
-             without it the whole Liquibase migration aborts -->
-        <dependency>
-            <groupId>fr.paris.lutece.plugins</groupId>
-            <artifactId>plugin-xmltransformer</artifactId>
-            <version>[2.0.0,)</version>
-            <type>lutece-plugin</type>
-        </dependency>
-
         <!-- FO authentication — UNCOMMENT when the flow under test needs a logged-in
              LuteceUser; see harness README "FO authentication" for the seed + enable steps.
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
             <artifactId>plugin-mylutece</artifactId>
-            <version>[5.0.0,)</version>
+            <version>5.0.1-SNAPSHOT</version>
             <type>lutece-plugin</type>
         </dependency>
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
             <artifactId>module-mylutece-database</artifactId>
-            <version>[7.0.0,)</version>
+            <version>7.0.1-SNAPSHOT</version>
             <type>lutece-plugin</type>
         </dependency>
         -->
 
-        <!-- Liquibase: builds the schema (core + plugin) on first boot; DATABASECHANGELOGLOCK serialises the instances -->
+        <!-- Liquibase: builds the schema (core + plugin) on first boot; DATABASECHANGELOGLOCK serialises the instances.
+             It honours the "lutece runAfter:<plugin>" SQL ordering directive. -->
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
             <artifactId>plugin-liquibase</artifactId>
-            <version>2.0.0</version>
+            <version>2.0.2-SNAPSHOT</version>
             <type>lutece-plugin</type>
         </dependency>
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
             <artifactId>mariadb-java-client</artifactId>
-            <version>3.5.8</version>
+            <version>${mariadb.version}</version>
         </dependency>
         <!-- Distributed cache + session (level 2) -->
         <dependency>
@@ -101,20 +82,19 @@
             <artifactId>hazelcast</artifactId>
             <version>5.5.0</version>
         </dependency>
+        <dependency>
+            <groupId>fr.paris.lutece.plugins</groupId>
+            <artifactId>plugin-health</artifactId>
+            <version>1.0.0</version>
+            <type>lutece-plugin</type>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Keeps a single SLF4J provider in the war: slf4j-jdk14 from the container-runtime profile. -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
-    <profiles>
-        <profile>
-            <id>liberty</id>
-            <activation><activeByDefault>true</activeByDefault></activation>
-            <dependencies>
-                <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-to-jul</artifactId><scope>runtime</scope></dependency>
-                <dependency><groupId>org.slf4j</groupId><artifactId>slf4j-jdk14</artifactId><version>1.7.36</version><scope>runtime</scope></dependency>
-                <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-core</artifactId><scope>provided</scope></dependency>
-                <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-slf4j-impl</artifactId><scope>provided</scope></dependency>
-                <dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-jakarta-web</artifactId><scope>provided</scope></dependency>
-                <dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-health</artifactId><type>lutece-plugin</type><scope>runtime</scope></dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 </project>

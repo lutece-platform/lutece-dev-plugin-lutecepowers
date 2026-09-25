@@ -17,6 +17,7 @@ LOGIN_URL = f"{BASE}/jsp/site/Portal.jsp?page=mylutece&action=login&auth_provide
 FORM_URL = f"{BASE}/jsp/site/Portal.jsp?page=<xpage>&view=<view>&<params>"   # the contended form
 FORM_SELECTOR = "#<formId>"                                                  # the form to submit
 LOG_ERROR_PATTERN = "Duplicate entry"                                        # server-side RED evidence
+INVARIANT_SQL = None   # e.g. "SELECT COUNT(*) FROM <table> WHERE <scope>": rows each accepted submit must add
 ARTIFACTS = pathlib.Path(__file__).parent / "artifacts"
 # ------------------------------------------------------------------------------
 
@@ -30,6 +31,7 @@ def db(query):
 
 
 def docker_logs_since(since_iso):
+    """Logs of the three app nodes since the given local timestamp, one block per node."""
     chunks = []
     for node in ("lutece-app1", "lutece-app2", "lutece-app3"):
         out = subprocess.run(["docker", "logs", "--since", since_iso, node],
@@ -79,6 +81,7 @@ async def submit(pg, idx):
     post = {}
 
     def on_response(r):
+        """Records the status and upstream of the first POST to Portal.jsp."""
         if r.request.method == "POST" and "Portal.jsp" in r.url and not post:
             post["status"] = r.status
             post["upstream"] = r.headers.get("x-upstream", "?")
@@ -94,7 +97,15 @@ async def submit(pg, idx):
     return idx, post.get("status", "?"), post.get("upstream", "?")
 
 
+def count_invariant():
+    """Current value of INVARIANT_SQL, or None when it is not configured."""
+    return int(db(INVARIANT_SQL)[0]) if INVARIANT_SQL else None
+
+
 async def run(n_clients, n_rounds):
+    """Runs the rounds and writes the report. RED when a submit fails, when INVARIANT_SQL did not grow by exactly
+    one row per client, or when LOG_ERROR_PATTERN shows in the node logs; adapt the condition to the invariant
+    (lost write, oversell, counter drift)."""
     ARTIFACTS.mkdir(exist_ok=True)
     start_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
     report = {"clients": n_clients, "rounds": [], "verdict": None}
@@ -107,14 +118,15 @@ async def run(n_clients, n_rounds):
         print(f"{n_clients} clients logged in")
 
         for rnd in range(1, n_rounds + 1):
-            # before = int(db("SELECT COUNT(*) FROM <table> WHERE <invariant scope>")[0])
+            before = count_invariant()
             upstreams = await asyncio.gather(*[arm(pg, i, rnd) for i, pg in enumerate(pages)])
             results = await asyncio.gather(*[submit(pg, i) for i, pg in enumerate(pages)])
-            # after = int(db(...)[0]); created = after - before
+            after = count_invariant()
+            created = None if before is None else after - before
             failures = [r for r in results if r[1] not in (200, 302)]
-            # RED condition: adapt to the invariant (lost writes, oversell, drift...)
-            # if failures or created != n_clients: red = True
-            report["rounds"].append({"round": rnd,
+            if failures or (created is not None and created != n_clients):
+                red = True
+            report["rounds"].append({"round": rnd, "created": created,
                                      "posts": [{"client": i, "status": s, "upstream": u} for i, s, u in results],
                                      "view_upstreams": upstreams})
             print(f"round {rnd}: {len(failures)} HTTP failures, nodes={sorted({u for _, _, u in results})}")

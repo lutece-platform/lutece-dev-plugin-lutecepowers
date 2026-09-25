@@ -10,6 +10,7 @@
 # Dockerfile, Liberty/Hazelcast/nginx config, and the assembled war -> ready for `docker compose up -d`.
 set -euo pipefail
 HARNESS="$(cd "$(dirname "$0")/../harness" && pwd)"
+FLOOR="$(cd "$(dirname "$0")/../../lutece-migration-v8-agent-teams/scripts" && pwd)/check-v8-floor.sh"
 HZ_VERSION="5.5.0"
 OUT="./e2e/.scalability-test"; LOCAL=""; PLUGIN=""; PTYPE="lutece-plugin"; ENABLE=""; BUILD=1
 
@@ -31,9 +32,10 @@ if [ -n "$LOCAL" ]; then
   A=$(mvn -q -f "$LOCAL/pom.xml" help:evaluate -Dexpression=project.artifactId -DforceStdout 2>/dev/null)
   V=$(mvn -q -f "$LOCAL/pom.xml" help:evaluate -Dexpression=project.version -DforceStdout 2>/dev/null)
   PTYPE=$(mvn -q -f "$LOCAL/pom.xml" help:evaluate -Dexpression=project.packaging -DforceStdout 2>/dev/null)
-  # auto-derive --enable if not given: plugin name from webapp/WEB-INF/plugins/*.xml
+  # auto-derive --enable if not given: the <name> of the plugin descriptor webapp/WEB-INF/plugins/*.xml
   if [ -z "$ENABLE" ]; then
-    ENABLE=$(find "$LOCAL/webapp/WEB-INF/plugins" -maxdepth 1 -name "*.xml" 2>/dev/null | head -1 | xargs -r basename 2>/dev/null | sed 's/\.xml$//')
+    DESC=$(find "$LOCAL/webapp/WEB-INF/plugins" -maxdepth 1 -name "*.xml" 2>/dev/null | head -1)
+    [ -n "$DESC" ] && ENABLE=$(sed -n 's:.*<name>[[:space:]]*\([^<[:space:]]*\)[[:space:]]*</name>.*:\1:p' "$DESC" | head -1)
   fi
 elif [ -n "$PLUGIN" ]; then
   IFS=':' read -r G A V <<< "$PLUGIN"
@@ -41,7 +43,7 @@ else
   echo "ERROR: --local <path> or --plugin <g:a:v> is required" >&2; exit 2
 fi
 [ -n "${G:-}" ] && [ -n "${A:-}" ] && [ -n "${V:-}" ] || { echo "ERROR: incomplete plugin coordinates ($G:$A:$V)" >&2; exit 2; }
-[ -n "$ENABLE" ] || { echo "ERROR: --enable <plugin names to activate> is required (e.g. forms,genericattributes)" >&2; exit 2; }
+[ -n "$ENABLE" ] || { echo "ERROR: --enable <plugin names to activate> is required (e.g. myplugin,genericattributes)" >&2; exit 2; }
 echo ">> plugin under test: $G:$A:$V ($PTYPE) ; plugins enabled: $ENABLE"
 
 # --- Materialise the test site ---
@@ -53,9 +55,12 @@ sed -e "s#@@PUT_GROUPID@@#$G#" -e "s#@@PUT_ARTIFACTID@@#$A#" \
     -e "s#@@PUT_VERSION@@#$V#" -e "s#@@PUT_TYPE@@#$PTYPE#" \
     "$HARNESS/pom.xml.tpl" > "$OUT/pom.xml"
 
-ENABLED_LINES=$(echo "$ENABLE,xmltransformer" | tr ',' '\n' | sed 's/[[:space:]]//g; s/$/.installed=1/' | sort -u)
+ENABLED_LINES=$(echo "$ENABLE" | tr ',' '\n' | sed 's/[[:space:]]//g; s/$/.installed=1/' | sort -u)
 awk -v repl="$ENABLED_LINES" '{gsub(/@@PUT_PLUGINS_ENABLED@@/, repl)}1' \
     "$HARNESS/webapp/WEB-INF/plugins/plugins.dat.tpl" > "$OUT/webapp/WEB-INF/plugins/plugins.dat"
+
+# --- Refuse a plugin below the supported Lutece 8 level (exit 2 = undecidable, let the build decide) ---
+bash "$FLOOR" "$OUT" || [ $? -eq 2 ] || { echo "ERROR: the site resolves a lutece-core below the Lutece 8 level lutecepowers supports" >&2; exit 1; }
 
 # --- Hazelcast jar (server-level, for Liberty sessionCache) ---
 echo ">> fetch hazelcast $HZ_VERSION"
@@ -64,8 +69,8 @@ cp "$HOME/.m2/repository/com/hazelcast/hazelcast/$HZ_VERSION/hazelcast-$HZ_VERSI
 
 # --- Build the war ---
 if [ "$BUILD" = "1" ]; then
-  echo ">> build war (mvn -Pdev lutece:site-assembly)"
-  ( cd "$OUT" && mvn -B -Pdev clean package lutece:site-assembly >/dev/null )
+  echo ">> build war (mvn -Pcontainer-runtime lutece:site-assembly)"
+  ( cd "$OUT" && mvn -B -Pcontainer-runtime clean package lutece:site-assembly >/dev/null )
   FINAL=$(find "$OUT/target" -maxdepth 1 -type d -name "scalability-test-site-*" | head -1)
   ( cd "$FINAL" && jar -cf ../lutece.war . )
   echo ">> war: $(du -h "$OUT/target/lutece.war" | cut -f1)"

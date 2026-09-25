@@ -14,20 +14,22 @@ dependency into `pom.xml.tpl` and enables it in `plugins.dat.tpl`, fetches Hazel
    shared volume: /opt/lutece/shared (Lucene index, filestore)
 ```
 
-## Parent and BOM versions
-- Parent `lutece-site-pom` **8.0.1**: the latest release in `fr/paris/lutece/tools/lutece-site-pom/maven-metadata.xml` on `dev.lutece.paris.fr/maven_repository`. Never a SNAPSHOT parent.
-- `fr.paris.lutece.starters:lutece-bom` **8.0.0-SNAPSHOT**: the only release is `8.0.0-RC-01` (same metadata file under `starters/lutece-bom`), so the snapshot repository stays declared and the import keeps the SNAPSHOT until a final BOM is released. Re-check the metadata before changing it.
+## Versions
+- Parent `lutece-site-pom` **8.0.2**, whose parent is `lutece-global-pom` 8.0.2. Never a SNAPSHOT parent.
+- `lutece-core` `[8.0.0,)`, which resolves the latest core. `gen-test-site.sh` runs `check-v8-floor.sh` on the generated site and refuses a core below the level lutecepowers supports (`skills/lutece-migration-v8-agent-teams/scripts/v8-floor.conf`).
+- No BOM import: `lutece-bom` manages `lutece-core` below that level and would also force the versions of the plugin's own Lutece dependencies.
+- JDBC driver `mariadb-java-client` at `${mariadb.version}`, set by `lutece-global-pom`; never redeclared.
 
 ## How it works (and the gotchas it bakes in)
-- **Build**: Lutece `lutece-site` packaging; assembled with `mvn -Pdev clean package lutece:site-assembly`, then the exploded webapp is `jar`-ed into `lutece.war`. The `lutece-maven-plugin` assembly lifecycle is only active under an env profile (`-Pdev`).
+- **Build**: Lutece `lutece-site` packaging; assembled with `mvn -Pcontainer-runtime clean package lutece:site-assembly`, then the exploded webapp is `jar`-ed into `lutece.war`. The `container-runtime` profile of `lutece-site-pom` routes Log4j and SLF4J to JUL, which Liberty prints.
 - **DB / schema**: empty MariaDB + **plugin-liquibase** (`LIQUIBASE_ENABLED_AT_STARTUP`) builds the schema on first boot. **Migrator pattern**: only `app1` has Liquibase enabled + a healthcheck; `app2`/`app3` start once `app1` is healthy (Liquibase disabled) → no concurrent first-run race.
-- **Datasource**: Lutece uses the Liberty JNDI datasource via `webapp/WEB-INF/conf/db.properties` (`ManagedConnectionService` + `portal.ds=jdbc/portal`), configured in `server.xml`.
-- **Plugin activation**: `webapp/WEB-INF/plugins/plugins.dat` (v8 defaults plugins to NOT installed; we set `<name>.installed=1`).
+- **Datasource**: Lutece uses the Liberty JNDI datasource via `webapp/WEB-INF/conf/db.properties` (`ManagedConnectionService` + `portal.ds=jdbc/portal`), configured in `server.xml`. The Dockerfile extracts the MariaDB driver from the war into `${shared.resource.dir}/jdbc`, because the dataSource is resolved before the war is expanded.
+- **Plugin activation**: `webapp/WEB-INF/plugins/plugins.dat` (a plugin absent from it is NOT installed; `gen-test-site.sh` writes `<name>.installed=1` for each `--enable` name, `<name>` being the plugin descriptor's `<name>`).
 - **Level 2 — distributed cache**: `hazelcast` dependency + `com.hazelcast.cache.HazelcastMemberCachingProvider` + `hazelcast.xml` (cluster `lutece-cache`, port **5703**, tcp-ip app1/2/3). Env vars in compose. This member is loaded from the **WAR** class loader.
 - **Level 2 — session replication**: Liberty `sessionCache-1.0` + Hazelcast (`server.xml` cacheManager + `JCacheLib` → `hazelcast-session.xml`, cluster `lutece-session`, port **5701**). The Hazelcast jar is at **server level** (sessionCache inits before the war). `jvm.options` forces `-Dhazelcast.jcache.provider.type=member`. nginx is **round-robin** (no `ip_hash`). **CRITICAL**: `<httpSessionCache>` sets `writeContents="GET_AND_SET_ATTRIBUTES"` — the Liberty default `ONLY_SET_ATTRIBUTES` does NOT replicate in-place mutations of `@SessionScoped` CDI beans, so stateful wizards silently break on node switch while plain `setAttribute` (admin auth) still replicates and hides it.
 - **Two SEPARATE Hazelcast clusters, on purpose**: each JVM runs two Hazelcast members — the JCache one (WAR class loader, `lutece-cache`/5703) and the session one (server lib class loader, `lutece-session`/5701). They MUST NOT share a cluster: a single cluster spanning both class loaders makes partition-migration operations cross the class-loader boundary and fail with `Failed to serialize com.hazelcast.internal.partition.operation.MigrationOperation`. Distinct cluster-name + distinct port per concern keeps each cluster class-loader-homogeneous.
 - **nginx forwards `Host` WITH the port** (`proxy_set_header Host $http_host`, not `$host`): Lutece builds absolute redirect URLs from the `Host` header. With `$host` (no port) every redirect points to `http://<name>/` (port 80) → a browser following it (admin login, any `do*` action, Playwright) gets `ERR_CONNECTION_REFUSED`. `$http_host` keeps `localhost:8080` so redirects work. Essential for any redirect-based / browser-driven (Playwright) test.
-- **Shared index**: the volume is mounted on the **parent** `/opt/lutece/shared` (not on `forms-index` itself) because the indexer swaps the index dir via `Files.move` (rename fails EBUSY on a mount point).
+- **Shared index / files**: the volume is mounted on the **parent** `/opt/lutece/shared`. Point the plugin's index or file path property at a sub-folder through an environment variable in the three app services (MicroProfile: key upper-cased, every non-alphanumeric character replaced by `_`, e.g. `MYPLUGIN_INDEX_PATH: /opt/lutece/shared/myplugin-index`). Never mount the index folder itself: an indexer that swaps its directory with `Files.move` fails with EBUSY on a mount point.
 - **dbinit**: one-shot service applying `db/post-init.sql` after migration (clears the default admin password expiry so `admin/adminadmin` logs in without the password-change wall — used by the session-replication check).
 
 ## Driving a stateful FO flow through the cluster (Playwright) — gotchas
@@ -51,13 +53,13 @@ round-robin LB. Things that make a basic run fail until you know them:
   (e.g. the atomic guard rejecting over-capacity writes) is server-side, not in the browser.
 
 ## Boot & seed — gotchas
-- **plugin-xmltransformer is mandatory** (in `pom.xml.tpl`, always enabled): it provides
-  the legacy `core_style*` tables some plugins' core SQL still INSERTs into — without it
-  the whole Liquibase run aborts and NO plugin schema deploys. Never pre-create tables
-  by hand before the first migration: any pre-existing table defeats plugin-liquibase's
-  empty-db detection and kills the migration.
+- **Legacy `core_style*` tables**: core v8 does not create them. If the SQL of the plugin under test
+  (or of one of its dependencies) writes to them, add `plugin-xmltransformer` to the generated `pom.xml`
+  and `xmltransformer` to `--enable`; otherwise the whole Liquibase run aborts and NO plugin schema deploys.
+  Never pre-create tables by hand before the first migration: any pre-existing table defeats
+  plugin-liquibase's empty-db detection and kills the migration.
 - **FO authentication**: when the flow under test needs a logged-in LuteceUser, uncomment
-  the mylutece block in `pom.xml.tpl`, add `mylutece,mylutece-database` to `--enable`, and
+  the mylutece block in the generated `pom.xml`, add `mylutece,mylutece-database` to `--enable`, and
   uncomment the FO user seed in `db/post-init.sql` (grant the role the plugin checks).
   Login URL: `Portal.jsp?page=mylutece&action=login&auth_provider=mylutece-database`,
   fields `username`/`password`.
@@ -67,6 +69,8 @@ round-robin LB. Things that make a basic run fail until you know them:
   failed: read its logs.
 - **Waiting for health**: grep on `healthy` also matches **un**healthy — use
   `docker inspect -f '{{.State.Health.Status}}' lutece-app1`.
+- **Right after boot**: nginx keeps an upstream that refused a connection marked down for 10 s (default
+  `fail_timeout`), so `cluster-verify.sh` section 2 may see one backend; wait 10 s once the three nodes are ready.
 - **dbinit re-runs on every `up`**: keep `db/post-init.sql` idempotent (INSERT IGNORE).
 - **e2e**: start from `e2e_skeleton.py` (copy into the plugin's `e2e/`, adapt the CONFIG
   block + form selectors). Same skeleton adapts to the failover proof: map the form's
@@ -83,4 +87,4 @@ LOCK_TABLE=<plugin>_lock bash ../scripts/cluster-verify.sh e2e/.scalability-test
 ```
 
 > Kept on disk after the run: the generated `e2e/.scalability-test/` is part of the deliverable (see the artifact retention rule in `SKILL.md`); only the containers are torn down.
-> Image base: `icr.io/appcafe/open-liberty:full-java21-openj9-ubi-minimal`.
+> Image base: `eclipse-temurin:21-jdk-noble` + the Open Liberty runtime zip (version pinned in `Dockerfile`), as in the lutece-e2e bench.

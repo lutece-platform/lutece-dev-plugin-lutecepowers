@@ -10,13 +10,15 @@ The cluster was stood up in **A.4.2** and the browser-driven e2e (Playwright ove
 
 ## Inputs
 - Scripts: `${SKILL}/scripts/gen-test-site.sh`, `${SKILL}/scripts/cluster-verify.sh`.
-- Prerequisite: Docker + Compose, Maven, JDK 21, access to the Lutece Maven repos (or a populated `~/.m2`).
+- Prerequisite: Docker + Compose, Maven 3.9.x (not 4), JDK 17 or later, access to the Lutece Maven repos (or a populated `~/.m2`).
 
 ## Procedure
 1. **Build the fixed plugin**: `mvn -B clean install -DskipTests` (then with tests once green). The project will not compile until all other teammates are done — only build at the end.
-2. **Redeploy into the ALREADY-STANDING cluster** (built in A.4.2) and restart the app nodes so the new classes load:
+2. **Redeploy into the ALREADY-STANDING cluster** (built in A.4.2): reassemble the site war so it picks up the plugin just installed, then rebuild the image and restart the app nodes so the new classes load:
    ```bash
-   ( cd <plugin>/e2e/.scalability-test && docker compose up -d --build )
+   ( cd <plugin>/e2e/.scalability-test && mvn -B -Pcontainer-runtime clean package lutece:site-assembly \
+        && ( cd target/scalability-test-site-1.0.0-SNAPSHOT && jar -cf ../lutece.war . ) \
+        && docker compose up -d --build )
    ```
    Only if no cluster is up (fresh run) generate it first:
    ```bash

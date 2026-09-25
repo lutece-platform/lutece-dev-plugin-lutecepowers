@@ -1,6 +1,6 @@
 # Pattern — Concurrency on a contended resource (CAS vs distributed lock) & ID generation
 
-> The most critical axis for any plugin managing a **contended resource**: slots (appointment), quotas, stock, counters. Observed references: `lutece-form-plugin-forms` (LUT‑32420 quota, `LockDAO`/`forms_lucene_lock`). Forbidden everywhere: `synchronized`, `ReentrantLock`, `Collections.synchronized`, in-memory counter — they **do not cross the JVM boundary**.
+> The most critical axis for any plugin managing a **contended resource**: slots, quotas, stock, counters. Reference: `lutece-form-plugin-forms` (`FormService.saveFormUnderQuotaLock`, `LockDAO`/`forms_lucene_lock`). Forbidden everywhere: `synchronized`, `ReentrantLock`, `Collections.synchronized`, in-memory counter — they **do not cross the JVM boundary**.
 
 ## Choose the primitive by the data model (decide this FIRST)
 Two correct, cluster-safe primitives. Both rest on the same atomic-conditional-UPDATE + rows-affected trick; pick by **how capacity is represented**:
@@ -10,7 +10,7 @@ Two correct, cluster-safe primitives. Both rest on the same atomic-conditional-U
 | a **counter column** (`nb_remaining_places`, `stock`, `quota_left`) | **atomic CAS UPDATE** *(preferred)* | the guarded decrement IS the operation — lock-free, one statement, no lock table/TTL/heartbeat |
 | only a **`COUNT(*)`** of rows (no counter to decrement) | **DB distributed lock** | you must serialise the "count → decide → insert" critical section explicitly |
 
-> Don't reach for the distributed lock by default. forms locks because its quota is a `COUNT(*)` — there is nothing to decrement atomically. If your table has a counter, the CAS is strictly simpler and faster; the lock would be pure overhead. (This is the appointment vs forms divergence: same primitive, applied one level lower — directly on the counter instead of on a lock row.)
+> Don't reach for the distributed lock by default. forms locks because its quota is a `COUNT(*)` — there is nothing to decrement atomically. If your table has a counter, the CAS is strictly simpler and faster; the lock would be pure overhead.
 
 ## Primitive A — atomic compare-and-set on the counter (counter-based resources)
 The InnoDB **row lock** taken by the UPDATE *is* the serialisation — no application lock needed.
@@ -110,14 +110,14 @@ ALTER TABLE <plugin>_slot
 ## Provisional "hold" (reservation held while the user fills a form)
 Never a `ScheduledFuture`/`Timer` in the session (JVM-local, lost on restart, invisible to peers). Materialise it as a **DB row with an expiry timestamp** + a session token, recompute "potential remaining = remaining − active holds", and let a **daemon sweep expired rows** (a plain `DELETE WHERE expired_date < now` is idempotent — no distributed lock needed for the sweep). See `serialization-session.md`.
 
-## ID generation (LUT‑29492)
+## ID generation
 - ❌ `SELECT MAX(id)+1` → two reads of the same max → PK collision.
 - ✅ DB auto-increment / sequence, **or** a `UNIQUE(idSlot, idUser)` constraint (double-booking becomes a duplicate-key), **or** serialise via the lock above.
 
 ## Daemons in a cluster
 No node election in core → a daemon runs on **every** instance. Two valid options for a "run-once-cluster-wide" job:
 1. **DB distributed lock** (the pattern above): take the lock at the top of `run()`, bail out otherwise. Self-contained, no extra dependency.
-2. **`lutece-tech-plugin-quartz-scheduler`** (v8-native): a DB-backed Quartz scheduler that serialises jobs cluster-wide (`disallowedClusterConcurrentExecution`). Prefer it when the plugin already needs scheduled jobs. (Core also offers cron via Jakarta Concurrency `ManagedScheduledExecutorService`/`DaemonScheduler`, but that runs per-node — still needs a lock for run-once.)
+2. **`lutece-tech-plugin-quartz-scheduler`**, a site choice: it replaces the core daemon executor for the whole site and, with `quartzscheduler.cluster.enable=true`, runs a daemon once cluster-wide from a JDBC store when `quartzscheduler.daemon.<id>.disallowedClusterConcurrentExecution=true`. The plugin keeps a plain daemon and never declares Quartz itself (`rules/java-conventions.md`). Without it, the core `DaemonScheduler` (`ManagedScheduledExecutorService`) runs every daemon on every node, so a run-once job needs option 1.
 
 ## Rules
 - DO: **counter → atomic CAS UPDATE** (preferred); short critical section → **B1 transactional `SELECT … FOR UPDATE`** on the scoped row (no lock table, auto-released on commit/crash); long single-writer → **B2 TTL lease** (forms `LockDAO`) with re-read under the lock, **granular** lock name (`...slot.<id>`), DB-side clock, TTL+heartbeat, release in `finally` + cleanup on shutdown, pre-create the lock row; add a `CHECK` invariant on counters; `UNIQUE` as last line of defence (double-click).

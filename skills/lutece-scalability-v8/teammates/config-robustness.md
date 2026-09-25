@@ -8,7 +8,7 @@ Externalize hardcoded config and fix cluster robustness anti-patterns (streams, 
 ## Inputs
 - Findings for axes `5-config`, `6-streams`, `6-threadlocal` from the scan.
 - Pattern: `${SKILL}/patterns/config-and-robustness.md`.
-- References: `~/.lutece-references/lutece-core` (LUT‑32717/31768/31799/32524/31201/32531), `lutece-tech-library-httpaccess` (library defaults).
+- References: `~/.lutece-references/lutece-core` (`LuteceConfigSource`, `LuteceOverrideConfigSource`), `lutece-tech-library-httpaccess` (library defaults), `lutece-form-plugin-forms` (`FormsPlugin.warnIfIndexPathIsNodeLocal`).
 
 ## Procedure
 1. Hardcoded path/URL/datasource/timeout → MicroProfile property; defaults in `src/main/resources/META-INF/microprofile-config.properties`; read via `@ConfigProperty`/`AppPropertiesService`.

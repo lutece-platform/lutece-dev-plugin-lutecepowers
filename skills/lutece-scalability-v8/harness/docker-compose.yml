@@ -1,7 +1,7 @@
 services:
 
   mariadb:
-    image: mariadb:11
+    image: mariadb:11.8
     container_name: lutece-mariadb
     restart: unless-stopped
     environment:
@@ -40,16 +40,14 @@ services:
       portal.user: lutece
       portal.password: some_password
       http.port: "9090"
-      FORMS_INTERNALINDEXER_LUCENE_INDEXPATH: /opt/lutece/shared/forms-index
       # Level 2: distributed Lutece cache via Hazelcast (3-JVM cluster)
       LUTECE_CACHE_JCACHE_CACHINGPROVIDER: com.hazelcast.cache.HazelcastMemberCachingProvider
-      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/config/hazelcast.xml
+      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/opt/wlp/usr/servers/defaultServer/hazelcast.xml
       LIQUIBASE_ENABLED_AT_STARTUP: "true"
-      LUTECE_INSTANCE_ID: app1
     volumes:
-      # Shared volume mounted on the PARENT (not on forms-index itself):
-      # the indexer does Files.move(forms-indexTemp -> forms-index), a rename that
-      # fails (EBUSY) if forms-index is a mount point. As a sub-folder of the volume, OK.
+      # Shared volume mounted on the PARENT: point a plugin's index or file path at a sub-folder
+      # (e.g. MYPLUGIN_INDEX_PATH: /opt/lutece/shared/myplugin-index). An indexer that swaps its
+      # directory with Files.move fails (EBUSY) when that directory is itself a mount point.
       - shared:/opt/lutece/shared
     depends_on: { mariadb: { condition: service_healthy } }
     healthcheck:
@@ -72,13 +70,11 @@ services:
       portal.user: lutece
       portal.password: some_password
       http.port: "9090"
-      FORMS_INTERNALINDEXER_LUCENE_INDEXPATH: /opt/lutece/shared/forms-index
       # Level 2: distributed Lutece cache via Hazelcast (3-JVM cluster)
       LUTECE_CACHE_JCACHE_CACHINGPROVIDER: com.hazelcast.cache.HazelcastMemberCachingProvider
-      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/config/hazelcast.xml
+      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/opt/wlp/usr/servers/defaultServer/hazelcast.xml
       # Liquibase DISABLED: app2 neither initializes nor updates the DB (already migrated by app1).
       LIQUIBASE_ENABLED_AT_STARTUP: "false"
-      LUTECE_INSTANCE_ID: app2
     volumes:
       - shared:/opt/lutece/shared
     depends_on:
@@ -98,12 +94,10 @@ services:
       portal.user: lutece
       portal.password: some_password
       http.port: "9090"
-      FORMS_INTERNALINDEXER_LUCENE_INDEXPATH: /opt/lutece/shared/forms-index
       # Level 2: distributed Lutece cache via Hazelcast (3-JVM cluster)
       LUTECE_CACHE_JCACHE_CACHINGPROVIDER: com.hazelcast.cache.HazelcastMemberCachingProvider
-      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/config/hazelcast.xml
+      LUTECE_CACHE_JCACHE_CONFIG_URI: file:/opt/wlp/usr/servers/defaultServer/hazelcast.xml
       LIQUIBASE_ENABLED_AT_STARTUP: "false"
-      LUTECE_INSTANCE_ID: app3
     volumes:
       - shared:/opt/lutece/shared
     depends_on:
@@ -114,7 +108,7 @@ services:
   # One-shot service: applies db/post-init.sql AFTER the Liquibase migration
   # (depends on app1/migrator healthy => schema ready). Runs once then stops.
   dbinit:
-    image: mariadb:11
+    image: mariadb:11.8
     container_name: lutece-dbinit
     restart: "no"
     depends_on:

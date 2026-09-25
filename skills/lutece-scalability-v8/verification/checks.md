@@ -6,7 +6,7 @@
 - [ ] **`CHECK` invariant on counter resources** (`remaining + taken = capacity`) as defense in depth — and the deploy target is **MariaDB ≥ 10.2.1 / MySQL ≥ 8.0.16** (else `CHECK` is silently ignored).
 - [ ] **No `SELECT MAX(+1)`** ID generation → auto-increment/sequence or `UNIQUE` constraint.
 - [ ] **No mutable static singleton** (`private static X _instance`, `getInstance()`) → `@ApplicationScoped` bean; `getInstance()` **removed** (callers migrated; no `@Deprecated`).
-- [ ] **No static `CDI.current()` field init** → injection or lazy resolution.
+- [ ] **No static `CDI.current()` field init** outside Home facades and static utils → injection or lazy resolution.
 - [ ] **Session/cache objects `Serializable`** (whole graph) + `serialVersionUID`; non-serializables `transient` + lazy reload; **no `@Inject` marked `transient`**.
 - [ ] **Stateful `@SessionScoped`/`@ConversationScoped` bean** → whole field graph `Serializable` + a **passivation test** (round-trip `ObjectOutputStream`/`ObjectInputStream`, cf. forms `FormXPageSessionPassivationTest`); AND the cluster sets `writeContents="GET_AND_SET_ATTRIBUTES"` (see empirical) — a serializable graph alone does NOT replicate in-place mutations.
 - [ ] **No `Future`/`Timer`/`Thread`/`Stream`/`Optional` in session**; resource "hold" materialised in DB (row + expiry, daemon sweep), not a `ScheduledFuture`.

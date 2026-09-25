@@ -17,7 +17,7 @@
         <feature>jsonb-3.0</feature>
         <feature>mpHealth-4.0</feature>
         <feature>mpTelemetry-2.0</feature>
-        <feature>sessionCache-1.0</feature>   <!-- Niveau 2 : replication de session HTTP via JCache -->
+        <feature>sessionCache-1.0</feature>
     </featureManager>
     <variable defaultValue="9090" name="http.port"/>
     <variable defaultValue="9443" name="https.port"/>
@@ -27,7 +27,7 @@
     <application context-root="lutece" location="lutece.war" name="lutece" type="war"/>
     <applicationMonitor dropinsEnabled="false" updateTrigger="disabled"/>
     <library id="jdbcLib">
-        <fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="mariadb-java-client-*.jar"/>
+        <fileset dir="${shared.resource.dir}/jdbc" includes="*.jar"/>
     </library>
     <variable defaultValue="lutece" name="portal.user"/>
     <variable defaultValue="some_password" name="portal.password"/>
@@ -46,13 +46,13 @@
           password="${portal.password}"/>
     </dataSource>
 
-    <!-- Level 2: HTTP session replication via JCache/Hazelcast.
-         The session lives in the Hazelcast cluster -> survives node switching (sticky no longer needed).
-         The Hazelcast jar is provided at server level (sessionCache initializes before the war is deployed). -->
+    <!-- HTTP session replication via JCache/Hazelcast: the session lives in the Hazelcast cluster and survives
+         a node switch, so the load balancer needs no sticky session. The Hazelcast jar is provided at server level
+         (sessionCache initializes before the war is deployed). -->
     <library id="JCacheLib">
-        <file name="/config/hazelcast/hazelcast-5.5.0.jar"/>
+        <file name="/opt/wlp/usr/servers/defaultServer/hazelcast/hazelcast-5.5.0.jar"/>
     </library>
-<!-- writeContents MUST be GET_AND_SET_ATTRIBUTES (Liberty default is ONLY_SET_ATTRIBUTES).
+    <!-- writeContents MUST be GET_AND_SET_ATTRIBUTES (Liberty default is ONLY_SET_ATTRIBUTES).
          CDI @SessionScoped beans (every stateful v8 XPage: multi-step wizards, booking flows...)
          are mutated IN PLACE by Weld without a subsequent setAttribute. With the default, those
          mutations stay node-local and are NEVER replicated -> on a node switch the bean is seen
@@ -61,7 +61,7 @@
          bean's full state replicates. Plain setAttribute values (e.g. admin auth) replicate either
          way; that is why only the stateful CDI flow is affected, and why it is easy to miss. -->
     <httpSessionCache cacheManagerRef="CacheManager" writeContents="GET_AND_SET_ATTRIBUTES"/>
-    <cacheManager id="CacheManager" uri="file:/config/hazelcast-session.xml">
+    <cacheManager id="CacheManager" uri="file:/opt/wlp/usr/servers/defaultServer/hazelcast-session.xml">
         <cachingProvider jCacheLibraryRef="JCacheLib"/>
     </cacheManager>
 </server>

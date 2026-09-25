@@ -8,7 +8,7 @@ Eliminate mutable static singletons and JVM-local state; make services stateless
 ## Inputs
 - Findings for axes `3-singleton`, `3-cdi-static`, `4-cache` from the scan.
 - Pattern: `${SKILL}/patterns/cdi-scopes.md` (+ `cache-distributed.md` if caches).
-- References: `~/.lutece-references/lutece-core` (LUT‑28726, LUT‑32353 `RSAKeyPairUtil`), `lutece-form-plugin-forms` (LUT‑32088/32425/32038).
+- References: `~/.lutece-references/lutece-core` (`RSAKeyPairUtil`, `RSAKeyDatastoreProvider`, `RoleHome`), `lutece-form-plugin-forms` (`FormHome`).
 
 ## Procedure
 1. `private static X _instance` + `getInstance()` → `@ApplicationScoped`. **Remove `getInstance()` entirely** (`rules/service-layer.md`) and migrate every caller: `@Inject` in CDI beans, `private static final X _x = CDI.current().select(...).get()` in Home facades / static utils, cached `private final` field in objects created with `new`.

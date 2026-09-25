@@ -1,11 +1,11 @@
 # Pattern — Distributed cache (JSR-107 / Hazelcast)
 
-> Ref: core LUT‑31010/31195/31215/31217, `Lutece107CacheManager`, `CacheConfigUtil`, `AbstractCacheableService`. The Lutece cache uses the standard **JSR‑107 (JCache)** API; provider is configurable: ehcache (local, default) → **Hazelcast** (distributed) **without code changes**, provided the JCache contract is respected.
+> Reference: lutece-core `Lutece107CacheManager`, `CacheConfigUtil`, `AbstractCacheableService`. The Lutece cache uses the standard **JSR‑107 (JCache)** API; provider is configurable: ehcache (local, default) → **Hazelcast** (distributed) **without code changes**, provided the JCache contract is respected.
 
 ## Anti-patterns (break in a cluster)
-- **`synchronized(key)`** around the cache: a JVM monitor does not cross the JVM boundary (LUT‑31195) → use atomic JCache ops (`putIfAbsent`, `invoke`).
-- **`EntryProcessor` capturing request context** (`HttpServletRequest`, lambda, ThreadLocal) → non-serializable, shipped to the key-owner node → error (LUT‑31217). Replace with `get()` + local generation + `putIfAbsent()`.
-- **Anonymous Listener/Factory** → non-serializable (LUT‑31010). Use **named static classes + `Serializable`**.
+- **`synchronized(key)`** around the cache: a JVM monitor does not cross the JVM boundary → use atomic JCache ops (`putIfAbsent`, `invoke`).
+- **`EntryProcessor` capturing request context** (`HttpServletRequest`, lambda, ThreadLocal) → non-serializable, shipped to the key-owner node → error. Replace with `get()` + local generation + `putIfAbsent()`.
+- **Anonymous Listener/Factory** → non-serializable. Use **named static classes + `Serializable`**.
 - **Static Map "beside" the cache** (parallel JVM-local state) → diverges across nodes. Remove it; everything goes through the cache.
 
 ## Target pattern

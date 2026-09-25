@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Empirical scalability proofs for a Lutece v8 cluster (3 instances).
 # Generic: works for any plugin. The cluster must be running (docker compose up -d).
-# Usage: cluster-verify.sh [site-dir]
+# Usage: cluster-verify.sh [site-dir]   (the site dir is informative: the checks target the lutece-* containers)
 #   Optional env: LOCK_TABLE=<table>   -> check that a distributed-lock table exists
-#                 PLUGIN_PAGE=<page>   -> check that a plugin XPage responds (e.g. forms)
 set -uo pipefail
 DB="docker exec lutece-mariadb mariadb -ulutece -psome_password core -N -e"
 pass=0; fail=0; warn=0
+# Prints a passing check and counts it.
 ok(){ echo "  PASS $1"; pass=$((pass+1)); }
+# Prints a failing check and counts it.
 ko(){ echo "  FAIL $1"; fail=$((fail+1)); }
+# Prints a warning and counts it.
 wn(){ echo "  WARN $1"; warn=$((warn+1)); }
 
 echo "== 1. The 3 instances serve =="
@@ -23,9 +25,10 @@ n=$(for i in $(seq 1 12); do curl -s -D - http://localhost:8080/lutece/jsp/site/
 
 echo "== 3. Shared DB + SINGLE Liquibase migration =="
 t=$($DB "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='core';" 2>/dev/null)
-[ "${t:-0}" -gt 50 ] && ok "shared DB: $t tables" || ko "DB: ${t:-0} tables"
+c=$($DB "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='core' AND table_name='core_admin_user';" 2>/dev/null)
+[ "${c:-0}" -eq 1 ] && ok "shared DB: $t tables, core schema deployed" || ko "DB: ${t:-0} tables, core schema missing"
 cs=$($DB "SELECT COUNT(*) FROM DATABASECHANGELOG;" 2>/dev/null)
-mig=$(docker compose logs app1 app2 app3 2>/dev/null | grep -c "Update has been successful")
+mig=$(for a in app1 app2 app3; do docker logs lutece-$a 2>&1 | grep -q "Update has been successful" && echo "$a"; done | grep -c .)
 { [ "${cs:-0}" -gt 0 ] && [ "${mig:-0}" -le 1 ]; } && ok "liquibase: $cs changesets, $mig migrating instance" || ko "liquibase: ${cs:-0} changesets, ${mig:-0} migrations (race?)"
 
 echo "== 4. Hazelcast clusters formed — BOTH rings (session 5701 + cache 5703) =="
@@ -33,6 +36,7 @@ echo "== 4. Hazelcast clusters formed — BOTH rings (session 5701 + cache 5703)
 # and the JCache ring on 5703 (hex 1647). BOTH must mesh — if only one forms, either session
 # replication or the distributed cache silently degrades to node-local. Count ESTABLISHED inter-node
 # connections per port (tcp + tcp6). A meshed app1 has >=2 peers (app2 + app3) on each ring.
+# Prints the number of ESTABLISHED connections of app1 on the given hex port.
 hzpeers(){ docker exec lutece-app1 sh -c 'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' | awk -v p=":$1" '($2 ~ p"$"||$3 ~ p"$")&&$4=="01"{c++}END{print c+0}'; }
 sring=$(hzpeers 1645); cring=$(hzpeers 1647)
 [ "${sring:-0}" -ge 2 ] && ok "session ring (5701): app1 meshed with >=2 peers" || ko "session ring (5701): only ${sring:-0} peer(s) — session replication degraded"
@@ -56,7 +60,7 @@ echo "== 6. Session-cache write policy (writeContents) — the silent cluster ki
 # wizard breaks on node switch ("session lost"), while admin auth (a plain setAttribute) still
 # replicates and HIDES the bug. This static config assertion is what makes section 7 trustworthy.
 # Must be GET_AND_SET_ATTRIBUTES (or ALL_SESSION_ATTRIBUTES).
-wc=$(docker exec lutece-app1 sh -c 'grep -ho "writeContents=\"[^\"]*\"" /opt/ol/wlp/usr/servers/defaultServer/server.xml 2>/dev/null' | head -1)
+wc=$(docker exec lutece-app1 sh -c 'grep -ho "writeContents=\"[^\"]*\"" /opt/wlp/usr/servers/defaultServer/server.xml 2>/dev/null' | head -1)
 case "$wc" in
   *GET_AND_SET_ATTRIBUTES*|*ALL_SESSION_ATTRIBUTES*) ok "httpSessionCache $wc (in-place @SessionScoped mutations replicate)" ;;
   "") ko "httpSessionCache has NO writeContents -> Liberty default ONLY_SET_ATTRIBUTES: @SessionScoped bean mutations are NOT replicated (set writeContents=\"GET_AND_SET_ATTRIBUTES\")" ;;

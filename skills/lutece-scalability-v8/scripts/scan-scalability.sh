@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scan a Lutece plugin for multi-instance scalability anti-patterns (7 axes).
+# Scan a Lutece plugin for multi-instance scalability anti-patterns (6 axes).
 # Heuristic: flags points to REVIEW (judgment required), not to fix blindly.
 # Usage: scan-scalability.sh [plugin-dir]   (default .)  -> JSON on stdout
 set -uo pipefail
@@ -8,8 +8,11 @@ SRC="$ROOT/src/java"
 [ -d "$SRC" ] || SRC="$ROOT/src/main/java"
 [ -d "$SRC" ] || { echo "{\"error\":\"no java source under $ROOT\"}"; exit 1; }
 
+# Prints the number of Java files matching the pattern.
 cnt(){ grep -rIlE "$1" "$SRC" --include=*.java 2>/dev/null | wc -l | tr -d ' '; }
+# Prints up to eight matching files as JSON strings, relative to the plugin root.
 files(){ grep -rIlE "$1" "$SRC" --include=*.java 2>/dev/null | sed "s#$ROOT/##" | head -8 | awk '{printf "%s\"%s\"", (NR>1?",":""), $0}'; }
+# Prints one finding as a JSON object. Args: axis, label, extended regex.
 section(){ printf '    {"axis":"%s","label":"%s","count":%s,"files":[%s]}' "$1" "$2" "$(cnt "$3")" "$(files "$3")"; }
 
 art=$(grep -m1 -oE "<artifactId>[^<]+" "$ROOT/pom.xml" 2>/dev/null | sed 's/<artifactId>//')

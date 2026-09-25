@@ -1,6 +1,6 @@
 # Pattern — CDI scopes & end of static singletons
 
-> Ref: core LUT‑28726 (23 services), LUT‑32353 (cluster-safe RSAKeyPair), LUT‑30894/30896 ; forms LUT‑32088/32425/32038. A mutable `static` lives in ONE JVM only → diverges across nodes.
+> Reference: lutece-core `RSAKeyPairUtil` / `RSAKeyDatastoreProvider` (cluster-safe shared key), `RoleHome`; forms `FormHome`. A mutable `static` lives in ONE JVM only → diverges across nodes.
 
 ## Anti-pattern
 ```java
@@ -24,13 +24,13 @@ public class XService {
 - in a CDI bean → `@Inject` the service;
 - in a Home facade or static util → `private static final XService _x = CDI.current().select(XService.class).get();` — the static initializer is the core idiom (`RoleHome.java:58`, forms `FormHome.java:52`); the reference is effectively immutable, not divergent state;
 - in an object created with `new` → cached `private final` field.
-**Proxyability** (LUT‑30894): a normal-scoped bean resolved by its **concrete class** must be **non-`final`** + have a **non-private no-arg ctor** (alongside the `@Inject` ctor). A bean resolved only through its interface may stay `final` (core/forms DAOs).
+**Proxyability**: a normal-scoped bean resolved by its **concrete class** must be **non-`final`** + have a **non-private no-arg ctor** (alongside the `@Inject` ctor). A bean resolved only through its interface may stay `final` (core/forms DAOs).
 
-**Optional / multi-implementation dependency** (LUT‑30896, EntryServiceManager): `@Inject @Any Instance<I>` + `isResolvable()`/`stream()` collected in `@PostConstruct` — never a direct `@Named IService` of an optional plugin.
+**Optional / multi-implementation dependency**: `@Inject @Any Instance<I>` + `isResolvable()`/`stream()` collected in `@PostConstruct` — never a direct `@Named IService` of an optional plugin.
 
 **Non-CDI object serialised into the session** (created with `new`, e.g. a display tree): dependencies as **`transient` + lazy getter** `if(_x==null) _x=CDI.current().select(...).get()`. This lazy rule applies to serialised objects only, not to Home facades.
 
-**Value genuinely shared across nodes** (keys, secrets): move it to the **database** with an **atomic** write `insertDataValueIfAbsent` (relies on the PK; tolerate `false` = another node won) — **never** `setDataValue`/upsert (overwrite race).
+**Value genuinely shared across nodes** (keys, secrets): move it to the **database** with an **atomic** write `DatastoreService.insertDataValueIfAbsent` (reference: core `RSAKeyDatastoreProvider`; relies on the PK; tolerate `false` = another node won) — **never** `setDataValue`/upsert (overwrite race).
 
 ## Scope → usage
 | Component | Scope |

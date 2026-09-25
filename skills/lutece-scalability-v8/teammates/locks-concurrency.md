@@ -19,7 +19,7 @@ Replace any JVM-local coordination of a contended resource with the **right clus
 4. (lock path) Wrap the decision: `acquire → tx → RE-COUNT in DB → write → commit → release`; under sustained contention, **refuse** (typed exception), do not write without a guard.
 5. IDs: remove any `SELECT MAX(+1)` → DB auto-increment/sequence or a `UNIQUE` constraint; add the unique constraint as a last line of defence (double-click).
 6. "Run-once" daemon → take the lock at the top of `run()`.
-7. **Add a concurrency test** for the lock: N threads (or an `ExecutorService` + `CountDownLatch`) racing to `acquireLock(sameName)` → assert exactly **one** succeeds, others get `LockException`/false; test expiry (TTL) reclaim and release. Note: there is **no upstream reference test** for the forms lock (it's untested in core/forms) — so this is a NEW test, and the **primary empirical proof remains the cluster harness** (`LOCK_TABLE=...` in `cluster-verify.sh`, which observes `is_locked=1` on a single instance under load).
+7. **Add a concurrency test** for the lock: N threads (or an `ExecutorService` + `CountDownLatch`) racing to `acquireLock(sameName)` → assert exactly **one** succeeds, others get `LockException`/false; test expiry (TTL) reclaim and release. No upstream test covers the forms lock, so this test is new. The **primary proof remains the UI e2e on the cluster**; `LOCK_TABLE=...` in `cluster-verify.sh` only checks that the lock table exists.
 
 ## Constraints
 - **Reference-first**: invent no pattern — copy the forms mechanics.

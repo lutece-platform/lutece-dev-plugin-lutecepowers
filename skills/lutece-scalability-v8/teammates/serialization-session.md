@@ -8,7 +8,7 @@ Make all session/cache state **cluster-safe** (serializable, light, free of non-
 ## Inputs
 - Findings for axes `2-session`, `2-nonserial`, `2-sessionscoped` from the scan.
 - Pattern: `${SKILL}/patterns/serialization-session.md`.
-- References: `~/.lutece-references/lutece-core` (`LuteceUser`, LUT‑32341/32099/31371), `lutece-form-plugin-forms` (LUT‑31038, `FormXPageSessionPassivationTest`).
+- References: `~/.lutece-references/lutece-core` (`LuteceUser`, `AdminUser`), `lutece-form-plugin-forms` (`FormXPageSessionPassivationTest`).
 
 ## Procedure
 1. Every object put in session/cache → `implements Serializable` + `serialVersionUID`, cascading over the graph.

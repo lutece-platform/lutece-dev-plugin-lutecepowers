@@ -11,9 +11,9 @@ Takes a **v8-compliant** Lutece plugin and makes it **scalable for multi-instanc
 
 Unlike migration (largely mechanical), scalability is mostly **semantic** — it needs judgment. So this skill is: **scan (detect) → triage (drop false positives) → reproduce (observe each real defect — RED) → fix (intelligent teammates + patterns) → PROVE (same reproduction, now GREEN, in the real cluster)**. The empirical red→green loop is the heart of the skill: **a scanner finding is never a bug until it has been observed failing, and a fix is never "done" until that same observation turns green.**
 
-**Prerequisites:** subagent or teammate dispatch, or the sequential fallback (`using-lutecepowers`, section Subagents and teams). Also required: Docker + Compose; JDK 21; Maven; access to the Lutece Maven repos (or a populated `~/.m2`).
+**Prerequisites:** subagent or teammate dispatch, or the sequential fallback (`using-lutecepowers`, section Subagents and teams). Also required: Docker + Compose; JDK 17 or later; Maven 3.9.x (not 4); access to the Lutece Maven repos (or a populated `~/.m2`).
 
-The 7 scalability axes are documented under `patterns/`. Reference-first rule: `using-lutecepowers`, Mandatory reads.
+The 6 scalability axes are documented under `patterns/`. Reference-first rule: `using-lutecepowers`, Mandatory reads.
 
 ---
 
@@ -22,9 +22,10 @@ The 7 scalability axes are documented under `patterns/`. Reference-first rule: `
 ### A.0 — Verify v8 compliance (FIRST)
 Check that the plugin is **already v8-compliant**:
 ```bash
+bash ${LUTECEPOWERS_ROOT}/skills/lutece-migration-v8-agent-teams/scripts/check-v8-floor.sh .
 mvn -B clean verify -DskipTests
 ```
-If the build **FAILS**, stop. Ask the user: *"The plugin does not build on v8. Please run `lutece-migration-v8-agent-teams` first, then re-run this skill."* — scalability work cannot begin until migration is complete and the code compiles.
+If `check-v8-floor.sh` exits 1, stop: the plugin is below the Lutece 8 level lutecepowers supports; raise its `lutece-core` and parent as the message says. If the build **FAILS**, stop. Ask the user: *"The plugin does not build on v8. Please run `lutece-migration-v8-agent-teams` first, then re-run this skill."* — scalability work cannot begin until migration is complete and the code compiles.
 
 If the build **SUCCEEDS**, proceed to A.1.
 
@@ -64,7 +65,7 @@ Common false positives — classify and discard, recording the reason in the rep
 
 | Axis | Looks like | Why it is usually a FALSE POSITIVE |
 |------|-----------|-------------------------------------|
-| `3-singleton` | `getInstance()` calls | Calls to **core** services (`SecurityService`, `PluginService`, `AppPropertiesService`…) are standard. Only an **own** `getInstance()` returning an instance that holds **mutable static state** is a defect. |
+| `3-singleton` | `getInstance()` calls | Calls to a **core** `getInstance()` that is not deprecated (`SecurityService`, `AdminAuthenticationService`) are standard; a deprecated one is a migration FAIL (DP01), not a cluster defect. Only an **own** `getInstance()` returning an instance that holds **mutable static state** is a defect. |
 | `3-singleton` | `private static X _dao = CDI.current().select(...).get()` | The **Home pattern** — an effectively-immutable reference resolved once at class-load. Not divergent state. |
 | `4-cache` | `new HashMap<>()` / `new ArrayList<>()` | **Method-local** collections are per-request stack variables, GC'd, never shared across nodes. Only a **field**-level or `static` mutable collection is state. |
 | `4-cache` | a service extending `AbstractCacheableService` | Already JCache-backed → **cluster-capable** when Hazelcast is on. The concern is **invalidation completeness + proving distribution** (Phase F), *not* a rewrite. |
@@ -100,7 +101,7 @@ Plan fixes for the **confirmed (reproduced) defects only** — never for raw sca
 
 ## PHASE C — Spawn Teammates
 
-From here the lead only orchestrates and never edits files (on Claude Code with Agent Teams: Shift+Tab). On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
+From here the lead only orchestrates and never edits files. On a harness without dispatch, execute the teammates below yourself, one after the other, in the Phase D order.
 
 Spawn the teammates whose axes have findings:
 
@@ -108,7 +109,7 @@ Spawn the teammates whose axes have findings:
 |---|---|---|
 | Locks & Concurrency | `teammates/locks-concurrency.md` | `1-locks`, `1-id` |
 | CDI scopes & singletons | `teammates/cdi-scopes.md` | `3-singleton`, `3-cdi-static`, `4-cache` |
-| Serialization & session | `teammates/serialization-session.md` | `2-session`, `2-nonserial` |
+| Serialization & session | `teammates/serialization-session.md` | `2-session`, `2-sessionscoped`, `2-nonserial` |
 | Config & robustness | `teammates/config-robustness.md` | `5-config`, `6-streams`, `6-threadlocal` |
 | Verifier | `teammates/verifier.md` | builds + runs the cluster test |
 
@@ -202,7 +203,7 @@ All in `${LUTECEPOWERS_ROOT}/skills/lutece-scalability-v8/scripts/`:
 
 | Script | Purpose | Used by |
 |--------|---------|---------|
-| `scan-scalability.sh` | Scan 7-axis anti-patterns → JSON | Lead (A) |
+| `scan-scalability.sh` | Scan 6-axis anti-patterns → JSON | Lead (A) |
 | `verify-file.sh` | Per-file residual anti-pattern check | Fixer teammates |
 | `gen-test-site.sh` | Generate a disposable 3-node Docker cluster for the plugin | Verifier (F) |
 | `cluster-verify.sh` | Empirical scalability proofs against the running cluster | Verifier (F) |
