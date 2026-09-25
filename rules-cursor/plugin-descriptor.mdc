@@ -23,7 +23,7 @@ This is a template for **new plugins only**. During migration, do NOT overwrite 
     <description>myplugin.plugin.description</description>
     <provider>myplugin.plugin.provider</provider>
     <provider-url>http://lutece.paris.fr</provider-url>
-    <icon-url>images/admin/skin/feature_default_icon.png</icon-url>
+    <icon-url>themes/admin/shared/images/apps.svg</icon-url>
     <copyright>Copyright (c) <current year></copyright>
     <db-pool-required>1</db-pool-required>
 
@@ -40,8 +40,8 @@ Most plugins use `PluginDefaultImplementation`. However, **preserve the existing
 
 | `<class>` value | When to use | Examples |
 |---|---|---|
-| `PluginDefaultImplementation` | No custom `init()` logic needed. Plugin only declares rights, XPages, daemons, services. | workflow-forms, mylutece, rest, elasticdata, asynchronousupload |
-| Custom `XxxPlugin` | Plugin registers providers (ImageResourceProvider, FileResourceProvider) or runs setup logic in `init()`. | forms, genericattributes, workflow, announce |
+| `PluginDefaultImplementation` | No custom `init()` logic needed. Plugin only declares rights, XPages, daemons, services. | a plugin with no setup code |
+| Custom `XxxPlugin` | Plugin registers providers (ImageResourceProvider, FileResourceProvider) or runs setup logic in `init()`. | `MyPlugin extends PluginDefaultImplementation` overriding `init()` |
 
 **MIGRATION RULE: During migration to v8, NEVER replace an existing custom `XxxPlugin` class with `PluginDefaultImplementation`. If the current plugin.xml has a custom class, keep it — it likely has `init()` logic that is required at runtime (e.g. registering image/file providers via CDI).**
 
@@ -61,12 +61,14 @@ Most plugins use `PluginDefaultImplementation`. However, **preserve the existing
         <feature-description>myplugin.adminFeature.manageEntities.description</feature-description>
         <feature-level>3</feature-level>
         <feature-url>jsp/admin/plugins/myplugin/ManageEntities.jsp</feature-url>
-        <feature-icon-url/>
+        <icon-url>ti ti-list</icon-url>
         <feature-page-order>1</feature-page-order>
         <feature-group>APPLICATIONS</feature-group>
     </admin-feature>
 </admin-features>
 ```
+
+The feature icon is read from `<icon-url>` (`plugin-digester-rules.xml`, pattern `admin-features/admin-feature`) and rendered as a CSS class by `adminHeader.ftl`: a Tabler class `ti ti-<name>`, never an image path. `<feature-icon-url>` is not read.
 
 `<feature-url>` is the full webapp-relative path (`jsp/admin/plugins/<plugin>/Manage….jsp`), never a bare file name — reference: forms.xml:36, appointment.xml:28.
 
@@ -89,4 +91,4 @@ No `<application-class>`: the core resolves the CDI bean named `<plugin>.xpage.<
 | `Could not find bean named <plugin>.xpage.<id>` at startup | `@Named` value does not match `<plugin>.xpage.<application-id>` | Align the two |
 | Feature not in admin menu | Missing `<admin-feature>` block | Add the declaration |
 | Feature link 404 | Relative `<feature-url>` | Use the full `jsp/admin/plugins/...` path |
-| i18n keys displayed raw | Prefix missing in feature-title/description | Use `pluginName.key` format |
+| Empty feature title, WARN `Error localizing key` in the log | Prefix missing in feature-title/description | Use `pluginName.key` format |

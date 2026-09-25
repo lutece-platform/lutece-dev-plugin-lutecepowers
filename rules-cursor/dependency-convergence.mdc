@@ -1,5 +1,5 @@
 ---
-description: "Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts each parent manages, enforcer rules from 8.0.2"
+description: "Lutece 8 dependency convergence: latest released global-pom 8.x as parent, Jakarta EE 10 pins, which test artifacts the parent manages, enforcer rules"
 globs: pom.xml
 alwaysApply: false
 ---
@@ -30,29 +30,30 @@ https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global
 
 `scan-project.sh` writes it to `project.latestParent`. Always a released version, never a SNAPSHOT parent.
 
-## What Each Parent Manages
+## What the Parent Manages
 
 Declare these with coordinates and scope only. A local `<version>` re-creates the divergence the parent exists to prevent.
 
-| Managed for tests | 8.0.0 / 8.0.1 | 8.0.2 and later |
-|---|---|---|
-| `library-lutece-unit-testing` | 5.0.1 | 5.0.2 |
-| `hibernate-validator` | 8.0.1.Final | 8.0.5.Final |
-| `jaxb-runtime` | 4.0.5 | 4.0.9 |
-| EL implementation | `org.glassfish:jakarta.el` 5.0.0-M1 | `org.glassfish.expressly:expressly` 5.0.0 |
-| `jboss-logging` | not managed | 3.6.3.Final |
-| `jakarta.el-api` | not managed | 5.0.1 |
-| `jakarta.annotation-api` | not managed | 2.1.1 |
+| Managed for tests | Version |
+|---|---|
+| `library-lutece-unit-testing` | 5.0.2 |
+| `hibernate-validator` | 8.0.5.Final |
+| `jaxb-runtime` | 4.0.9 |
+| EL implementation | `org.glassfish.expressly:expressly` 5.0.0 |
+| `jboss-logging` | 3.6.3.Final |
+| `jakarta.el-api` | 5.0.1 |
+| `jakarta.annotation-api` | 2.1.1 |
 
-The EL implementation is the trap: each parent manages exactly one of the two artifacts. `org.glassfish:jakarta.el` never released past `5.0.0-M1` and was renamed `org.glassfish.expressly:expressly`, which is also what `hibernate-validator` depends on today. Declaring the artifact the parent does not manage yields a dependency without version and the build fails.
+The EL implementation is `org.glassfish.expressly:expressly`, declared without version. `org.glassfish:jakarta.el` is not managed: declaring it yields a dependency without version and the build fails.
 
-## Enforcer, from 8.0.2
+## Enforcer
 
-Parents 8.0.0 and 8.0.1 only enforce the Maven and Java versions. From 8.0.2 a second execution runs on every scope except `provided`, test included:
+A first execution requires Maven `[3.9,4.0.0)` and JDK 17 or later. A second execution runs on every scope except `provided`, test included:
 
 - `requireUpperBoundDeps` **fails the build** when the resolved version of a transitive dependency is lower than what another dependency requires. `-Denforcer.dependencyRules.fail=false` turns it into a report, for diagnosis only.
 - `banDuplicatePomDependencyVersions` fails on the same `groupId:artifactId` declared twice in one POM.
-- `dependencyConvergence` **reports only**, listing every divergence including the harmless ones.
+
+A third execution runs `dependencyConvergence`, which **reports only**, listing every divergence including the harmless ones.
 
 ## Reading an Enforcer Failure
 
@@ -61,7 +62,7 @@ Rule 0: ...RequireUpperBoundDeps failed with message:
 Require upper bound dependencies error for org.jboss.logging:jboss-logging:3.4.3.Final
 paths to dependency are:
   +-my-plugin:1.0.0-SNAPSHOT
-    +-org.hibernate.validator:hibernate-validator:8.0.1.Final
+    +-org.hibernate.validator:hibernate-validator:8.0.5.Final
       +-org.jboss.logging:jboss-logging:3.4.3.Final
 ```
 

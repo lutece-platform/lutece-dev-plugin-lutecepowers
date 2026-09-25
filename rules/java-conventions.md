@@ -24,9 +24,9 @@ paths:
 ## Forbidden Libraries
 
 - `net.sf.ehcache` — replaced by JCache (`javax.cache`)
-- `org.quartz-scheduler` — replaced by `ManagedScheduledExecutorService`
+- `org.quartz-scheduler` in a plugin — a plugin writes a daemon, scheduled by the core (`DaemonScheduler`, `ManagedScheduledExecutorService`). Cluster-wide scheduling is a site choice: the site adds `plugin-quartz-scheduler`, which replaces the core daemon executor and carries Quartz itself
 - `net.sf.json-lib` — replaced by Jackson (`com.fasterxml.jackson`)
-- `org.apache.commons.fileupload` — replaced by `fr.paris.lutece.portal.web.upload.MultipartItem`
+- `org.apache.commons.fileupload` — replaced by `fr.paris.lutece.portal.service.upload.MultipartItem` (library-core-utils)
 - `org.glassfish.jersey` — use standard JAX-RS (`jakarta.ws.rs`)
 
 ## DAOUtil
@@ -36,9 +36,9 @@ paths:
 
 ## Logging
 
-- Use SLF4J: `Logger` + `LoggerFactory`
-- Use parameterized messages: `logger.debug( "Found {} items", count )` — NOT string concatenation
-- `isDebugEnabled()` guard is unnecessary with parameterized logging
+- Use `AppLogService.getLogger( )` (Log4j2 `lutece.application` logger)
+- Use parameterized messages: `AppLogService.getLogger( ).debug( "Found {} items", count )` — NOT string concatenation (LG01)
+- `isDebugEnabled()` guard is unnecessary with parameterized logging (LG02)
 
 **NON NEGOCIABLES RULES**
 - javadocs on each methods.

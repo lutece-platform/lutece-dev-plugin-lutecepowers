@@ -117,7 +117,7 @@ public String doRemoveTask( HttpServletRequest request )
 }
 ```
 
-**Blind spots of the automatic token** (core 8.0.x, observed on e2e benches), write the controller around them and
+**Blind spots of the automatic token**: write the controller around them and
 cover each one with a negative e2e scenario:
 - **An `@Action` also runs on GET, unvalidated.** The filter skips GET while `processController` dispatches the action
   whatever the method, so `ManageX.jsp?action=removeX&id=1` in a link or an `<img>` deletes. Every mutation is a POST

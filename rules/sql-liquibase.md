@@ -18,14 +18,14 @@ In Lutece 8 the database is deployed by **plugin-liquibase**, which scans the cl
 -- preconditions onFail:MARK_RAN onError:WARN
 ```
 
-Example (`update_db_appointment_3.0.8-4.0.0.sql`):
+Example (`update_db_myplugin-1.0.0-2.0.0.sql`):
 
 ```sql
 -- liquibase formatted sql
--- changeset appointment:update_db_appointment_3.0.8-4.0.0.sql
+-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0.sql
 -- preconditions onFail:MARK_RAN onError:WARN
-CREATE TABLE IF NOT EXISTS appointment_slot_hold ( ... );
-ALTER TABLE appointment_slot ADD CONSTRAINT chk_... CHECK ( ... );
+CREATE TABLE IF NOT EXISTS my_table_hold ( ... );
+ALTER TABLE my_table ADD CONSTRAINT chk_... CHECK ( ... );
 ```
 
 ## Rules
@@ -45,26 +45,89 @@ ALTER TABLE appointment_slot ADD CONSTRAINT chk_... CHECK ( ... );
   ```
 
   Keep the policy line everywhere for consistency, but do not read it as a safety net — most scripts of the estate carry it with no condition attached, which is why replaying a non-idempotent `init_*` breaks the startup instead of being marked as ran.
-- Don't declare `ON DELETE CASCADE` to clean child tables — the house convention is a **restrictive FK + explicit `deleteByIdForm`/`deleteByIdSlot`** chained in the service (see `FormService.removeForm`).
+- Don't declare `ON DELETE CASCADE` to clean child tables — the house convention is a **restrictive FK + explicit `deleteByIdForm`/`deleteByIdSlot`** chained in the service.
+- **A changeset id is never reused.** A changeset already played elsewhere is repaired by a `-pre` changeset inserted before it, guarded by a `DATABASECHANGELOG` precondition, and left untouched itself:
+
+  ```sql
+  -- changeset myplugin:update_db_myplugin-1.0.0-2.0.0-rev5-pre.sql
+  -- preconditions onFail:MARK_RAN onError:WARN
+  -- precondition-sql-check expectedResult:0 SELECT COUNT(*) FROM DATABASECHANGELOG WHERE ID = 'update_db_myplugin-1.0.0-2.0.0-rev5.sql'
+  DELETE FROM my_table WHERE my_key = 'my.new.key';
+  ```
+
+  Reference: `lutece-core/src/sql/upgrade/update_db_lutece_core-8.0.1-8.0.2.sql` (`-rev5-pre`, `-rev7-pre`).
+- A released script whose content must change keeps its former checksums valid with one `-- validCheckSum: <checksum>` line per accepted value, right after the `changeset` line. Reference: `gru-plugin-appointment/src/sql/plugins/appointment/plugin/create_db_appointment.sql`.
+
+## One small changeset per concern
+
+Liquibase runs a changeset as one unit and records it only when every statement passed. On MyISAM tables nothing is
+rolled back: a statement that fails leaves the ones before it applied and the ones after it never run, and the next
+start fails again at the same place. A long changeset that stops midway leaves a site that neither the old nor the
+new version can read.
+
+Split an upgrade by concern, and put the fragile part last, guarded:
+
+```sql
+-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0.sql
+-- preconditions onFail:MARK_RAN onError:WARN
+ALTER TABLE ...;
+
+-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0-rev1.sql
+-- preconditions onFail:MARK_RAN onError:WARN
+-- precondition-sql-check expectedResult:3 SELECT COUNT(1) from INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=database() AND TABLE_NAME IN ('core_style_mode_stylesheet','core_stylesheet','core_style');
+DELETE FROM core_style_mode_stylesheet WHERE id_style = 200;
+```
+
+`expectedResult` is the number of tables the statements need. When the count differs the changeset is marked as ran
+and the update goes on. Check `XT03`.
+
+## Tables another plugin owns
+
+`core_style`, `core_stylesheet` and `core_style_mode_stylesheet` belong to plugin-xmltransformer, not to the core. A
+plugin that writes to them:
+
+- **ports its portlet to HTML and removes those statements** when it can
+  (`skills/lutece-migration-v8-agent-teams/patterns/mvc-patterns.md` §10). Check `XT01`.
+- **otherwise declares plugin-xmltransformer** in its pom, and puts `-- lutece runAfter:xmltransformer` as the second
+  line of every install script that writes to those tables, so they exist when the script runs. Check `XT02`. The
+  same header serves any dependency on another plugin's tables (`runAfter:genericattributes` for entry types).
+
+In both cases the upgrade scripts that touch those tables get the guarded changeset above: they run on every site
+that migrates, including the ones where the tables do not exist.
+
+## Adding AUTO_INCREMENT to an existing column
+
+MariaDB and MySQL renumber a 0 into the next value when a column becomes AUTO_INCREMENT. A reference row shipped with
+id 0 then collides with id 1:
+
+    ALTER TABLE causes auto_increment resequencing, resulting in duplicate entry '1' for key 'PRIMARY'
+
+The ALTER goes in a changeset restricted to those engines, after the mode that keeps 0 as a value:
+
+```sql
+-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0-mariaDB-mySQL.sql dbms:mariadb,mysql
+SET SESSION sql_mode='NO_AUTO_VALUE_ON_ZERO';
+ALTER TABLE my_table MODIFY COLUMN id_my_table int AUTO_INCREMENT;
+```
+
+PostgreSQL gets its own changeset (`dbms:postgresql`) with `GENERATED BY DEFAULT AS IDENTITY` and a `setval` on the
+sequence. Check `SQ03`.
 
 ## The file name is parsed — digits only in the versions
 
 `SqlPathInfo` (library-sql-utils) recognises an upgrade script by a regular expression whose two versions are
-`[0-9]+(\.[0-9]+)*`: `update_db_<plugin>-<from>-<to>.sql`, `sql/upgrade/update_db_lutece_core-<from>-<to>.sql`.
+`[0-9]+(\.[0-9]+)*`: `sql/plugins/<plugin>/upgrade/update_db_<plugin>-<from>-<to>.sql`, `sql/upgrade/update_db_lutece_core-<from>-<to>.sql`.
+The directory is part of the match: an upgrade script under `plugins/<plugin>/plugin/` is dropped as well, that
+directory is for the install scripts (`create_db_`, `init_db_`). Check `SQ06`.
 A name that does not match parses to `null` and the file is **dropped silently, twice**: the lutece-maven-plugin
 does not copy it to `WEB-INF/classes/sql/` at assembly, and `plugin-liquibase` would not include it at startup.
 No log line names it — the include log only lists files the parser understood.
 
-The core itself ships one: `update_db_lutece_core-7.1.x-8.0.0.sql`,
-400 lines — the whole 7 → 8 schema migration of the core (`core_theme` rebuilt, `core_mode` dropped, datastore
-keys) — is absent from every assembled v8 site because of the `x`. A site upgraded from 7.1.x under Liquibase
-gets `8.0.0-8.0.1` and `8.0.1-8.0.2` and never the step before. Only the destination version is compared to
-the installed one, so `7.1.9-8.0.0` would have been picked up by any 7.1.x site.
-
 Rules that follow:
 - **versions in a script name are digits and dots only** — no `x`, no `SNAPSHOT`, no `beta`;
 - a migration that changes a schema ships `update_db_<plugin>-<v7 version>-<v8 version>.sql` with a real
-  version on both sides; the destination is what decides, the source documents;
+  version on both sides; only the destination is compared to the installed version, the source documents;
+- a major switch is named `<prev>.9.9-<new>`, as the core's `update_db_lutece_core-7.9.9-8.0.0.sql`;
 - after `lutece:site-assembly`, compare `src/sql` with `WEB-INF/classes/sql`: a file missing there is a file
   Liquibase will never see. `run.sh compare` (lutece-e2e) prints that difference.
 
@@ -113,7 +176,8 @@ Do not trust an older upgrade that (re)creates the table: it created it as it wa
 (an older upgrade recreates a history table as it was then, the v8 DAO writes a new column into it, every v7
 base answers `Unknown column`). `verify-migration.sh` SQ02 diffs the
 creation scripts against the last commit and fails on an addition no upgrade script covers; `run.sh compare`
-of the e2e skill proves it on a real v7 base.
+of the e2e skill proves it on a real v7 base: the v7 site on a fresh database, then the v8 site taking it over. A
+plugin proven only on a fresh database has not been proven where every deployment runs it.
 
 The symptom hides: `DAOUtil.free` throws `NullPointerException` (`results` is null) inside the error path of
 `executeUpdate`, so the visible stack is a NPE in `DAOUtil.free`, not the `SQLException`. Read the log for

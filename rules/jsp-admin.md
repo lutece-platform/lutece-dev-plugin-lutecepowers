@@ -22,7 +22,7 @@ ${ pageContext.getAttribute( 'strContent' ) }
 <%@ include file="../../AdminFooter.jsp" %>
 ```
 
-Reference: `~/.lutece-references/lutece-core/webapp/jsp/admin/templates/ManageThemes.jsp`, `~/.lutece-references/lutece-form-plugin-forms/webapp/jsp/admin/plugins/forms/ManageForms.jsp`.
+Reference: `~/.lutece-references/lutece-core/webapp/jsp/admin/theme/ManageThemes.jsp`, `~/.lutece-references/lutece-form-plugin-forms/webapp/jsp/admin/plugins/forms/ManageForms.jsp`.
 
 ## Rules
 

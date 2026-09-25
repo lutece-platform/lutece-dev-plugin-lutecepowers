@@ -44,7 +44,7 @@ a signature keeps requiring one whatever the site's global switch says. Reproduc
 authenticator class, signature elements in the same order, private key, validity period — so existing clients sign
 unchanged.
 
-Rules that follow, each of which has cost a real defect:
+Rules that follow:
 
 - **`@PreMatching` and `@NameBinding` are mutually exclusive.** The javadoc says binding annotations are *ignored*
   on a pre-matching component: the combination compiles, deploys, and guards the whole site while reading as if it

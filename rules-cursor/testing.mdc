@@ -47,8 +47,7 @@ Tests pass only when Failures = 0 and Errors = 0. No `target/surefire-reports/` 
 </dependency>
 
 <!-- Optional — add if tests use bean validation, Jakarta EL, or JAXB.
-     EL implementation: org.glassfish.expressly:expressly with parent 8.0.2+,
-     org.glassfish:jakarta.el with parent 8.0.0 / 8.0.1 (only one is managed). -->
+     EL implementation: org.glassfish.expressly:expressly (managed by the parent). -->
 <dependency>
     <groupId>org.hibernate.validator</groupId>
     <artifactId>hibernate-validator</artifactId>
@@ -77,7 +76,7 @@ See `dependency-convergence.md` for the Jakarta EE 10 baseline and the enforcer 
 ## Mocking
 
 - Use `MockHttpServletRequest` / `MockHttpServletResponse` from `fr.paris.lutece.test.mocks`
-- NEVER use `fr.paris.lutece.portal.service.spring.MokeHttpServletRequest` (v7 legacy, removed in v8)
+- NEVER use `fr.paris.lutece.test.MokeHttpServletRequest` (v7 legacy, removed in v8)
 - For CDI beans in tests, use `@Inject` with Weld-testing or `CDI.current().select()`
 
 ## Naming trap: LuteceTestCase

@@ -39,9 +39,9 @@ message.confirmRemoveEntity=Are you sure?
 
 ## A missing key is invisible, not loud
 
-`I18nService.getLocalizedString` catches the lookup failure and returns an **empty string**. A key no bundle
-answers therefore shows nothing: no error page, no raw key on screen, no line in the log — just a label that is
-not there. It is the quietest defect of the platform, and the reason it survives releases.
+`I18nService.getLocalizedString` catches the lookup failure, logs a WARN `Error localizing key : <key>` and returns
+an **empty string**. A key no bundle answers therefore shows nothing on screen: no error page, no raw key — just a
+label that is not there, and a WARN line easy to miss in the log.
 
 `check-i18n-keys.sh` resolves every `#i18n` key of a project against the bundles of the assembled webapp and
 names those that answer nothing. It reads templates, `.js`, `.java`, `.xml` and `.sql`, follows a Java constant
@@ -61,5 +61,5 @@ belongs to a plugin this webapp does not carry.
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | The label is simply absent from the page | No bundle answers the key | Add it, or point the call at the key that already exists |
-| i18n key displayed as-is (e.g. `myplugin.label.name`) | Prefix included in `.properties` file | Remove prefix — keep only `label.name=Value` |
+| Empty label, WARN `Error localizing key : myplugin.label.name` in the log | Prefix included in `.properties` file (`myplugin.label.name=` instead of `label.name=`) | Remove prefix — keep only `label.name=Value` |
 | The label is there but a screen reader says nothing | The text sits in a `d-none` span | `display:none` leaves the accessibility tree; `visually-hidden` does not |

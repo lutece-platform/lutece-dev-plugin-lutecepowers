@@ -33,4 +33,4 @@ For external libraries (e.g. Apache Commons, Jackson, third-party APIs):
 1. **Check if Context7 MCP is available** — Look for the `context7` tool in your available tools
 2. **If Context7 is available** → Use it to fetch up-to-date documentation and source references for the library
 3. **If Context7 is NOT available** → tell the user that the Context7 MCP server provides up-to-date documentation for external libraries and can be added to the harness configuration
-4. **Fallback** — Use WebSearch/WebFetch to find official documentation, or ask the user for a local path to the library sources
+4. **Fallback** — Search the web for the official documentation, or ask the user for a local path to the library sources

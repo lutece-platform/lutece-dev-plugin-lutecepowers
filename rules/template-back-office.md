@@ -26,14 +26,14 @@ BS5 (CSS + JS) and Tabler Icons are globally loaded by the admin theme. Do NOT a
 
 ## Layout Structure (MANDATORY)
 
-Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`. Do NOT use `@row` / `@columns` / `@pageColumn` together. @row and @columns can be used only inside @pageColumn.
+Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`. `@row` / `@columns` only inside `@pageColumn`.
 
 ## List Layout — `@manageFeature` by default, `@table` for tabular data
 
-- **Entity lists with CRUD actions** (manage pages): `@manageFeature` > `@manageFeatureItem` > `@manageFeatureItemColumn`. This is the layout of every core manage page (`rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`, 25 core templates) and of the forms manage pages (`manage_forms.html`, `manage_categories.html`, `manage_steps.html`). Items render as cards, so no `@box` around the list.
-- **Tabular data** (several data columns per row, reports, grids, child-entity tables): `@table` with `<tr>/<th>/<td>`. Forms uses it in 9 templates. Never replace an existing well-formed `@table` "systematically": switch to `@manageFeature` only when the rows are entities with edit/delete actions.
+- **Entity lists with CRUD actions** (manage pages): `@manageFeature` > `@manageFeatureItem` > `@manageFeatureItemColumn`. This is the layout of every core manage page (`rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and of the forms manage pages (`manage_forms.html`, `manage_categories.html`, `manage_steps.html`). Items render as cards, so no `@box` around the list. Copy their item layout, not their `@offcanvas` nor their `@box` around `@empty`.
+- **Tabular data** (several data columns per row, reports, grids, child-entity tables): `@table` with `<tr>/<th>/<td>`. Never replace an existing well-formed `@table` "systematically": switch to `@manageFeature` only when the rows are entities with edit/delete actions.
 - **Empty state**: test the list before iterating and render `@empty` otherwise.
-- **Pagination**: `@paginationAdmin paginator=paginator combo=1` after the list (server-side, `IPager`). `@paginationAjax` (JSON endpoint + `@ResponseBody`, see `/lutece-patterns` §5) is an option for large datasets; no core or forms template uses it today.
+- **Pagination**: `@paginationAdmin paginator=paginator combo=1` after the list (server-side, `IPager`). `@paginationAjax` (JSON endpoint + `@ResponseBody`, see `/lutece-patterns` §5) is an option for large datasets.
 
 ## Navigation, dialogs and forms (blocking)
 
@@ -62,8 +62,8 @@ Render model messages with the core macro, once per page, right after `@pageHead
 `#i18n{prefix.key.subkey}` — always reuse existing portal i18n utility keys instead of creating new ones whenever possible. Existing keys (`lutece-core/.../portal/resources/util_messages.properties`): `portal.util.labelActions`, `labelModify`, `labelDelete`, `labelCreate`, `labelBack`, `labelValidate`, `labelCancel`, `labelClose`, `labelYes`, `labelNo`, `labelEnabled`, `labelDisabled`, `labelSearch`, `labelNoItem`. Keys that do NOT exist: `portal.util.labelActive`, `labelInactive`, `labelSave`, `labelAdd` (use `labelEnabled`/`labelDisabled`/`labelValidate`/`labelCreate`).
 
 
-**`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )` (`:272`, `:304`, `:334`), then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )` (`:277`, `:309`, `:339`), then `DatastoreService.replaceKeys( template.getHtml( ) )` (`:343`). Two consequences:
-- **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html:199` (`#i18n{${column.titleKey}}`) and `:216`, `:222`.
+**`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )`, then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )`, then `DatastoreService.replaceKeys( template.getHtml( ) )`. Two consequences:
+- **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html` (`#i18n{${column.titleKey}}`).
 - **A template never writes `_csrftoken` itself**: the token is injected into the rendered `<form>`.
 
 ## Null Safety
@@ -168,7 +168,7 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - Use native DOM APIs: `document.querySelector`, `addEventListener`, `fetch`, `classList`, `dataset`
 - Use ES6+: `const`/`let`, arrow functions, template literals, destructuring, `async`/`await`
 - Code that depends on a jQuery plugin (DataTables, Select2, jQuery UI, Cropper, suggestPOI…) cannot be converted mechanically. Decide mechanically instead:
-  1. Grep the project's `pom.xml` for `library-theme-jquery`. **Declared**: the theme loads jQuery (`adminHeader.ftl` includes `<@jqueryHeader />` when `jqueryHeader??`, `page_frameset.html` loads `commons_theme_jquery.html` when it exists), the calls run, keep them and name in the report the widget that justifies the dependency.
+  1. Search the project's `pom.xml` for `library-theme-jquery`. **Declared**: the theme loads jQuery (`adminHeader.ftl` includes `<@jqueryHeader />` when `jqueryHeader??`, `page_frameset.html` loads `commons_theme_jquery.html` when it exists), the calls run, keep them and name in the report the widget that justifies the dependency.
   2. **Not declared**: the calls fail silently at runtime. Port them with the conversion table (`skills/lutece-update-template-fo/reference/patterns.md` § jQuery → Vanilla JS) when they are plain DOM work, which is the usual case for show/hide/val/append.
   3. Not declared **and** the code drives a jQuery plugin that has no vanilla equivalent: the fix is a `pom.xml` dependency, not a template edit. Report it to the owner of the build; never leave the calls unflagged.
   The scanner does this cross-check (`TD12`): WARN when jQuery appears and the pom does not declare the library, INFO when it does.
@@ -179,13 +179,10 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - JS files go in `webapp/js/{pluginName}/`
 - CSS files go in `webapp/css/{pluginName}/`
 
-## Auto-escaping — write templates that render the same in both modes (LUT-33153, upstream in progress)
+## Auto-escaping — write templates that render the same in both modes
 
-The core carries `service.freemarker.templateAutoEscape` (default `false`). A branch of `lutece-core`
-(`LUT-33153-autoescape-bicompat`; check `git branch -r` of the core reference to know whether it has merged) makes the whole rendering pass with the property
-at `true`, ships codemods (`tools/autoescape/`) and a guide, and states the order of work: core first as a
-compatibility pass, then every plugin, then the property. A plugin template written today has to survive both
-values, and four built-ins do not: `?html` and `?xhtml` are a **ParseException** when the property is `true`,
+The core reads `service.freemarker.templateAutoEscape` (default `false`, `FreeMarkerTemplateService`). A plugin
+template has to render the same with the property at `true` and at `false`, and four built-ins do not: `?html` and `?xhtml` are a **ParseException** when the property is `true`,
 `?no_esc` and `?esc` when it is `false` — the template does not load at all.
 
 | Goal | Do not write | Write |
@@ -202,9 +199,8 @@ Why the capture: under auto-escaping a block capture is *markup* (already-safe H
 not — a string holding HTML gets escaped a second time when a macro prints it. Escaping through a captured
 `<#outputformat "HTML">` block is what `?html` did, and it parses under both settings.
 
-HTML built on the Java side cannot be told apart from text by the template: on the branch the model carries it
-as `HtmlMarkup.of( html )` and the template prints a plain `${x}`. Until that reaches develop, skin templates
-run with an undefined output format and print the value as it is — do not add `?no_esc` there, it is refused.
+HTML built on the Java side cannot be told apart from text by the template. Skin templates run with an undefined
+output format and print the value as it is — do not add `?no_esc` there, it is refused.
 
 Do **not** put `<#ftl output_format="HTML" auto_esc=true>` at the top of plugin templates as a migration
 vehicle: a non-migrated caller feeding a migrated macro double-escapes, and nothing catches it.
