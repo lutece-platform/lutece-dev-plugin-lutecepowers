@@ -27,7 +27,7 @@ if globs:
 else:
     out.append("alwaysApply: true")
 out.append("---")
-open(dst, "w", encoding="utf-8").write("\n".join(out) + "\n" + body.lstrip("\n"))
+open(dst, "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n" + body.lstrip("\n"))
 PY
 done
 echo "Generated $(ls "$DST" | wc -l) Cursor rules in rules-cursor/"

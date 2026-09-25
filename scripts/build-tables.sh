@@ -41,7 +41,8 @@ def splice(path, marker, table):
         raise SystemExit(f"{path}: missing {marker} markers")
     head, rest = text.split(start, 1)
     _, tail = rest.split(end, 1)
-    path.write_text(f"{head}{start}\n{table}\n{end}{tail}", encoding="utf-8")
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{head}{start}\n{table}\n{end}{tail}")
 
 for target in (root / "skills/using-lutecepowers/SKILL.md", root / "README.md"):
     splice(target, "skills", skills_table)
