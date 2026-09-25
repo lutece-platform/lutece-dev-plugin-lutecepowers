@@ -210,7 +210,11 @@ ReflectionTestUtils.setField(myService, "_fieldName", mockValue);
 
 ## Step 8: Additional Test Dependencies (if needed)
 
-If tests use bean validation, JAXB, or Jakarta EL, these dependencies may be needed (Config Migrator should have added them, verify).
+Add them only when a test needs them (PM13), test scope, versions from the parent. The core does not pass them on:
+- a test that renders a JspBean or XPage page needs `jaxb-runtime`: without it the cache manager cannot read its XML
+  configuration and AppInit stops before the macros load, so the page fails on `@pageContainer`;
+- a test that calls an MVC action through `processController` also needs `hibernate-validator` and `expressly`;
+- business-only tests (DAO, Home) need none of them.
 The EL implementation is `org.glassfish.expressly:expressly`, the one the parent manages:
 
 ```xml

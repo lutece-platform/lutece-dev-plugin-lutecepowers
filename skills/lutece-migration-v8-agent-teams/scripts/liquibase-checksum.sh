@@ -2,12 +2,10 @@
 # liquibase-checksum.sh <sql file> [git ref] — the v8 and v9 checksums of each changeset of a formatted SQL file, as it
 # is in the work tree or, with a git ref (the last release tag), as that release shipped it.
 #
-# A changeset that already ran on a site is validated again the next time its script is included: a changed body
-# stops the startup ("ValidationFailedException … LiquibaseRunner failed stopping startup process"). When a released
-# script must change (SQ04: name the columns of a core insert), keep the old checksums valid on the changeset line:
-#   -- changeset myplugin:update_db_myplugin-1.0.0-1.0.1.sql
-#   -- validCheckSum: <v8 of the release>
-#   -- validCheckSum: <v9 of the release>
+# Only a prerun_db_* changeset is replayed on every start (plugin-liquibase filters init_* and old update_* files out
+# before Liquibase sees them): a changed prerun body stops the startup ("ValidationFailedException") unless the former
+# checksums are declared on the changeset line (-- validCheckSum: <v8>, -- validCheckSum: <v9>). Anywhere else, fix a
+# released script with a new changeset (rules/sql-liquibase.md).
 set -euo pipefail
 FILE=${1:?usage: liquibase-checksum.sh <sql file> [git ref]}
 REF=${2:-}

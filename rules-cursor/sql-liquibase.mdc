@@ -55,7 +55,10 @@ ALTER TABLE my_table ADD CONSTRAINT chk_... CHECK ( ... );
   ```
 
   Reference: `lutece-core/src/sql/upgrade/update_db_lutece_core-8.0.1-8.0.2.sql` (`-rev5-pre`, `-rev7-pre`).
-- A released script whose content must change keeps its former checksums valid with one `-- validCheckSum: <checksum>` line per accepted value, right after the `changeset` line. Reference: `gru-plugin-appointment/src/sql/plugins/appointment/plugin/create_db_appointment.sql`.
+- **A released `update_*` script is never edited: roll forward.** A site that already played it is not repaired by a new body, so the fix goes in a new changeset of the next upgrade script, an `UPDATE` when the data can be corrected in place rather than a delete and re-insert (it keeps the rows that reference it). Edit a released upgrade only when its damage cannot be undone afterwards (a customised value it overwrites), and say so in the changeset comment; the sites that already played it are then out of reach, so add the recovery changeset too whenever one is possible.
+- **A plugin never reuses a core id** (an admin right `CORE_*`, a datastore key the core owns): the core's upgrade scripts run after the plugin's (`sql/plugins` sorts before `sql/upgrade`, and `runAfter:core` is refused), so a core script that removes its own row removes the plugin's for good. Give it the plugin prefix, and rename the rows of existing sites with an `UPDATE` changeset (it keeps the users who hold the right).
+- **`create_*` / `init_*` scripts describe a fresh install** and may be edited: plugin-liquibase includes them only on an empty database or for a new plugin, never on a site that already has the component.
+- **No `-- validCheckSum:` outside `prerun_db_*`.** plugin-liquibase filters the files by version before Liquibase sees them: an `init_*` or an `update_*` older than the installed version is not in the changelog, so its checksum is never compared and the directive does nothing, except hiding a changed body from the one case that does replay it (an unstable or snapshot version equal to the installed one, `liquibase.accept.*.versions=true`). Only the `prerun_db_*` files run at every start, unfiltered: there a changed body needs it.
 
 ## One small changeset per concern
 

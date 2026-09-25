@@ -29,6 +29,7 @@
 | PM09 | WARN | Bounded version range (use open) | `,[0-9].*)</version>` | pom.xml |
 | PM10 | FAIL | `org.glassfish:jakarta.el` declared: the EL implementation is `org.glassfish.expressly:expressly`, the one the parent manages | (custom check) | pom.xml |
 | PM11 | WARN | Explicit `<version>` on a parent-managed dependency (`library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, `expressly`, `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`) | (custom check, ignores `<dependencyManagement>`) | pom.xml |
+| PM13 | WARN | web-layer test without the test implementation it needs: a JspBean/XPage test needs `jaxb-runtime` (else AppInit stops before the macros load and the page fails on `@pageContainer`), a `processController` test also needs `hibernate-validator` and `expressly`; business-only tests need none | test sources vs `<artifactId>` in pom.xml | pom.xml, src/test |
 | PM12 | FAIL | Jakarta EE 11 artifact on an EE 10 baseline (`jakarta.annotation-api` 3.x, `weld-junit5` 5.x, `jakarta.el-api` 6.x) | (custom check) | pom.xml |
 
 ## javax Residues (JX)
@@ -154,6 +155,7 @@ alone. `securityTokenEnabled = false` is always a finding, and so is a `@Control
 | WB06 | FAIL | `<admin-feature>` whose `<feature-group>` differs from the group its install SQL gives: a reinstall rebuilds the right from the descriptor and moves it | (cross-file check) | plugins/*.xml |
 | WB07 | WARN | admin feature icon value in `<feature-icon-url>`, which the core digester ignores (it reads `<icon-url>`): a reinstall loses the icon | (cross-file check) | plugins/*.xml |
 | WB08 | WARN | descriptor `<icon-url>` naming a path no webapp carries while the project ships that image elsewhere (a typo such as `iamges/`): the plugin shows the generic icon | (cross-file check) | plugins/*.xml |
+| WB09 | WARN | plugin admin right named `CORE_*`: it shares the id with the core, so a core upgrade that deletes its own right deletes the plugin's, and plugin scripts run before core upgrade scripts (`sql/plugins` < `sql/upgrade`, `runAfter:core` refused) | `<feature-id>CORE_` in a plugin descriptor | webapp/WEB-INF/plugins/*.xml |
 
 **WB05** — a `<filters>` entry of the plugin descriptor whose `<url-pattern>` is deeper than `/rest/*`. It cannot
 fire in v8: `MainFilter.matchMapping` compares the pattern to `request.getServletPath( )`, which is `/rest` for
@@ -199,6 +201,7 @@ after the gate.
 | SQ04 | FAIL | `INSERT INTO core_x VALUES (…)` without a column list: fails as soon as the core adds a column | `INSERT +INTO +core_[a-z0-9_]+ +VALUES` | src/sql |
 | SQ05 | FAIL | value concatenated into a SQL literal in a DAO (`"… LIKE '%" + str`): injection point | `'\" +` in *DAO.java | *DAO.java |
 | SQ06 | FAIL | Liquibase-headed SQL file absent from `WEB-INF/classes/sql` of the assembled webapp: the lutece-maven-plugin copies only a name it parses (`update_db_<plugin>-<from>-<to>.sql`, digits and dots), plugin-liquibase reads nothing else | (assembly check) | src/sql |
+| SQ07 | WARN | `-- validCheckSum:` in a script other than `prerun_db_*`: plugin-liquibase filters `init_*` and old `update_*` files out before Liquibase, so the directive never helps and hides a changed body; a released upgrade is fixed by a new changeset | `^--\s*validCheckSum` outside `prerun_db_*` | src/sql |
 
 **SQ02** — a fresh install runs the creation script and is green; an existing site runs only the
 `update_db_*` scripts newer than its recorded version. An older upgrade that (re)creates the table

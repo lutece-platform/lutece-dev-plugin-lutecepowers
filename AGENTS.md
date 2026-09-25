@@ -40,6 +40,7 @@ bash tests/scripts/test-version-tags.sh
 bash tests/scripts/test-sql-literal.sh
 bash tests/scripts/test-structure-checks.sh
 bash tests/scripts/test-e2e-mvc-inheritance.sh
+bash tests/scripts/test-sql-rights-checks.sh
 claude plugin validate .
 ```
 

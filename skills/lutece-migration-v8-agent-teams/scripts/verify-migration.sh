@@ -242,6 +242,24 @@ else
     emit "PM11" "WARN" "Explicit version on a parent-managed dependency (remove it)" "$PM11_COUNT" "$PM11_MATCHES"
 fi
 
+# PM13: web-layer tests need test-scoped implementations the core does not pass on, and only them. A test that renders
+# a JspBean or XPage page needs jaxb-runtime: without it the cache manager cannot read its XML configuration and AppInit
+# stops before AppTemplateService.initMacros, so the page fails on a missing macro (@pageContainer...). A test that
+# calls an MVC action through processController also needs hibernate-validator and expressly (bean validation).
+# Business-only tests (DAO, Home) need none of them.
+PM13_MATCHES=""
+if [ -f pom.xml ] && [ -d src/test ]; then
+    NEEDED=""
+    grep -rqlE "extends +LuteceTestCase" src/test 2>/dev/null && grep -rqlE "\b[A-Za-z]+(JspBean|XPage)\b" src/test --include="*.java" 2>/dev/null && NEEDED="jaxb-runtime"
+    grep -rqlE "processController *\(" src/test --include="*.java" 2>/dev/null && NEEDED="$NEEDED hibernate-validator expressly"
+    for dep in $NEEDED; do
+        grep -q "<artifactId>$dep</artifactId>" pom.xml || PM13_MATCHES="${PM13_MATCHES}${PM13_MATCHES:+$'\n'}pom.xml: no test dependency $dep"
+    done
+fi
+COUNT=0; [ -n "$PM13_MATCHES" ] && COUNT=$(echo "$PM13_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "PM13" "PASS" "Web-layer tests have the test implementations they need" 0
+else emit "PM13" "WARN" "Test dependency missing: a JspBean/XPage test needs jaxb-runtime (else the test startup stops before the macros load, pages fail on @pageContainer), a processController test also needs hibernate-validator and expressly (teammates/test-migrator.md step 8)" "$COUNT" "$PM13_MATCHES"; fi
+
 if [ "$PM12_COUNT" -eq 0 ]; then
     emit "PM12" "PASS" "No Jakarta EE 11 artifact (EE 10 baseline)" 0
 else
@@ -772,7 +790,7 @@ if ! grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/nul
     # them (XT03 checks the guard): it needs no dependency and is not counted here.
     SQL_XT=$({ find src/sql -name '*.sql' 2>/dev/null | sort | while read -r f; do
         awk 'BEGIN{IGNORECASE=1; g=0; found=0} /^--[[:space:]]*changeset/ {g=0} /^--[[:space:]]*precondition-sql-check/ {g=1}
-             /^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER|CREATE)[^;]*core_style/ && !g {found=1} END{exit !found}' "$f" && echo "$f"
+             /^[[:space:]]*(INSERT[[:space:]]+INTO|UPDATE|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE)[[:space:]]+core_style/ && !g {found=1} END{exit !found}' "$f" && echo "$f"
     done; } | sed 's/$/: writes core_style* tables the core no longer has (plugin-xmltransformer, or drop with the XSL portlet)/')
     [ -n "$SQL_XT" ] && XT01_MATCHES="$XT01_MATCHES${XT01_MATCHES:+$'\n'}$SQL_XT"
 fi
@@ -786,7 +804,7 @@ else emit "XT01" "FAIL" "XSL services or core_style* used without plugin-xmltran
 XT02_MATCHES=""
 if grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null && [ -d src/sql ]; then
     XT02_MATCHES=$(find src/sql -name '*.sql' -not -path '*/upgrade/*' | sort | while read -r f; do
-        grep -qE '^[[:space:]]*(INSERT|UPDATE|DELETE)[^;]*core_style' "$f" || continue
+        grep -qE '^[[:space:]]*(INSERT[[:space:]]+INTO|UPDATE|DELETE[[:space:]]+FROM)[[:space:]]+core_style' "$f" || continue
         grep -qiE '^--[[:space:]]*lutece runAfter:xmltransformer' "$f" || echo "$f: writes core_style* but has no '-- lutece runAfter:xmltransformer' header"
     done)
 fi
@@ -803,7 +821,7 @@ if [ -d src/sql ]; then
         awk -v F="$f" 'BEGIN{IGNORECASE=1; guarded=0}
             /^--[[:space:]]*changeset/ {guarded=0}
             /^--[[:space:]]*precondition-sql-check/ {guarded=1}
-            /^[[:space:]]*(INSERT|UPDATE|DELETE|ALTER)[^;]*core_style/ && !guarded {print F": "NR": statement on core_style* in a changeset without precondition-sql-check"}' "$f"
+            /^[[:space:]]*(INSERT[[:space:]]+INTO|UPDATE|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE)[[:space:]]+core_style/ && !guarded {print F": "NR": statement on core_style* in a changeset without precondition-sql-check"}' "$f"
     done)
 fi
 COUNT=0; [ -n "$XT03_MATCHES" ] && COUNT=$(echo "$XT03_MATCHES" | wc -l)
@@ -1017,7 +1035,15 @@ if [ -d "src/sql" ]; then
 fi
 COUNT=0; [ -n "$SQ04_MATCHES" ] && COUNT=$(echo "$SQ04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ04" "PASS" "INSERTs into core tables name their columns" 0
-else emit "SQ04" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column. In a script already released with a liquibase header, keep the old checksums valid: liquibase-checksum.sh <file> <release tag>, then -- validCheckSum: lines" "$COUNT" "$SQ04_MATCHES"; fi
+else emit "SQ04" "FAIL" "INSERT into a core table without column list: breaks when the core adds a column. Name the columns in create_/init_ scripts (fresh installs only); a released update_ script is left as it is (rules/sql-liquibase.md: roll forward, no validCheckSum)" "$COUNT" "$SQ04_MATCHES"; fi
+echo ""
+SQ07_MATCHES=""
+if [ -d src/sql ]; then
+    SQ07_MATCHES=$(grep -rniE "^--[[:space:]]*validCheckSum" src/sql --include="*.sql" 2>/dev/null | grep -v "/prerun_db_[^/]*\.sql:") || SQ07_MATCHES=""
+fi
+COUNT=0; [ -n "$SQ07_MATCHES" ] && COUNT=$(echo "$SQ07_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "SQ07" "PASS" "No validCheckSum outside prerun_db_* scripts" 0
+else emit "SQ07" "WARN" "validCheckSum outside a prerun_db_* script: plugin-liquibase never replays these files on an existing site, the directive only hides a changed body (rules/sql-liquibase.md)" "$COUNT" "$SQ07_MATCHES"; fi
 echo ""
 
 # I18N03: a key the default bundle carries and _fr does not, or the reverse (the two languages the core ships): the
@@ -1261,6 +1287,17 @@ WB08_WARN=$(echo "$WB08_MATCHES" | sed -n 's/^SHIPPED //p')
 COUNT=0; [ -n "$WB08_WARN" ] && COUNT=$(echo "$WB08_WARN" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB08" "PASS" "Every descriptor icon the project ships is named by its path" 0
 else emit "WB08" "WARN" "Descriptor icon path the project does not ship while it ships that image elsewhere (a typo): the plugin shows the generic icon" "$COUNT" "$WB08_WARN"; fi
+
+# WB09: a plugin declaring an admin right with the core's CORE_ prefix shares that id with the core: a core upgrade that
+# removes its own right removes the plugin's too, and plugin install scripts run before the core upgrade scripts
+# (sql/plugins sorts before sql/upgrade, and runAfter:core is refused), so the plugin cannot put it back.
+WB09_MATCHES=""
+if [ -d webapp/WEB-INF/plugins ] && ! grep -q "<packaging>lutece-core</packaging>" pom.xml 2>/dev/null; then
+    WB09_MATCHES=$(grep -HnoE "<feature-id>CORE_[A-Z0-9_]+</feature-id>" webapp/WEB-INF/plugins/*.xml 2>/dev/null | sed 's#<feature-id>\(.*\)</feature-id>#\1: a plugin right named like a core one (use the plugin prefix, rename existing rows with an UPDATE changeset)#')
+fi
+COUNT=0; [ -n "$WB09_MATCHES" ] && COUNT=$(echo "$WB09_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "WB09" "PASS" "No plugin right reuses the core CORE_ prefix" 0
+else emit "WB09" "WARN" "Plugin right with the CORE_ prefix: a core upgrade removing its own right removes this one, and the plugin cannot restore it (its scripts run first)" "$COUNT" "$WB09_MATCHES"; fi
 echo ""
 
 # ST07: a production class whose name matches the surefire test patterns (Test*, *Test, *Tests, *TestCase).
