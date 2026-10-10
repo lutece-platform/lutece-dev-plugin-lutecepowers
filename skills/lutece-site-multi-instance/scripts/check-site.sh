@@ -21,6 +21,7 @@ X=$CFG/cluster.xml
 check "Liberty: sessionCache-1.0 feature" "$X" "sessionCache-1.0"
 check "Liberty: session library on every jar of the war" "$X" 'includes="\*\.jar"'
 check "Liberty: writeContents=GET_AND_SET_ATTRIBUTES" "$X" 'writeContents="GET_AND_SET_ATTRIBUTES"'
+check "Liberty: persistTimeout above the load balancer keep-alive" "$SITE/src/main/liberty/config/server.xml" "persistTimeout"
 check "Liberty: Lutece cache on the Hazelcast client" "$X" "HazelcastClientCachingProvider"
 if [ -f "$CFG/cluster.xml" ]; then
   check "server.xml: cluster.xml included through cluster.config" "$CFG/server.xml" 'location="${server.config.dir}/${cluster.config}"'

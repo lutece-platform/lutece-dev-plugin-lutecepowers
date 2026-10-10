@@ -9,3 +9,9 @@
 <library id="jdbcLib">
     <fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="mariadb-java-client-*.jar"/>
 </library>
+
+<!-- Persistent connections kept longer than the load balancer ones (ingress-nginx: 60 s; Liberty default: 30 s): otherwise the
+     load balancer reuses a connection Liberty has just closed and a POST (not retried) gets a 502 -->
+<httpEndpoint host="*" httpPort="${http.port}" httpsPort="${https.port}" id="defaultHttpEndpoint">
+    <httpOptions persistTimeout="75s" />
+</httpEndpoint>
