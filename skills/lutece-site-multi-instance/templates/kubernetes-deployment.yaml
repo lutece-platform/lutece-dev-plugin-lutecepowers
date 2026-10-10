@@ -28,6 +28,9 @@ spec:
           env:
             - name: MP_CONFIG_PROFILE
               value: <profile>
+            # Liberty thread pool: 2 threads per CPU of the limit (server.xml: executor bounded by executor.threads)
+            - name: EXECUTOR_THREADS
+              value: "4"
             # Liquibase runs from one instance only (a job or a single replica), never from every replica
             - name: JVM_ARGS
               value: "-Dliquibase.enabled.at.startup=false"
