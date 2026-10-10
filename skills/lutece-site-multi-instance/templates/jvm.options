@@ -1,0 +1,17 @@
+# The JCache Hazelcast provider loaded by sessionCache-1.0 starts as a MEMBER (in-line topology).
+# Without this system property the generic provider starts as a client.
+-Dhazelcast.jcache.provider.type=member
+
+# Kubernetes Service of the site pods (port 5701), used by the member to discover the other pods.
+# Overridable by the deployment: JVM_ARGS="-Dhz.service-name=..." (added after jvm.options).
+-Dhz.service-name=<site>-hazelcast
+
+# Hazelcast access to the Java internal API (otherwise a startup warning and degraded performance).
+# One option per line, --option=value form; the last one is specific to OpenJ9 (Semeru images).
+--add-modules=java.se
+--add-exports=java.base/jdk.internal.ref=ALL-UNNAMED
+--add-opens=java.base/java.lang=ALL-UNNAMED
+--add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+--add-opens=java.management/sun.management=ALL-UNNAMED
+--add-opens=jdk.management/com.sun.management.internal=ALL-UNNAMED
+--add-exports=jdk.management/com.ibm.lang.management.internal=ALL-UNNAMED

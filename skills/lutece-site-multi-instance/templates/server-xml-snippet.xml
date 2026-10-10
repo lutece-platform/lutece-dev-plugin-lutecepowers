@@ -1,0 +1,11 @@
+<!-- In server.xml, instead of the sessionCache feature and the Hazelcast elements:
+     multi-instance configuration in cluster.xml. The local profile of the pom (mvn liberty:run -Dlocal) writes
+     cluster.config=none.xml in bootstrap.properties: the optional include is skipped and Lutece uses Ehcache.
+     The value must come from bootstrap.properties: a configDropins variable is not read for an include. -->
+<variable name="cluster.config" defaultValue="cluster.xml" />
+<include location="${server.config.dir}/${cluster.config}" optional="true" />
+
+<!-- JDBC driver only, not every jar of the war -->
+<library id="jdbcLib">
+    <fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="mariadb-java-client-*.jar"/>
+</library>

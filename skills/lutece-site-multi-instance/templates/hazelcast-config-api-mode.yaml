@@ -1,0 +1,26 @@
+# Hazelcast member started by sessionCache-1.0 (HTTP session), one per replica.
+hazelcast:
+  # Site specific: two sites of the same namespace must not merge their clusters.
+  cluster-name: <site>
+  properties:
+    # Pod shutdown: hand the partitions (sessions) over before leaving. The default TERMINATE leaves without transfer.
+    hazelcast.shutdownhook.policy: GRACEFUL
+    # Seconds; keep it below terminationGracePeriodSeconds of the pod (60 recommended).
+    hazelcast.graceful.shutdown.max.wait: 45
+    # Near cache of the clients (Lutece cache): invalidations sent immediately instead of batched (seconds of staleness).
+    hazelcast.cache.invalidation.batch.enabled: false
+  network:
+    # Fixed port: the Kubernetes Service and the Lutece cache client (127.0.0.1:5701) expect it.
+    port:
+      auto-increment: false
+      port: 5701
+    join:
+      multicast:
+        enabled: false
+      kubernetes:
+        enabled: true
+        # No namespace: the namespace of the pod. Default in jvm.options, overridable with JVM_ARGS="-Dhz.service-name=...".
+        service-name: ${hz.service-name}
+        service-port: 5701
+  # No "cache:" section for the Lutece caches: a declared cache would be created as soon as Lutece asks for it by name,
+  # bypassing the enabled/disabled state Lutece keeps in database.

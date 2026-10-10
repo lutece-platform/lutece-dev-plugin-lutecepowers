@@ -1,0 +1,22 @@
+# Hazelcast client of the Lutece application cache (lutece.cache.jcache.*, cluster.xml).
+hazelcast-client:
+  # Same cluster-name as the member.
+  cluster-name: <site>
+  network:
+    # The client connects to the member of its own pod, then discovers the other members from the cluster topology:
+    # no Kubernetes API, no rights.
+    cluster-members:
+      - 127.0.0.1:5701
+    redo-operation: true
+  # Near cache: local copy of the entries read, invalidated on every change (immediate with
+  # hazelcast.cache.invalidation.batch.enabled=false on the member). Page latency about halved.
+  near-cache:
+    "*":
+      in-memory-format: OBJECT
+      invalidate-on-change: true
+      time-to-live-seconds: 0
+      max-idle-seconds: 0
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: ENTRY_COUNT
+        size: 10000

@@ -1,0 +1,53 @@
+<!-- In the site pom.xml. Hazelcast releases after 5.7.0 are published on the Hazelcast repository only:
+<repository>
+    <id>hazelcast</id>
+    <url>https://repository.hazelcast.com/release</url>
+    <snapshots><enabled>false</enabled></snapshots>
+</repository>
+-->
+<profiles>
+    <!-- Multi-instance packaging, active by default: Hazelcast carries the HTTP session (sessionCache-1.0) and the
+         Lutece JCache cache; Ehcache, local to the JVM, is removed from the war. Activated by a property (not
+         activeByDefault) so that it stays active when another profile is requested (-Pcontainer-runtime).
+         Disabled by -Dlocal. -->
+    <profile>
+        <id>cluster</id>
+        <activation>
+            <property>
+                <name>!local</name>
+            </property>
+        </activation>
+        <dependencies>
+            <dependency>
+                <groupId>com.hazelcast</groupId>
+                <artifactId>hazelcast</artifactId>
+                <!-- Latest version supported by the OpenLiberty sessionCache-1.0 feature of the image -->
+                <version>5.7.2</version>
+                <scope>runtime</scope>
+            </dependency>
+            <!-- Ehcache neutralised: same coordinates as the lutece-core dependency, scope provided -->
+            <dependency>
+                <groupId>org.ehcache</groupId>
+                <artifactId>ehcache</artifactId>
+                <version>3.12.0</version>
+                <classifier>jakarta</classifier>
+                <scope>provided</scope>
+            </dependency>
+        </dependencies>
+    </profile>
+
+    <!-- Local single instance (mvn ... -Dlocal): Ehcache of the core, no Hazelcast. -->
+    <profile>
+        <id>local</id>
+        <activation>
+            <property>
+                <name>local</name>
+            </property>
+        </activation>
+        <properties>
+            <!-- liberty:run writes cluster.config=none.xml in bootstrap.properties: server.xml does not include cluster.xml.
+                 A liberty.var.* variable is not enough: it is not read for an include. -->
+            <liberty.bootstrap.cluster.config>none.xml</liberty.bootstrap.cluster.config>
+        </properties>
+    </profile>
+</profiles>
