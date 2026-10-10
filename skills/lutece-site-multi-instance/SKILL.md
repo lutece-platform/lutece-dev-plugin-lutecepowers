@@ -124,6 +124,11 @@ attachment field.
   in its namespace (`templates/kubernetes-rbac.yaml`).
 - `terminationGracePeriodSeconds` above `hazelcast.graceful.shutdown.max.wait` (45 s → 60 s), a readiness probe and a short
   `preStop` so that the pod leaves the Service before OpenLiberty stops (otherwise `The cache closed` errors during shutdown).
+- Probe timeouts: readiness `timeoutSeconds: 5`, liveness `timeoutSeconds: 10` (template). With the 1 s default, the
+  replica left alone with the whole load after the loss of the other one answered its health checks late (they wait in the
+  bounded thread pool) and was killed by its liveness probe: one crash took both replicas down (reproduced on minikube).
+- Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
+  of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
 
 ## Static checks (run after writing)

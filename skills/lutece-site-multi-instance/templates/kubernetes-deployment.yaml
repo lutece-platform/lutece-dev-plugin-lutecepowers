@@ -58,12 +58,18 @@ spec:
               path: /health/ready
               port: http
             periodSeconds: 5
+            # A loaded pod answers slowly (the health check waits in the bounded thread pool): leave it the time to
+            # answer; readiness takes it out of the Service, it does not kill it
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health/live
               port: http
             periodSeconds: 10
             failureThreshold: 6
+            # Liveness detects a frozen pod, not a slow one: with the 1 s default, the pod left alone with the whole load
+            # after the loss of the other one was killed in turn (cascade)
+            timeoutSeconds: 10
           lifecycle:
             # Leave the Service before OpenLiberty stops
             preStop:
