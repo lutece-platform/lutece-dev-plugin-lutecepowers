@@ -29,6 +29,7 @@ fi
 
 M=$CFG/hazelcast-config-api-mode.yaml
 check "member: graceful shutdown" "$M" "hazelcast.shutdownhook.policy: GRACEFUL"
+check "member: no JVM shutdown hook (closed by OpenLiberty after the application)" "$M" "hazelcast.shutdownhook.enabled: false"
 check "member: immediate near-cache invalidations" "$M" "hazelcast.cache.invalidation.batch.enabled: false"
 check "member: fixed port (auto-increment false)" "$M" "auto-increment: false"
 check "member: Kubernetes discovery" "$M" "kubernetes:"

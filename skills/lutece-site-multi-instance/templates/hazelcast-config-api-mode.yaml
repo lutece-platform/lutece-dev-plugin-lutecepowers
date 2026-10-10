@@ -7,6 +7,10 @@ hazelcast:
     hazelcast.shutdownhook.policy: GRACEFUL
     # Seconds; keep it below terminationGracePeriodSeconds of the pod (60 recommended).
     hazelcast.graceful.shutdown.max.wait: 45
+    # No JVM shutdown hook: it closed the member while OpenLiberty was still serving the requests in flight (500 errors
+    # during a rolling update). OpenLiberty closes the member when it stops sessionCache-1.0, after the application,
+    # and HazelcastInstance.shutdown( ) is still graceful (partition migration, bounded by graceful.shutdown.max.wait).
+    hazelcast.shutdownhook.enabled: false
     # Near cache of the clients (Lutece cache): invalidations sent immediately instead of batched (seconds of staleness).
     hazelcast.cache.invalidation.batch.enabled: false
   network:

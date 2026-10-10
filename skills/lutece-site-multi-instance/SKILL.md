@@ -61,6 +61,9 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   the deployment could not change it.
 - **No member-side `cache:` configuration for the Lutece caches**: the client creates a declared cache as soon as Lutece asks for
   it by name, bypassing the enabled/disabled state Lutece keeps in database.
+- **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
+  serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
+  7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
 - **`hazelcast.cache.invalidation.batch.enabled: false`** on the member: otherwise near-cache invalidations are batched and a
   change takes seconds to be visible on the other replicas.
 - **Liquibase**: run migrations from one instance only. Disable at startup with `-Dliquibase.enabled.at.startup=false` in
