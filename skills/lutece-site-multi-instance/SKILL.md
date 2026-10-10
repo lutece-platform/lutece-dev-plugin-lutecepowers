@@ -45,6 +45,7 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 | `webapp/WEB-INF/plugins/plugins.dat` | generated | Plugins installed on a fresh database |
 | `Dockerfile` | `Dockerfile` | Configuration copied, war copied, `configure.sh` |
 | Kubernetes (chart) | `kubernetes-rbac.yaml` | Service on 5701, Role/RoleBinding for the discovery |
+| Kubernetes (chart) | `kubernetes-deployment.yaml` | Replicas, probes, preStop, grace period, CPU limit above request |
 
 ### Rules that are easy to get wrong (all observed)
 
@@ -106,6 +107,9 @@ bash ${CLAUDE_PLUGIN_ROOT}/skills/lutece-site-multi-instance/scripts/check-site.
 Every line must be `OK`; fix the `KO` lines before handing over.
 
 ## Runtime verification (when the user asks to prove it)
+
+Over plain HTTP on a host other than `localhost` (a NodePort), the CSP `upgrade-insecure-requests` of the security headers makes the
+browser load the resources over HTTPS and the back office breaks: test behind TLS or through `localhost` (port-forward, relay).
 
 1. Two replicas start; the logs show `Members {size:2` and the client `Client Connectivity` to both members.
 2. A multi-step form completed with each step served by a different replica (cookie or round robin): no "session expired".
