@@ -72,7 +72,10 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   `DATABASECHANGELOGLOCK` locked: stop every replica, release the lock, start one replica.
 - **`plugins.dat`**: on a fresh database only the plugins listed there are installed. A dependency may ship its own file that
   overwrites the core one: the site ships its own (`<plugin>.installed=1` per plugin; names with spaces cannot be listed).
-- **Lucene indexes** (forms internal indexer…): on a shared volume (`ReadWriteMany`), or one index per pod.
+- **Forms Lucene index on a shared volume** (`ReadWriteMany`, mounted on the parent directory `/opt/data/lucene`, with
+  `forms.internalIndexer.lucene.indexInWebapp=false`). Not optional: the back office authorization on a form response searches the
+  local index, so with one index per pod the response detail shows "access denied" as soon as the request changes pod (verified on
+  minikube).
 - **Quartz**: every daemon that must run once per cluster is listed with its `daemon-id` (from `core.xml` and each plugin `.xml`).
 
 ## Plugin prerequisites (report, do not patch)

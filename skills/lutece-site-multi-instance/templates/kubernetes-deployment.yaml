@@ -66,3 +66,12 @@ spec:
             preStop:
               exec:
                 command: ["sleep", "10"]
+          volumeMounts:
+            # Parent directory of the Forms Lucene index (indexPath=/opt/data/lucene/plugins/forms/index)
+            - name: lucene
+              mountPath: /opt/data/lucene
+      volumes:
+        # Shared by every replica: the back office authorization on a response searches this index
+        - name: lucene
+          persistentVolumeClaim:
+            claimName: <site>-lucene   # ReadWriteMany
