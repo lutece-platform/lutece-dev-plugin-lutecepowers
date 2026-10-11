@@ -134,6 +134,15 @@ attachment field.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+- Warm-up of a new pod (optional, measured): the shared class cache that `configure.sh` builds only holds the startup path. A
+  layer trained on real traffic (container started with `-Xshareclasses:…,createLayer -Xscmx100m`, a few minutes of the site
+  journeys, layer file copied into the image) halved the p95 of the first minute of the new pods during a rolling restart
+  (5.4 s to 2.7 s, 2 pairs on minikube) and the time to ready on podman (68 s to 36 s). Needs a database at image build time.
+  A cold JVM put under a saturating load at once can stay slow for minutes (1.2 req/s instead of 11 on podman): warm it with
+  a lower load first. Liberty InstantOn (`beforeAppStart`) cut the startup CPU by 43 % but not the time to ready, the Lutece
+  startup (database, Hazelcast) happening after the checkpoint; it needs CRIU capabilities at build and run time.
+- Test clusters: the memory of the minikube container (`docker inspect minikube`, 4 GB by default) is not seen by Kubernetes.
+  Three replicas of 1.6 GiB, or two plus the rolling update surge, make it swap and every latency measurement is wrong.
 - Time zone set consistently or not at all. Lutece writes `java.sql.Timestamp` values through the MariaDB driver in the JVM time
   zone, the server reads them in its session time zone, while some columns are filled by `CURRENT_TIMESTAMP` on the server side.
   `TZ=Europe/Paris` on the pods alone (database in UTC) stores the dates written by Java 2 h in the future next to correct
