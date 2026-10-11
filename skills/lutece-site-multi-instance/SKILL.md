@@ -134,6 +134,14 @@ attachment field.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+- Time zone set consistently or not at all. Lutece writes `java.sql.Timestamp` values through the MariaDB driver in the JVM time
+  zone, the server reads them in its session time zone, while some columns are filled by `CURRENT_TIMESTAMP` on the server side.
+  `TZ=Europe/Paris` on the pods alone (database in UTC) stores the dates written by Java 2 h in the future next to correct
+  server-side dates (measured: new `forms_response.creation_date` at now + 2 h, new `forms_form.creation_date` correct). Either
+  keep everything in UTC, or set the pods (`TZ`, `-Duser.timezone`) and the database session together, for instance with
+  `connectionTimeZone=Europe/Paris&forceConnectionTimeZoneToSession=true` on the JDBC URL (needs the time zone tables of MariaDB).
+  Dates computed by the browser (form availability "today") are local dates: with a UTC server a form published between
+  00:00 and 02:00 Paris time is not listed until 02:00.
 - Ingress replays a request on another pod when the connection to a pod fails, never a request already sent
   (`proxy-next-upstream: error timeout`, without `non_idempotent`; template). Real crash of one pod (SIGKILL) under 20 k6 users on
   minikube: 5.6 to 6.9 % of the journeys failed without the replay (502 on connection refused), 0 to 0.6 % with it; the remaining
