@@ -46,6 +46,7 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 | `Dockerfile` | `Dockerfile` | Configuration copied, war copied, `configure.sh` |
 | Kubernetes (chart) | `kubernetes-rbac.yaml` | Service on 5701, Role/RoleBinding for the discovery |
 | Kubernetes (chart) | `kubernetes-deployment.yaml` | Replicas, probes, preStop, grace period, CPU limit above request |
+| Kubernetes (chart) | `kubernetes-ingress.yaml` | No affinity, replay on connection errors only |
 
 ### Rules that are easy to get wrong (all observed)
 
@@ -130,6 +131,10 @@ attachment field.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+- Ingress replays a request on another pod when the connection to a pod fails, never a request already sent
+  (`proxy-next-upstream: error timeout`, without `non_idempotent`; template). Real crash of one pod (SIGKILL) under 20 k6 users on
+  minikube: 5.6 to 6.9 % of the journeys failed without the replay (502 on connection refused), 0 to 0.6 % with it; the remaining
+  errors are POSTs that were in flight on the killed pod.
 
 ## Static checks (run after writing)
 

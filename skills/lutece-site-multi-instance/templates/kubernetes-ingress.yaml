@@ -1,0 +1,32 @@
+# Ingress (ingress-nginx) of a multi-instance Lutece site. No session affinity: the HTTP session is in Hazelcast.
+# Replace <site> and <host>.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: <site>
+  annotations:
+    # Replay a request on another pod ONLY when the connection to the pod failed (pod killed, endpoint not yet removed).
+    # Never add non_idempotent: a POST already sent (form step, workflow action) must not be replayed.
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "2"
+    # Uploads of the Forms questions
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    # Above the longest page (multiview, PDF export)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+# OpenShift Route (HAProxy): the router already retries a failed connection on another pod (retries + option redispatch);
+# do not enable a retry on HTTP status codes for the same reason as non_idempotent.
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: <host>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: <site>
+                port:
+                  name: http
