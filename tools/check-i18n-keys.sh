@@ -10,7 +10,9 @@
 # never loaded belongs to a plugin this webapp does not carry and is listed apart too.
 # The assembled webapp is a precondition: without it the bundles of the dependencies are missing. The script assembles
 # the project itself (ensure-exploded.sh) and stops with exit 2 when it cannot. --no-exploded accepts the reference
-# clone instead and says so. Exit code 0 when every key resolves, 1 when one does not, 2 when the check did not run.
+# clone instead and says so. A project without webapp/ (a jar library) has no bundle nor template of its own: the check
+# is not applicable and assembles nothing. Exit code 0 when every key resolves, 1 when one does not, 2 when the check
+# did not run.
 set -euo pipefail
 
 ROOT="$(cd "${1:-.}" && pwd)"
@@ -23,6 +25,11 @@ assembly() {
     [ -d "$ROOT/webapp/WEB-INF/templates/admin/themes/tabler" ] && echo "$ROOT/webapp/WEB-INF/templates"
     return 0
 }
+
+if [ ! -d "$ROOT/webapp" ]; then
+    echo "I18NKEYS files=0 keys=0 unresolved=0 dynamic=0 foreignBundle=0 bundles=0 (not applicable: no webapp/ in this project, its keys resolve in the webapp that ships it)"
+    exit 0
+fi
 
 if ! grep -rqsE "#i18n\{|I18nService\." --include='*.html' --include='*.ftl' --include='*.js' --include='*.java' --include='*.xml' --include='*.sql' "$ROOT"; then
     echo "I18NKEYS files=0 keys=0 unresolved=0 dynamic=0 foreignBundle=0 bundles=0 (this project references no i18n key)"

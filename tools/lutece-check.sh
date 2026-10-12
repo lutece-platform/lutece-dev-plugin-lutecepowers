@@ -82,6 +82,7 @@ echo "== scan-template-design"
 C="$OUT/scanner.clean.txt"
 w=$(grep -c " WARN " "$C"); i=$(grep -c " INFO " "$C")
 echo "   $w WARN, $i INFO"
+grep "^SCAN not applicable" "$C" | sed 's/^/   /'
 grep " WARN " "$C" | sed 's/^/   /' | cut -c1-160
 [ "$i" -eq 0 ] || grep " INFO " "$C" | awk '{print $2}' | sort | uniq -c | sort -rn | awk '{printf "   INFO %s x%s\n", $2, $1}'
 [ "$scan_rc" -eq 0 ] || { stopped "$C"; blocking=1; }

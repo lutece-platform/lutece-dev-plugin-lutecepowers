@@ -10,6 +10,8 @@ Macro names, macro signatures and Tabler icon names are read from the **assemble
 core, every declared dependency and the project, at the versions this project really resolves. A project that
 ships both macro families (the core) is its own source. `--no-exploded` falls back on the reference clone and
 must be declared in the report, because a clone can be another version of the core.
+A project with neither webapp/ nor src/sql (a jar library) has nothing to scan: the scan says it is not applicable
+and assembles nothing.
 Report on stdout: human text by default, JSON with --json, one line per finding with --flat; only what was asked
 for, so the output can be redirected to a file. Progress and diagnostics go to stderr. Exit code 0 when the scan
 ran, 2 when it could not (the project would not assemble): a caller must tell "nothing found" from "not checked".
@@ -1201,6 +1203,9 @@ def main():
     as_json = "--json" in sys.argv
     flat = "--flat" in sys.argv
     warn_only = "--warn-only" in sys.argv
+    if not os.path.isdir(os.path.join(root, "webapp")) and not walk(root, SQL, ".sql"):
+        print("SCAN not applicable: no webapp/ and no src/sql in this project, nothing to scan nor to assemble")
+        return 0
     know = Knowledge(root)
     if know.source == "reference clone" and "--no-exploded" not in sys.argv:
         print("no assembled webapp yet: running ensure-exploded.sh (mvn lutece:exploded-lite, it writes target/)", file=sys.stderr)

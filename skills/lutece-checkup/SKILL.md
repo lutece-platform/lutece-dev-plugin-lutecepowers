@@ -16,7 +16,8 @@ bash ${LUTECEPOWERS_ROOT}/tools/lutece-check.sh <project-dir>
 ```
 
 A few seconds once the project is assembled (the scanner and the i18n check assemble it with
-`mvn lutece:exploded-lite` the first time). Full outputs land in `<project>/target/checkup/`.
+`mvn lutece:exploded-lite` the first time; a project without `webapp/`, a jar library, is not applicable to them and
+is not assembled). Full outputs land in `<project>/target/checkup/`.
 Exit 1 means at least one blocking finding.
 
 ## 2. Report
