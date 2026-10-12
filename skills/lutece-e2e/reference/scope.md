@@ -126,6 +126,11 @@ The detection rules avoid the obvious proxies, which are wrong:
 applications, RBAC resources, dashboards, portlets, daemons, servlets, filters, page includes, macro and asset
 files), the code counts, the admin templates **no Java names** (macros, includes — or a dead screen), and the
 testable URLs. Read it first: it tells the agent what this target actually exposes, so the scenarios aim at it.
+The elements without a screen of their own (`components`) are listed with the page that shows them: each page include
+of the descriptors with the home page (`jsp/site/Portal.jsp?page_id=1`), each group of site properties (a class
+implementing `ISitePropertiesGroup` or `ILocalizedSitePropertiesGroup`) with `jsp/admin/ManageProperties.jsp`. The
+coverage judges each on that page (proven by a green scenario standing behind it, reached, or to do) and the summary
+lists them apart; they never enter the screen suites nor the coverage gate, since the page is the core's.
 
 **Server-side exceptions are attributed to the artefact, never to the platform it runs inside.** An exception
 counts only when the artefact is named in its own log entry (message + stack, never a fixed window): its Java

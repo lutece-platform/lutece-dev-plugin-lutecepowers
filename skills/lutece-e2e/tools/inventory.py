@@ -523,6 +523,31 @@ def declarations(root):
     return counts
 
 
+PROPERTIES_GROUP = re.compile(r"class\s+(\w+)[^{]*\bimplements\b[^{]*\bI(?:Localized)?SitePropertiesGroup\b")
+"""A group of site properties: the core lists it as a tab of jsp/admin/ManageProperties.jsp."""
+
+
+def components(root):
+    """Elements registered by descriptor or by CDI that have no screen of their own, each with the page that shows
+    them: the page includes of the descriptors (rendered in every front-office page, the home page standing for them)
+    and the groups of site properties (a tab of the core's ManageProperties.jsp)."""
+    out = []
+    for xml in root.rglob("WEB-INF/plugins/*.xml"):
+        if in_build(xml, root):
+            continue
+        for block in re.findall(r"<page-include-service>(.*?)</page-include-service>", descriptor_text(xml), re.S):
+            sid = (re.search(r"<page-include-service-id>\s*([^<]+?)\s*<", block) or [None, None])[1]
+            cls = (re.search(r"<page-include-service-class>\s*([^<]+?)\s*<", block) or [None, None])[1]
+            out.append({"id": "include.%s" % (sid or cls), "url": "jsp/site/Portal.jsp?page_id=1", "kind": "page-include",
+                        "surface": "fo", "bean": (cls or "").rsplit(".", 1)[-1]})
+    for java, _ in app_java(root):
+        m = PROPERTIES_GROUP.search(java.read_text(errors="replace"))
+        if m:
+            out.append({"id": "properties.%s" % m.group(1), "url": "jsp/admin/ManageProperties.jsp", "kind": "site-properties",
+                        "surface": "bo", "bean": m.group(1)})
+    return out
+
+
 def portlet_types(root):
     """Portlet types the artefact's plugin descriptors declare: type id, creation and update urls."""
     out = []
@@ -615,6 +640,7 @@ def print_markdown(inv, surface):
                      ("rbac_resources", "ressources RBAC"), ("dashboards", "dashboards"),
                      ("portlets", "portlets"), ("daemons", "daemons"), ("servlets", "servlets"),
                      ("filters", "filtres"), ("page_includes", "page includes"),
+                     ("properties_groups", "groupes de propriétés du site"),
                      ("macro_files", "fichiers de macros"), ("javascript_files", "fichiers JS"),
                      ("stylesheets", "feuilles de style")):
         if surface.get(k):
@@ -629,6 +655,12 @@ def print_markdown(inv, surface):
     if unnamed:
         print("\n%d template(s) admin qu'aucun Java ne nomme (macros, includes, ou écran mort) : %s"
               % (len(unnamed), ", ".join("`%s`" % x for x in unnamed[:15])))
+    comps = inv.get("components") or []
+    if comps:
+        print("\nSans écran propre, couverts par la page qui les montre :\n")
+        print("| Élément | Classe | Page |\n|---|---|---|")
+        for c in comps:
+            print("| %s | %s | `%s` |" % (c["id"], c["bean"], c["url"]))
     if inv["features"]:
         print("\n| Fonctionnalité (droit) | Écran d'entrée | Groupe |\n|---|---|---|")
         for f in inv["features"]:
@@ -671,6 +703,7 @@ def main():
         templates.update(bean_templates(r))
         if n == 0:                                        # the surface measures the artefact under test only
             decl, jsurf, pkg = declarations(r), java_surface(r), java_package(r)
+            comps = components(r)
             marks = artefact_markers(r, pkg)
             admin_tpl = sorted({str(h).split("templates/", 1)[1] for h in r.rglob("templates/admin/**/*.html")
                                 if not in_build(h, r)} | {str(h).split("templates/", 1)[1]
@@ -708,10 +741,12 @@ def main():
                "package": pkg, "markers": marks,
                "testable_urls": {"screens": len(tgt), "actions": len(tga)}}
     surface.update(decl)
+    surface["properties_groups"] = sum(1 for e in comps if e["kind"] == "site-properties")
     inv = {"root": str(root), "extra": [str(r) for r in roots[1:]], "surface": surface, "unresolved_controllers": UNRESOLVED,
            "features": sorted(feats.values(), key=lambda f: f["right"]),
            "screens": sorted(screens, key=lambda s: s["id"]), "actions": sorted(actions, key=lambda a: a["id"]),
            "rest": sorted(rest, key=lambda r: (r["url"], r["verb"])),
+           "components": comps,
            "portlets": portlet_types(root),
            "stats": {"features": len(feats), "screens": len(screens), "actions": len(actions),
                      "templates_with_links": len(links),

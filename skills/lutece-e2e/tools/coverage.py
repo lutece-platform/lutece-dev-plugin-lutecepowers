@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Coverage of the static inventory by the tests: which screens and actions were reached by at least one
 test navigation (results/*.jsonl `visited`, non-error status), and which were not. Writes
-artifacts/coverage.json and prints the uncovered elements: the to-do list for the scenarios. Elements of the artefact
+artifacts/coverage.json and prints the uncovered elements: the to-do list for the scenarios. The elements without a
+screen of their own (page includes, groups of site properties) are judged on the page that shows them, and reported
+apart: they never enter the gate. Elements of the artefact
 under test (origin target) are the scope; the core and the other plugins of the site (origin env) are counted apart.
 With --gate, exits 1 when an action of the artefact is not proven by a green scenario (or tested red, or excluded
 with a written reason), or a screen of the artefact is reached by no test at all: the report names the gap, the gate
@@ -136,6 +138,12 @@ def main():
         out["rest"].append({"id": e["id"], "url": e["url"], "verb": e["verb"], "origin": e.get("origin", "target"),
                             "status": "proven" if hits else ("unreachable" if rule else "todo"), "calls": hits[:5],
                             "excluded": rule["reason"] if rule and not hits else None})
+    out["components"] = []
+    for e in inv.get("components", []):
+        path = e["url"].split("?")[0]
+        proven, tests = sorted(proven_by_path.get(path, set())), sorted(by_path.get(path, set()))
+        out["components"].append({"id": e["id"], "kind": e["kind"], "bean": e["bean"], "url": e["url"],
+                                  "status": "proven" if proven else "reached" if tests else "todo", "tests": (proven or tests)[:5]})
     out["stats"] = {k: count(v) for k, v in out.items() if k in ("screens", "actions")}
     tgt = lambda x: x["origin"] == "target"
     out["stats_target"] = {k: count([x for x in v if tgt(x) and x.get("surface", "bo") == "bo"]) for k, v in out.items() if k in ("screens", "actions")}
@@ -157,6 +165,9 @@ def main():
         env_todo = [x for x in out[kind] if x["origin"] == "env" and x["status"] == "todo"]
         if env_todo:
             print("  (environment: %d %s to do, listed in coverage.json)" % (len(env_todo), kind))
+    for x in out["components"]:
+        if x["status"] != "proven":
+            print("  %s %s (%s): %s" % ("- to do:" if x["status"] == "todo" else "~ reached, not proven:", x["id"], x["bean"], x["url"]))
     if "--gate" in sys.argv:
         gaps = gate(out) + ["controller %s: @Controller %s not resolved, its screens and actions are invisible to the bench" % (u["file"], ", ".join(u["attributes"])) for u in inv.get("unresolved_controllers", [])]
         if gaps:

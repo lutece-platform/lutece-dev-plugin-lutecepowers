@@ -187,6 +187,11 @@ def summary(rows, perf, disc, inv):
             L.append("| %s | %d | %d | %d | %d | %d | %d | %d | %d |" % (label, t["total"], t.get("n_proven", 0), t.get("n_defect", 0), t.get("n_robustness", 0), t.get("n_reached", 0), t.get("n_blocked", 0), t.get("n_unreachable", 0), t.get("n_todo", 0)))
         L.append("")
         L.append("Une erreur est un test : un élément atteint par un test rouge compte comme testé avec défaut. Un élément « bloqué » est injouable tant que le défaut nommé n'est pas corrigé.")
+        comps = cov.get("components") or []
+        if comps:
+            label = {"proven": "prouvé", "reached": "atteint sans preuve", "todo": "à faire"}
+            L.append("- sans écran propre, jugés sur la page qui les montre (hors gate) : " + ", ".join(
+                "`%s` (%s, `%s`) %s" % (c["id"], c["bean"], c["url"], label.get(c["status"], c["status"])) for c in comps))
         tgt = {k: [x for x in cov[k] if (not scoped or x.get("origin", "target") == "target") and x.get("surface", "bo") == "bo"] for k in ("screens", "actions")}
         fo = {k: [x for x in cov[k] if x.get("origin", "target") == "target" and x.get("surface") == "fo"] for k in ("screens", "actions")}
         for kind in ("screens", "actions"):
