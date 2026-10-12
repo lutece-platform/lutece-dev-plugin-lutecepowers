@@ -139,7 +139,9 @@ genuinely expected — a refusal the bench's own negative scenarios provoke — 
 it, whatever its stack names: a download written through a JSP that
 still flushes its writer (`SRVE0199E: OutputStream already obtained`) leaves only container frames, which the
 package fingerprint misses, and the file still reaches the browser. Such an entry fails the scenario. The client
-connection noise (Broken pipe) is left out (`CORE_LOG_NOISE` in tests/lutece.py), then the
+connection noise (Broken pipe) is left out (`CORE_LOG_NOISE` in tests/lutece.py), and so is the error page Liberty
+then tries to write into the response of a static file the client left (`SRVE0199E` from the error page, on the
+thread of that Broken pipe within two seconds; `abort_aftermath`), then the
 patterns of `harness/server-errors-allow.txt`, then the scenario's own `server_log_allow`. The parallel pass runs
 several scenarios against one log, so an error one of them provokes on purpose would fail its neighbours: a scenario
 declaring `server_log_allow` therefore runs in the serial pass. A refusal many scenarios provoke (the token check of

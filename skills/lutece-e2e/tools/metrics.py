@@ -112,9 +112,11 @@ def server_errors():
     marks = surf.get("markers") or ([pkg] if pkg else [])
     allow = lutece.server_errors_allowed() + list(lutece.CORE_LOG_NOISE) + scenario_log_allows()
     counts, total, mine, unexpected = {}, 0, {}, {}
-    for level, line, *rest in lutece.log_entries(log.read_text(errors="replace")):
+    entries = lutece.log_entries(log.read_text(errors="replace"))
+    aftermath = lutece.abort_aftermath(entries)
+    for i, (level, line, *rest) in enumerate(entries):
         m = re.match(r"\[[^\]]+\] \w+ (\S+)\s+[EW] (.*)", line)
-        if not (m and level == "E"):
+        if not (m and level == "E") or i in aftermath:
             continue
         key = re.sub(r"\d+", "N", m.group(2))[:160]
         counts[key] = counts.get(key, 0) + 1

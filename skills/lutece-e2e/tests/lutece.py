@@ -629,6 +629,43 @@ CORE_LOG_NOISE = tuple(re.compile(p) for p in (
     r"(?s)java\.io\.IOException: Connection reset by peer.*\bFileServletWrapper\b",
 ))
 
+STATIC_ABORT = re.compile(r"(?s)Broken pipe.*\bFileServletWrapper\b|\bFileServletWrapper\b.*Broken pipe")
+"""An entry telling that the client left while Liberty was serving a static file."""
+
+ABORT_AFTERMATH = re.compile(r"(?s)SRVE0199E: OutputStream already obtained.*(\b_Error500\b|\bWebApp\.(sendError|reportRecursiveError)\b)")
+"""The error page Liberty then tries to write into the response already sent: no failure of the application."""
+
+ABORT_WINDOW = 2.0
+"""Seconds during which an error page on the same thread still belongs to the aborted static file."""
+
+
+def _entry_time(header):
+    """Time of a log entry header in seconds, or None when it does not parse."""
+    import datetime
+    m = re.match(r"\[(\d+/\d+/\d+, \d+:\d+:\d+):(\d+)", header)
+    if not m:
+        return None
+    try:
+        return datetime.datetime.strptime(m.group(1), "%m/%d/%y, %H:%M:%S").timestamp() + int(m.group(2)) / 1000
+    except ValueError:
+        return None
+
+
+def abort_aftermath(entries, context=()):
+    """Indexes of the entries that are the error page Liberty writes after a static file the client left: an
+    SRVE0199E from the error page, on the thread that logged the Broken pipe of a FileServletWrapper shortly before.
+    The context entries precede the given ones and only feed the threads' state."""
+    aborted, out = {}, set()
+    for i, (level, *lines) in enumerate(list(context) + list(entries)):
+        head = lines[0].split("] ", 1)[-1].split()
+        thread, when, body = (head[0] if head else ""), _entry_time(lines[0]), "\n".join(lines)
+        if STATIC_ABORT.search(body):
+            aborted[thread] = when
+        elif (ABORT_AFTERMATH.search(body) and thread in aborted and when is not None and aborted[thread] is not None
+              and 0 <= when - aborted[thread] <= ABORT_WINDOW and i >= len(context)):
+            out.add(i - len(context))
+    return out
+
 
 def server_log_mark():
     """Current size of the server log, the point from which server_errors reads."""
@@ -669,22 +706,26 @@ def log_entries(text):
 def server_errors(mark, allow=()):
     """Error entries (level E) the server logged since the mark, each as its header line and its first exception
     line. The log may have rotated since the mark: it is then read from its start. Entries matching the core noise,
-    harness/server-errors-allow.txt or the given patterns are left out.
+    the error page written after a static file the client left (abort_aftermath), harness/server-errors-allow.txt
+    or the given patterns are left out.
 
     Scenarios run one after the other, so an error logged while one runs comes from what it did, whatever package
     its stack names: a response written twice by a JSP leaves only container frames, which a package filter misses."""
     try:
         with open(SERVER_LOG, "rb") as f:
-            f.seek(mark if f.seek(0, 2) >= mark else 0)
+            start = mark if f.seek(0, 2) >= mark else 0
+            f.seek(max(0, start - 65536))
+            before = f.read(start - max(0, start - 65536)).decode("utf-8", "replace")
             text = f.read().decode("utf-8", "replace")
     except OSError:
         return []
     entries = log_entries(text)
+    aftermath = abort_aftermath(entries, log_entries(before))
     patterns = list(CORE_LOG_NOISE) + server_errors_allowed() + [re.compile(p) for p in allow]
     out = []
-    for level, *lines in entries:
+    for i, (level, *lines) in enumerate(entries):
         body = "\n".join(lines)
-        if level != "E" or any(p.search(body) or p.search(re.sub(r"\d+", "N", body)) for p in patterns):
+        if level != "E" or i in aftermath or any(p.search(body) or p.search(re.sub(r"\d+", "N", body)) for p in patterns):
             continue
         cause = next((l.strip() for l in lines[1:] if re.search(r"(Exception|Error)\b", l)), "")
         out.append((lines[0].split("] ", 1)[-1].strip() + (" | " + cause if cause else ""))[:400])
