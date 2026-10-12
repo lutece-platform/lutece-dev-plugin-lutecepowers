@@ -96,7 +96,7 @@ def upgrade_section():
         L += ["Le site du banc a repris la base de %s." % src, ""]
     by = ", ".join("%s %d" % kv for kv in (u.get("by_type") or {}).items())
     L.append("- Changesets joués : %d%s (`artifacts/liquibase-changesets.txt`)" % (u.get("changesets", 0), " (%s)" % by if by else ""))
-    for key, label, name in (("settings_lost", "Réglages du datastore changés ou perdus", "datastore-lost.txt"),
+    for key, label, name in (("settings_lost", "Réglages du datastore écrasés ou disparus", "datastore-lost.txt"),
                              ("components_without_version", "Composants sans version enregistrée par le démarrage v7", "components-without-version.txt"),
                              ("unmanaged", "Fichiers SQL v7 hors Liquibase", "v7-liquibase-unmanaged.txt"),
                              ("hand_applied", "Scripts d'upgrade appliqués à la main", "liquibase-invisible.txt"),
@@ -106,6 +106,9 @@ def upgrade_section():
         if v or key in ("settings_lost", "components_without_version"):
             shown = ", ".join("`%s`" % x for x in v[:8]) + (" …" if len(v) > 8 else "")
             L.append("- %s : %d%s (`artifacts/%s`)" % (label, len(v), " — " + shown if v else "", name))
+    if u.get("settings_defaults"):
+        L.append("- Valeurs par défaut changées exprès par la nouvelle version (information) : %d (`artifacts/datastore-defaults.txt`)"
+                 % len(u["settings_defaults"]))
     return L + [""]
 
 

@@ -42,7 +42,12 @@ CHANGESETS = "SELECT CONCAT(EXECTYPE,' ',FILENAME,' ',ID) FROM DATABASECHANGELOG
 UNRESOLVED = r"No plugin metadata for (\S+)|resolves to component '([^']+)' which is not declared"
 OWN = ("liquibase-changesets.txt", "liquibase-versions-after.txt", "liquibase-failure.txt",
        "liquibase-invisible.txt", "datastore-v7.txt", "datastore-before.txt", "datastore-v8.txt", "datastore-lost.txt",
+       "datastore-defaults.txt",
        "upgrade-disabled.txt", "upgrade-orphans.txt", "components-without-version.txt", "v7-liquibase-unmanaged.txt")
+DATASTORE_UPDATE = re.compile(r"UPDATE\s+core_datastore\s+SET\s+entity_value\s*=\s*'((?:[^'\\]|\\.|'')*)'\s+WHERE\s+"
+                              r"entity_key\s*=\s*'([^']+)'\s+AND\s+entity_value\s*=\s*'((?:[^'\\]|\\.|'')*)'", re.I)
+"""An upgrade statement replacing one value of a key by another: a default the new version changes on purpose."""
+DATASTORE_ROW = re.compile(r"\(\s*'([^']+)'\s*,\s*'((?:[^'\\]|\\.|'')*)'\s*\)")
 GEN_SITE7 = ("E2E_TARGET", "E2E_SRC", "E2E_ENABLE", "E2E_MYLUTECE", "E2E_MVN7", "E2E_SOLR_CORE")
 
 
@@ -353,9 +358,46 @@ def descriptors(site):
     return names
 
 
-def report(bench, site, settings_before, changesets_before, missing):
-    """The artifacts of the takeover: what Liquibase ran, the versions after, the settings lost, the plugins left
-    disabled, the orphan status keys, the components without recorded version; one line each."""
+def install_values(site):
+    """The core_datastore values the init scripts of a site write on a fresh install, by key; empty without a site."""
+    out = {}
+    for f in sorted((site / "WEB-INF/sql").rglob("init*.sql")) if site else []:
+        if "upgrade" in f.parts:
+            continue
+        for line in f.read_text(errors="replace").splitlines():
+            if re.search(r"INSERT\s+INTO\s+core_datastore", line, re.I):
+                out.update(DATASTORE_ROW.findall(line))
+    return out
+
+
+def default_changes(site):
+    """(key, before, after) of every value an upgrade script of the site replaces by another."""
+    return {(k, before, after) for f in (site / "WEB-INF/sql").rglob("*.sql") if "upgrade" in f.parts
+            for after, k, before in DATASTORE_UPDATE.findall(f.read_text(errors="replace"))}
+
+
+def settings_diff(before, after, site, previous):
+    """The settings of the previous version the takeover changed, split in two: the defaults the new version replaces
+    on purpose (an upgrade script turning that value into this one, or the previous install value turned into the new
+    install value), and the real losses (a key gone, any other value overwritten)."""
+    pairs = lambda lines: dict(l.split(" = ", 1) if " = " in l else (l.rstrip(" ="), "") for l in lines)
+    b, a = pairs(before), pairs(after)
+    old, new, updates = install_values(previous), install_values(site), default_changes(site)
+    expected, lost = [], []
+    for k, v in sorted(b.items()):
+        if a.get(k) == v:
+            continue
+        if k in a and ((k, v, a[k]) in updates or (k in old and old[k] == v and new.get(k) == a[k])):
+            expected.append("%s = %s -> %s" % (k, v, a[k]))
+        else:
+            lost.append("%s = %s -> %s" % (k, v, a[k]) if k in a else "%s = %s (gone)" % (k, v))
+    return expected, lost
+
+
+def report(bench, site, settings_before, changesets_before, missing, previous=None):
+    """The artifacts of the takeover: what Liquibase ran, the versions after, the settings lost and the defaults the new
+    version changed, the plugins left disabled, the orphan status keys, the components without recorded version; one
+    line each."""
     known = {" ".join(l.split(" ")[1:]) for l in changesets_before}
     ran = [l for l in db(bench, CHANGESETS) if " ".join(l.split(" ")[1:]) not in known]
     write(bench, "liquibase-changesets.txt", ran)
@@ -366,8 +408,11 @@ def report(bench, site, settings_before, changesets_before, missing):
     log("upgrade: %d version(s) recorded after the takeover (artifacts/liquibase-versions-after.txt)" % len(versions))
     after = db(bench, SETTINGS)
     write(bench, "datastore-v8.txt", after)
-    n = write(bench, "datastore-lost.txt", sorted(set(settings_before) - set(after)))
-    log("upgrade: %d datastore setting(s) of the previous version changed or lost (artifacts/datastore-lost.txt)" % n)
+    expected, lost = settings_diff(settings_before, after, site, previous)
+    write(bench, "datastore-defaults.txt", expected)
+    n = write(bench, "datastore-lost.txt", lost)
+    log("upgrade: %d datastore setting(s) of the previous version overwritten or gone (artifacts/datastore-lost.txt), "
+        "%d default(s) the new version changes on purpose (artifacts/datastore-defaults.txt)" % (n, len(expected)))
     status = db(bench, STATUS)
     names = descriptors(site)
     installed = {l.split(" = ")[0][len("core.plugins.status."):-len(".installed")] for l in status
@@ -402,7 +447,8 @@ def outcome(bench, how, failure=None):
     ran = lines(bench, "liquibase-changesets.txt")
     data = {"mode": how, "status": "failed" if failure else "ok", "failure": failure,
             "changesets": len(ran), "by_type": {k: sum(1 for l in ran if l.startswith(k + " ")) for k in sorted({l.split(" ")[0] for l in ran})},
-            "settings_lost": lines(bench, "datastore-lost.txt"), "components_without_version": lines(bench, "components-without-version.txt"),
+            "settings_lost": lines(bench, "datastore-lost.txt"), "settings_defaults": lines(bench, "datastore-defaults.txt"),
+            "components_without_version": lines(bench, "components-without-version.txt"),
             "disabled": lines(bench, "upgrade-disabled.txt"), "orphans": lines(bench, "upgrade-orphans.txt"),
             "unmanaged": lines(bench, "v7-liquibase-unmanaged.txt"),
             "hand_applied": sorted(set(re.findall(r"sql/(?:\S+/)?upgrade/\S+\.sql", "\n".join(lines(bench, "liquibase-invisible.txt")))))}
@@ -472,10 +518,11 @@ def main():
     server_files(bench)
     runner_up(bench)
     neighbours_up(bench)
-    missing = None
+    missing, previous = None, None
     try:
         if how == "before":
-            v8_start(bench, before_site(bench), "previous version on a fresh database")
+            previous = before_site(bench)
+            v8_start(bench, previous, "previous version on a fresh database")
             seed(bench)
             stop(bench)
         else:
@@ -486,6 +533,7 @@ def main():
                     base = site7(bench)
             image = tomcat_image() if base else None
             s7 = bench_site7(bench, base) if base else None
+            previous = s7
             if how == "v7":
                 v7_install(bench, image, s7)
             if base:
@@ -500,7 +548,7 @@ def main():
             takeover(bench, how, site, scripts)
         finally:
             if db(bench, "SHOW TABLES LIKE 'DATABASECHANGELOG'"):
-                report(bench, site, settings_before, changesets_before, missing)
+                report(bench, site, settings_before, changesets_before, missing, previous)
     except Failed as e:
         log("UPGRADE FAILED: %s" % e)
         outcome(bench, how, str(e))
