@@ -70,7 +70,9 @@ auto_workers() {
 [ "${E2E_JFR:-}" = 1 ] && export E2E_JVM_ARGS="${E2E_JVM_ARGS:-} -XX:StartFlightRecording=filename=/logs/lutece.jfr,dumponexit=true,settings=profile -XX:FlightRecorderOptions=stackdepth=128"
 export E2E_VOLUME=${E2E_VOLUME:-none} E2E_WORKERS=${E2E_WORKERS:-$(auto_workers)} E2E_CONTEXT=${E2E_CONTEXT:-lutece}
 APP="lpe2e-${E2E_NAME}-app"
-export LPE2E_SITE="$HOME/.lutecepowers-e2e/benches/$E2E_NAME/site"
+# The bench's state directory: under LUTECEPOWERS_E2E_HOME, as lpe2e and server.py read it.
+BENCH_STATE="${LUTECEPOWERS_E2E_HOME:-$HOME/.lutecepowers-e2e}/benches/$E2E_NAME"
+export LPE2E_SITE="$BENCH_STATE/site"
 RUNNER_C="lpe2e-${E2E_NAME}-runner"
 DB_NAME=${E2E_NAME//[^A-Za-z0-9_]/_}
 START=$SECONDS
@@ -110,10 +112,10 @@ cmd_build() {
     bash "$BENCH/tools/check-v8-floor.sh" "$E2E_SRC" || [ $? -eq 2 ] || { echo "build: refused, the artefact is below the Lutece 8 level lutecepowers supports"; exit 10; }
   fi
   "${SERVER[@]}" build
-  mkdir -p "$HOME/.lutecepowers-e2e/benches/$E2E_NAME"
-  bash "$BENCH/tools/src-digest.sh" "$E2E_SRC" > "$HOME/.lutecepowers-e2e/benches/$E2E_NAME/built.src"
-  python3 "$BENCH/tools/dep-digest.py" "$LPE2E_SITE" "$(own_artifact)" > "$HOME/.lutecepowers-e2e/benches/$E2E_NAME/built.deps"
-  bash "$BENCH/tools/liquibase-visibility.sh" "$HOME/.lutecepowers-e2e/benches/$E2E_NAME/site" || true
+  mkdir -p "$BENCH_STATE"
+  bash "$BENCH/tools/src-digest.sh" "$E2E_SRC" > "$BENCH_STATE/built.src"
+  python3 "$BENCH/tools/dep-digest.py" "$LPE2E_SITE" "$(own_artifact)" > "$BENCH_STATE/built.deps"
+  bash "$BENCH/tools/liquibase-visibility.sh" "$BENCH_STATE/site" || true
 }
 
 # The machine has the memory a bench takes before one is raised (MemAvailable of /proc/meminfo against E2E_MIN_MEM_MB):
@@ -152,7 +154,7 @@ cmd_up() {
 # Static inventory: of the assembled site for a site, of the artefact's sources otherwise.
 cmd_inventory() {
   step "inventory"
-  local site="$HOME/.lutecepowers-e2e/benches/$E2E_NAME/site"
+  local site="$BENCH_STATE/site"
   [ -d "$site" ] || { echo "inventory: no bench site yet (lpe2e build), the artefact's own sources only"; site=""; }
   if [ "$E2E_TARGET" = site ] && [ -n "$site" ]; then
     python3 "$BENCH/tools/inventory.py" "$site" --markdown-out artifacts/inventory.md > artifacts/inventory.json
@@ -270,7 +272,7 @@ invariants() {
 # (a dependency fixed locally, judged by the content of its jar, tools/dep-digest.py, not by its date: an install can
 # keep an older date). Prevents testing a stale build.
 needs_build() {
-  local stamp="$HOME/.lutecepowers-e2e/benches/$E2E_NAME/built"
+  local stamp="$BENCH_STATE/built"
   [ -f "$stamp" ] || return 0
   [ "$(cat "$stamp.src" 2>/dev/null)" = "$(bash "$BENCH/tools/src-digest.sh" "$E2E_SRC")" ] || return 0
   [ -n "$(find "$E2E_SRC/src" "$E2E_SRC/webapp" "$E2E_SRC/pom.xml" -type f -newer "$stamp" 2>/dev/null | head -1)" ] && return 0
