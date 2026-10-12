@@ -68,6 +68,12 @@ Step vocabulary (one key per step):
                                    identitystore, ants, and the channels of harness/fakes/extra/. `contains`
                                    filters on the logged JSON line, payload included, so it proves WHAT was sent;
                                    {absent: true} asserts nothing matching was sent
+  v7_witness: <SELECT COUNT(*) ... = 'exact value'>
+                                   the data only a v7 database holds (a seed7-*.sql row) survived the takeover: the count
+                                   must be exactly 1 when the database was born in v7, judged apart from the witness by
+                                   the core changeset sql/upgrade/update_db_lutece_core-7.9.9-8.0.0.sql in
+                                   DATABASECHANGELOG, and exactly 0 on a fresh install; under lpe2e upgrade from v7 that
+                                   changeset is required. The query compares to a value written in it; {{v7}} is then 1 or 0
   sql_set: {var: name, query: ...} store the first cell of the query in a variable
   sql_exec: <statement>            arrange data directly in the database (only for what the UI cannot create)
   set: {var: value}                define variables; {{rand}} is a per-scenario random token
@@ -131,7 +137,7 @@ SCENARIOS = lutece.E2E / "scenarios"
 
 MUTATION = ("submit", "submit_novalidate", "confirm", "confirm_if")
 """download proves itself (non-empty file), so it is not listed."""
-STATE_ORACLE = ("sql", "expect_dom", "mail", "fake_log", "http", "download")
+STATE_ORACLE = ("sql", "expect_dom", "mail", "fake_log", "http", "download", "v7_witness")
 """Reads the state the mutation was meant to change: a row, the DOM of the listing, a mail, a call, a file."""
 WEAK_ORACLE = ("expect_text", "expect_not_text", "expect_html", "expect_message", "expect_kind")
 """Reads the screen that followed: it says the application answered, not what it did. Never enough alone after a mutation."""
@@ -304,6 +310,34 @@ def _probe_guard(page, target, resp):
                     "that this scenario is judged on v8 only" % (status or "compile error"))
     raise AssertionError("the bench's own probe page did not run (HTTP %s): fix the probe, it is bench code and "
                          "nothing about the artefact can be read from this" % (status or "compile error"))
+
+
+V7_CHANGESET = "sql/upgrade/update_db_lutece_core-7.9.9-8.0.0.sql"
+"""The core changeset played only on a database taken over from v7: the reference a v7 witness is judged against."""
+
+
+def v7_witness(query):
+    """1 when the database was born in v7, 0 otherwise, after checking that the witness query counts exactly that.
+
+    The reference is the core changeset, never the witness itself, and the query must compare to a value written in it:
+    a witness read back as its own reference, or a count expected at 0 on both sides, passes even when the takeover
+    erased the data. Under lpe2e upgrade from v7 (artifacts/logs/upgrade.json) the changeset itself is required."""
+    query = str(query)
+    assert re.search(r"\bCOUNT\s*\(", query, re.I) and re.search(r"=\s*'[^']+'", query), \
+        "v7_witness %s: count the rows holding a value written in the query (= 'exact value')" % query
+    rows = lutece.sql("SELECT COUNT(*) FROM DATABASECHANGELOG WHERE FILENAME='%s'" % V7_CHANGESET)
+    born = 1 if rows and int(rows[0][0]) > 0 else 0
+    upgrade = lutece.ARTIFACTS / "logs" / "upgrade.json"
+    if upgrade.exists():
+        import json
+        info = json.loads(upgrade.read_text())
+        if info.get("status") == "ok" and info.get("mode") in ("v7", "dump"):
+            assert born, "v7_witness: lpe2e upgrade took a v7 database over, yet %s is not in DATABASECHANGELOG" % V7_CHANGESET
+    rows = lutece.sql(query)
+    got = int(rows[0][0]) if rows and rows[0][0] is not None else None
+    assert got == born, "v7_witness %s -> %r, expected %d (database %s)" % (
+        query, got, born, "born in v7" if born else "installed fresh")
+    return born
 
 
 def run_step(page, step, vars_, record):
@@ -640,6 +674,8 @@ def run_step(page, step, vars_, record):
         vars_[arg["var"]] = _dom_value(loc, arg.get("attr", "text"))
     elif key == "sql_exec":
         lutece.sql(arg)
+    elif key == "v7_witness":
+        vars_["v7"] = v7_witness(arg)
     elif key == "sql_set":
         rows = lutece.sql(arg["query"])
         vars_[arg["var"]] = rows[0][0] if rows else None

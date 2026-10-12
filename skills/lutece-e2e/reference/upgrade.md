@@ -92,6 +92,23 @@ everyday actions. Two v7 traps for that seed: `ant all` runs the plugins in alph
 the init scripts once every table exists), and a file row needs its `origin` (a v7 core ≥ 7.0.7 refuses a file whose
 origin is NULL, and its upgrade backfills none).
 
+**A witness proves the takeover kept the v7 data.** The same scenarios run on a fresh bench and on `upgrade`, so
+the rows of `seed-*.sql` cannot tell the two apart. The witness is one row only the v7 database holds: a
+`harness/db/seed7-<name>.sql` (replayed on the v7 install only, never after the takeover) with a fixed value. A
+scenario asserts it with the `v7_witness` step:
+
+```yaml
+- v7_witness: "SELECT COUNT(*) FROM core_datastore WHERE entity_key='myplugin.e2e.v7.witness' AND entity_value='site v7 myplugin 1.2.5'"
+- sql: {query: "SELECT title FROM myplugin_item WHERE id_item=1", expect_var: ...}   # {{v7}} is now 1 or 0
+```
+
+The count must be exactly 1 when the database was born in v7 and exactly 0 on a fresh install. Whether it was born
+in v7 is read apart from the witness, from the core changeset `sql/upgrade/update_db_lutece_core-7.9.9-8.0.0.sql`
+in `DATABASECHANGELOG`, and `lpe2e upgrade` from v7 requires that changeset. The query compares to a value written in
+it. A witness built otherwise passes even when the takeover erased the data: two counts expected at 0, the witness
+read back as its own reference, a value the scenario reads before comparing. After the step, `{{v7}}` (1 or 0)
+selects the expected values of the migrated rows (`sql_set` with `IF({{v7}}=1, ..., ...)`).
+
 ## Traps
 
 - **plugin-liquibase of the v7 line refuses a site with an SQL file it cannot manage** (`liquibase.safeRun=true`, the

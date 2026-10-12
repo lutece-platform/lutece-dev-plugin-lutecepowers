@@ -112,7 +112,10 @@ bash ${LUTECEPOWERS_ROOT}/tools/final-gate.sh .
 ```
 
 It reuses a green bench run and upgrade (`lpe2e upgrade`, the v7 database taken over) of the same sources instead of
-playing them again, and plays upgrade only when the bench knows a pre-v8 ancestor. Read what is red, fix it at the source (never an allowlist entry, a deleted
+playing them again, and plays upgrade only when the bench knows a pre-v8 ancestor. The upgrade proves the v7 data
+kept only through a witness asserted with the `v7_witness` step (lutece-e2e, `reference/upgrade.md`): a row of
+`seed7-*.sql` with a value written in the query, exactly 1 when the core changeset 7.9.9-8.0.0 says the database was
+born in v7, exactly 0 otherwise. Read what is red, fix it at the source (never an allowlist entry, a deleted
 assertion or a scenario rewritten to expect the defect), run the gate again in full. A WARN does not block the gate,
 and is fixed all the same: the gate lists each one; one stays only when its fix is impossible or outside the plugin (a
 core defect, a choice of the user), with that reason in the hand-over. The only other way out of a red is a defect

@@ -56,6 +56,9 @@ Read these only when the case applies — none is needed for a plain bench.
 - **Proving the database upgrade** of a migration or an update (`lpe2e upgrade`): the previous version's database
   (a v7 site installed and seeded, a recette dump, or the previous v8 version), brought under Liquibase as the
   environments will, taken over by the bench site, then the suites on it: [reference/upgrade.md](reference/upgrade.md).
+  The v7 data is proven kept by a witness row of `seed7-*.sql` asserted with the `v7_witness` step: exactly 1 on a
+  database born in v7 (the core changeset 7.9.9-8.0.0 in `DATABASECHANGELOG`), exactly 0 on a fresh install, against a
+  value written in the query.
 - **External systems** (CAS, OIDC, identity store, notifygru, ANTS, CRM, TIPI, Solr, Elasticsearch) and **running
   against a deployed instance** (`external`): [reference/external-systems.md](reference/external-systems.md).
 - **Scope of a plugin bench** — what extra artefacts to assemble (`E2E_PLUGINS`, `E2E_ENABLE`), front-office

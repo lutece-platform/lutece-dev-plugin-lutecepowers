@@ -65,6 +65,7 @@ bash tests/scripts/test-e2e-lock.sh
 bash tests/scripts/test-e2e-selftest.sh
 bash tests/scripts/test-e2e-hot-classes.sh
 bash tests/scripts/test-e2e-watch.sh
+bash tests/scripts/test-v7-witness.sh
 bash tests/scripts/test-core-defect.sh
 bash tests/scripts/test-source-key.sh
 bash tests/scripts/test-site-checks.sh

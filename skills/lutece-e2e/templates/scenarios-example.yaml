@@ -12,6 +12,16 @@ scenarios:
       - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp
       - expect_ok:
 
+  # The v7 data kept by lpe2e upgrade (reference/upgrade.md): harness/db/seed7-myplugin.sql inserts the witness row
+  # in the v7 database only; the step expects it exactly when the database was born in v7, then {{v7}} is 1 or 0.
+  # - id: myplugin_v7_data_kept
+  #   title: Reprise — les données saisies sous Lutece 7 sont toujours là
+  #   req: MYPLUGIN_MANAGEMENT
+  #   steps:
+  #     - v7_witness: "SELECT COUNT(*) FROM core_datastore WHERE entity_key='myplugin.e2e.v7.witness' AND entity_value='site v7 myplugin 1.2.5'"
+  #     - sql_set: {var: title, query: "SELECT IF({{v7}}=1, 'Saisi en v7', 'Exemple v8')"}
+  #     - sql: {query: "SELECT title FROM myplugin_myentity WHERE id_myentity=1", expect_var: title}
+
   # - id: myentity_crud
   #   title: Entités — créer, retrouver, modifier, supprimer
   #   req: MYPLUGIN_MANAGEMENT
