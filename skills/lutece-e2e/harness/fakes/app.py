@@ -2,7 +2,9 @@
 
 Only systems whose client code is public live here. An organisation adds its own in `extra/*.py` (mounted at
 /app/extra, ignored by git): each module exposes `PREFIXES = {"/prefix/": handle}` with
-`handle(handler, method, path, body)`, and uses `handler.send`, `handler.query`, `log` from this module."""
+`handle(handler, method, path, body)`, and uses `handler.send`, `handler.query`, `log` from this module. `body` is the
+request body as text; `handler.raw` holds its exact bytes, for a binary upload. HEAD reaches the handlers as "HEAD"
+for a prefix and as "GET" for the built-in systems; `handler.send` then writes the headers without the body."""
 import html
 import json
 import os
@@ -17,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "9030"))
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
-TLS_PORT = 9443
+TLS_PORT = int(os.environ.get("TLS_PORT", "9443"))
 """HTTPS listener for the services a page calls from the browser (BAN): the core CSP carries upgrade-insecure-requests,
 so a plain-http fetch from an admin page is rewritten to https. The certificate is a test one (CN fakes), accepted by
 the bench browser only."""
@@ -180,7 +182,8 @@ class Handler(BaseHTTPRequestHandler):
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(raw)
+        if self.command != "HEAD":
+            self.wfile.write(raw)
 
     def redirect(self, url):
         self.send_response(302)
@@ -189,15 +192,34 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def body(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        return self.rfile.read(length).decode("utf-8", "replace") if length else ""
+        """The request body as text; its exact bytes stay in self.raw. Reads a chunked body as well as a sized one."""
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            chunks = []
+            while True:
+                size = int(self.rfile.readline().split(b";")[0].strip() or b"0", 16)
+                if size == 0:
+                    while self.rfile.readline() not in (b"\r\n", b"\n", b""):
+                        pass
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.readline()
+            self.raw = b"".join(chunks)
+        else:
+            length = int(self.headers.get("Content-Length") or 0)
+            self.raw = self.rfile.read(length) if length else b""
+        return self.raw.decode("utf-8", "replace")
 
     def query(self):
         raw = urllib.parse.urlparse(self.path).query
         return {k: v[0] for k, v in urllib.parse.parse_qs(raw, keep_blank_values=True).items()}
 
     def do_GET(self):
+        self.raw = b""
         self.route("GET", "")
+
+    def do_HEAD(self):
+        self.raw = b""
+        self.route("HEAD", "")
 
     def do_POST(self):
         self.route("POST", self.body())
@@ -206,7 +228,7 @@ class Handler(BaseHTTPRequestHandler):
         self.route("PUT", self.body())
 
     def do_DELETE(self):
-        self.route("DELETE", "")
+        self.route("DELETE", self.body())
 
     # -- routing ----------------------------------------------------------
     def route(self, method, body):
@@ -216,6 +238,7 @@ class Handler(BaseHTTPRequestHandler):
         for prefix, handle in EXTRAS.items():
             if path.startswith(prefix):
                 return handle(self, method, path, body)
+        method = "GET" if method == "HEAD" else method
         if path.startswith("/cas/"):
             return self.cas(method, path, body)
         if path.startswith("/crm/"):

@@ -24,7 +24,8 @@ names resolve to 127.0.0.1 there) or as localhost.
   step reads it — `fake_log: {channel: notifygru, contains: '"demand_id": 42', min: 1}`, with `contains` matching
   inside the logged payload, so the scenario proves **what** was sent and not merely that something was. It polls
   like `mail`, because a Lutece daemon usually sends after the response is rendered, and `{absent: true}` asserts
-  the opposite: nothing left. `/health` answers 200.
+  the opposite: nothing left. `/health` answers 200. HEAD answers the headers of GET without the body, and an extra
+  module reads an upload's exact bytes in `handler.raw` (see `extra/README.md`).
 
   **Check first whether the artefact calls anything at all.** A module named after an external system is often a
   *provider*: it computes the markers another plugin's task will send (addresses, texts, urls) and issues no
