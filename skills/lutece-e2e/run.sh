@@ -17,7 +17,8 @@
 #   lpe2e review       check the visual review (artifacts/review.md) against the captures of the last run; a run that
 #                      only lacked it then counts as passed
 #   lpe2e upgrade      the previous version's database (v7 prepared by plugin-liquibase of the v7 line, a recette dump,
-#                      or the previous v8 war) taken over by the bench site, what the upgrade did, then every suite
+#                      or the previous v8 war) taken over by the bench site, what the upgrade did, then every suite; the
+#                      bench stays up when it ran before or with KEEP=1
 #   lpe2e watch        the hot loop on a running bench (KEEP=1 lpe2e first): a web file or test page is served at
 #                      once, a Java method body redefined in the running JVM, anything else packages the artefact
 #                      again and restarts the JVM; then the tests the change can break (a changed scenario file: its
@@ -351,10 +352,12 @@ pass_stamp() {
 
 # The database upgrade, lived the way an environment lives it (server/upgrade.py, reference/upgrade.md): the previous
 # version's database, brought under Liquibase by one v7 start when it is a v7 one, taken over by the bench site; then
-# the suites on that database. Exit 11 when the database upgrade failed (the v7 preparation or the takeover), with a
+# the suites on that database. The bench is left as it was found: up when it ran before (a KEEP=1 lpe2e), or
+# with KEEP=1, down otherwise. Exit 11 when the database upgrade failed (the v7 preparation or the takeover), with a
 # summary.md that says so; else the code of the suites.
 cmd_upgrade() {
-  e2e_on_exit() { [ "${KEEP:-}" = 1 ] || cmd_down; }
+  WAS_UP=$(docker inspect -f '{{.State.Running}}' "$APP" 2>/dev/null || true)
+  e2e_on_exit() { [ "${KEEP:-}" = 1 ] || [ "$WAS_UP" = true ] || cmd_down; }
   mkdir -p artifacts
   needs_build && cmd_build
   step "upgrade: the previous version's database taken over by the bench site"

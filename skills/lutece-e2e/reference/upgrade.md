@@ -70,7 +70,8 @@ upgrade are removed when a run starts:
 Exit code: **11** when the database upgrade failed, in the v7 preparation or in the takeover (the v7 start refused
 or failed, a Liquibase changeset stopped, the bench site did not start on the database: the changeset and its reason
 are printed); `summary.md` then says so and nothing else, and `artifacts/logs/upgrade.json` holds the same facts; otherwise the code of the suites, as
-`lpe2e`. A green run stamps `artifacts/pass-upgrade`, which `tools/final-gate.sh` reuses.
+`lpe2e`. A green run stamps `artifacts/pass-upgrade`, which `tools/final-gate.sh` reuses. The bench is left as the
+run found it: up when it ran before (a `KEEP=1 lpe2e`) or with `KEEP=1`, down otherwise.
 
 ## Configuration
 
