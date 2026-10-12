@@ -15,3 +15,6 @@
 --add-opens=java.management/sun.management=ALL-UNNAMED
 --add-opens=jdk.management/com.sun.management.internal=ALL-UNNAMED
 --add-exports=jdk.management/com.ibm.lang.management.internal=ALL-UNNAMED
+
+# Stop the JVM on an OutOfMemoryError so that Kubernetes restarts the container (OpenJ9: needs the default dump agents)
+-XX:+ExitOnOutOfMemoryError

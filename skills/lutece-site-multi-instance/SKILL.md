@@ -128,6 +128,12 @@ attachment field.
   in its namespace (`templates/kubernetes-rbac.yaml`).
 - `terminationGracePeriodSeconds` above `hazelcast.graceful.shutdown.max.wait` (45 s → 60 s), a readiness probe and a short
   `preStop` so that the pod leaves the Service before OpenLiberty stops (otherwise `The cache closed` errors during shutdown).
+- Probes and the database: readiness checks the database, liveness checks the webapp only (plugin-health:
+  `application-liveness`, webapp loaded and no deadlock), startup probe about twice the slowest start (template: 3 min).
+  Lutece reconnects by itself when the database comes back (verified: 9 s restart and 90 s outage, pages back at once), so
+  a liveness on the database only restarts every replica at the same time, cold. A replica started while the database is
+  down never loads its webapp (404 until restarted): the startup probe restarts it. `-XX:+ExitOnOutOfMemoryError` in
+  `jvm.options` (OpenJ9: keep the default dump agents, the option is one of them).
 - Probe timeouts: readiness `timeoutSeconds: 5`, liveness `timeoutSeconds: 10` (template). With the 1 s default, the
   replica left alone with the whole load after the loss of the other one answered its health checks late (they wait in the
   bounded thread pool) and was killed by its liveness probe: one crash took both replicas down (reproduced on minikube).
