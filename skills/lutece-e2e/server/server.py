@@ -11,11 +11,12 @@ the bench site from a host directory), and its own database in the shared MariaD
     server.py up       start the bench on the shared server, wait for the application, seed its database
     server.py seed     run the post-init and seed scripts again on the bench's database
     server.py restart  restart the application's JVM (the container and its network namespace stay), wait for it
-    server.py watch    the hot loop on a running bench: a changed web file is copied into the site at once (the
-                       FreeMarker cache and the kept browser contexts emptied), a changed Java method body is
-                       compiled and redefined in the running JVM, anything else (a new method, SQL, properties,
-                       plugin.xml, resources) rebuilds the jar and restarts the JVM; then the tests the change can
-                       break (the JSP screens that reach it), then every suite
+    server.py watch    the hot loop on a running bench: a changed web file or test page (e2e/harness/site/webapp) is
+                       copied into the site at once (the FreeMarker cache and the kept browser contexts emptied), a
+                       changed Java method body is compiled and redefined in the running JVM, anything else (a new
+                       method, SQL, properties, plugin.xml, resources) packages the jar and webapp zip again and
+                       restarts the JVM; then the tests the change can break (the JSP screens that reach it, the
+                       scenarios of a changed scenario file, the scenarios when none is named), then every suite
     server.py selftest proof that watch misses no bug: a template bug then a Java bug, each injected through the hot
                        loop's path right after a render, required red, reverted, required green; sources restored
     server.py down     remove the bench's containers and database
@@ -327,13 +328,7 @@ def cmd_build(bench):
     if sh("cp", "-al", base, site).returncode:
         shutil.copytree(base, site)
     if art:
-        jar = next(j for j in (bench.src / "target").glob(art + "-*.jar") if not re.search(r"-(sources|javadoc|tests)\.jar$", j.name))
-        put(site / "WEB-INF/lib" / jar.name, jar)
-        for z in (bench.src / "target").glob(art + "-*-webapp.zip"):
-            with zipfile.ZipFile(z) as zf:
-                for info in zf.infolist():
-                    if not info.is_dir():
-                        put(site / info.filename, zf.read(info))
+        put_artefact(bench, art)
     for own in (BENCH / "harness/site/webapp", bench.e2e / "harness/site/webapp"):
         for f in own.rglob("*") if own.is_dir() else []:
             if f.is_file():
@@ -349,6 +344,18 @@ def cmd_build(bench):
         put(solr, ("solr.server.address=http://solr:8983/solr/%s\nsolr.indexer.commit.size=10000\n" % os.environ.get("E2E_SOLR_CORE", "lutece")).encode())
     (bench.state / "built").write_text(str(time.time()))
     log("build: bench site %s" % site)
+
+
+def put_artefact(bench, art):
+    """The artefact's packaged jar and webapp zip (templates, JSP, bundles under WEB-INF/classes) into the bench site."""
+    site = bench.state / "site"
+    jar = next(j for j in (bench.src / "target").glob(art + "-*.jar") if not re.search(r"-(sources|javadoc|tests)\.jar$", j.name))
+    put(site / "WEB-INF/lib" / jar.name, jar)
+    for z in (bench.src / "target").glob(art + "-*-webapp.zip"):
+        with zipfile.ZipFile(z) as zf:
+            for info in zf.infolist():
+                if not info.is_dir():
+                    put(site / info.filename, zf.read(info))
 
 
 def server_files(bench):
@@ -600,11 +607,12 @@ def app_logs(bench):
     return out.stdout + out.stderr + files.stdout
 
 
-def snapshot(src):
-    """Modification time of every file of the project a hot change can come from."""
+def snapshot(src, e2e=None):
+    """Modification time of every file of the project a hot change can come from, and of the bench's scenarios and
+    site overlay (e2e/harness/site/webapp: the test pages) when the bench's e2e folder is given."""
     out = {}
-    for top in ("src", "webapp", "pom.xml"):
-        base = src / top
+    tops = [src / "src", src / "webapp", src / "pom.xml"] + ([e2e / "scenarios", e2e / "harness/site/webapp"] if e2e else [])
+    for base in tops:
         for f in ([base] if base.is_file() else base.rglob("*") if base.is_dir() else []):
             if f.is_file() and "/target/" not in str(f) and not f.name.startswith("."):
                 out[f] = f.stat().st_mtime_ns
@@ -616,10 +624,12 @@ def related(bench, changed):
     classes citing it, a class through the JSPs calling it), the front-office application ids of the plugin when a
     changed class is an XPage, else the words of the file names."""
     java = list((bench.src / "src/java").rglob("*.java"))
-    jsps = list((bench.src / "webapp").rglob("*.jsp"))
+    jsps = list((bench.src / "webapp").rglob("*.jsp")) + list((bench.e2e / "harness/site/webapp").rglob("*.jsp"))
     classes, screens, fo = set(), set(), True
     for p in changed:
-        if p.suffix == ".jsp":
+        if p.suffix in (".yaml", ".yml") and p.is_relative_to(bench.e2e / "scenarios"):
+            screens.add(p.stem)
+        elif p.suffix == ".jsp":
             screens.add(p.stem)
         elif p.suffix == ".java":
             classes.add(p.stem)
@@ -701,14 +711,12 @@ def hot_classes(bench):
 
 
 def package_jar(bench):
-    """Package the artefact offline and put its jar into the bench site; the hot classes go, the jar now holds them.
-    False when mvn package fails, the site unchanged."""
+    """Package the artefact offline and put its jar and webapp zip into the bench site; the hot classes go, the jar now
+    holds them. False when mvn package fails, the site unchanged."""
     mvn = os.environ.get("MVN", "mvn").split()
     if subprocess.run(mvn + ["-B", "-q", "-o", "-f", str(bench.src / "pom.xml"), "package", "-Dmaven.test.skip=true"]).returncode:
         return False
-    art = artifact(bench.src)
-    jar = next(j for j in (bench.src / "target").glob(art + "-*.jar") if not re.search(r"-(sources|javadoc|tests)\.jar$", j.name))
-    put(bench.state / "site/WEB-INF/lib" / jar.name, jar)
+    put_artefact(bench, artifact(bench.src))
     for f in hot_classes(bench):
         f.unlink()
     return True
@@ -755,11 +763,13 @@ def apply(bench, hot, changed):
     the kept browser contexts emptied), a Java method body compiled and redefined in the JVM, anything else (a new
     method, SQL, properties, plugin.xml, resources) a jar rebuild and a JVM restart. Return the hot compiler (a new one
     after a restart) and True when the batch is in place."""
-    web = [f for f in changed if f.is_relative_to(bench.src / "webapp")]
+    overlay = bench.e2e / "harness/site/webapp"
+    web = [f for f in changed if f.is_relative_to(bench.src / "webapp") or f.is_relative_to(overlay)]
     java = [f for f in changed if f.suffix == ".java" and f.is_relative_to(bench.src / "src/java")]
-    other = [f for f in changed if f not in web and f not in java and not f.is_relative_to(bench.src / "src/test")]
+    other = [f for f in changed if f not in web and f not in java and not f.is_relative_to(bench.src / "src/test")
+             and not f.is_relative_to(bench.e2e)]
     for f in web:
-        put(bench.state / "site" / f.relative_to(bench.src / "webapp"), f)
+        put(bench.state / "site" / f.relative_to(overlay if f.is_relative_to(overlay) else bench.src / "webapp"), f)
     if web:
         sh("docker", "exec", bench.runner, "bash", "/bench/server/reset_caches.sh", "reset")
         sh("docker", "exec", bench.runner, "python", "/bench/server/runnerd.py", "flush")
@@ -776,7 +786,7 @@ def apply(bench, hot, changed):
         else:
             other = java
     if other:
-        log("watch: %d change(s) the JVM cannot take hot (%s): jar rebuilt, JVM restarted" % (len(other), ", ".join(f.name for f in other[:3])))
+        log("watch: %d change(s) the JVM cannot take hot (%s): jar and webapp zip packaged again, JVM restarted" % (len(other), ", ".join(f.name for f in other[:3])))
         hot.close()
         ok = rebuild(bench)
         hot = Hot(bench)
@@ -795,20 +805,41 @@ def hot_start(bench, op):
     return hot
 
 
+def bench_lock(bench):
+    """Take the bench lock run.sh takes (<e2e>/.run.lock), for the tests of one batch; False when a live run holds it."""
+    d = bench.e2e / ".run.lock"
+    try:
+        d.mkdir()
+    except FileExistsError:
+        pid = (d / "pid").read_text().strip() if (d / "pid").exists() else ""
+        try:
+            os.kill(int(pid), 0)
+            return False
+        except (ValueError, ProcessLookupError, PermissionError):
+            shutil.rmtree(d, ignore_errors=True)
+            return bench_lock(bench)
+    (d / "pid").write_text(str(os.getpid()))
+    (d / "started").write_text(time.strftime("%F %T"))
+    (d / "cmd").write_text("lpe2e watch (tests of a batch)")
+    return True
+
+
 def cmd_watch(bench):
-    """The hot loop: apply each batch of changes, then the related tests, then every suite."""
+    """The hot loop: apply each batch of changes, then the related tests, then every suite. A changed scenario file
+    runs its scenarios, a changed test page (e2e/harness/site/webapp) is served at once; a change no test names runs
+    the scenarios. The bench lock is held only while the tests of a batch run, so lpe2e test works between batches."""
     hot = hot_start(bench, "watch")
     log("watch: %s (%s), Ctrl-C to stop" % (bench.src, bench.app))
-    seen = snapshot(bench.src)
+    seen = snapshot(bench.src, bench.e2e)
     try:
         while True:
             time.sleep(0.2)
-            now = snapshot(bench.src)
+            now = snapshot(bench.src, bench.e2e)
             changed = [f for f, m in now.items() if seen.get(f) != m]
             if not changed:
                 continue
             time.sleep(0.1)
-            now = snapshot(bench.src)
+            now = snapshot(bench.src, bench.e2e)
             changed = sorted(f for f, m in now.items() if seen.get(f) != m)
             seen = now
             t = time.time()
@@ -816,12 +847,21 @@ def cmd_watch(bench):
             if not ok:
                 continue
             log("watch: applied in %.2fs" % (time.time() - t))
-            words, only = related(bench, changed)
-            log("watch: tests related to %s%s" % (", ".join(words[:8]), " (front office)" if only else ""))
-            rc_fast, _ = suites(bench, words, only)
-            log("watch: first verdict %s in %.1fs" % ("rc=%d" % rc_fast if rc_fast is not None else "none (no related test)", time.time() - t))
-            rc, _ = suites(bench, [])
-            log("watch: full verdict rc=%d in %.1fs" % (rc, time.time() - t))
+            if not bench_lock(bench):
+                log("watch: another run holds the bench (%s), the tests of this batch are left to it" % (bench.e2e / ".run.lock/cmd").read_text().strip())
+                continue
+            try:
+                words, only = related(bench, changed)
+                log("watch: tests related to %s%s" % (", ".join(words[:8]), " (front office)" if only else ""))
+                rc_fast, _ = suites(bench, words, only)
+                if rc_fast is None:
+                    log("watch: no test named after the change, the scenarios instead")
+                    rc_fast, _ = suites(bench, [], ["scenarios"])
+                log("watch: first verdict %s in %.1fs" % ("rc=%d" % rc_fast if rc_fast is not None else "none (no related test)", time.time() - t))
+                rc, _ = suites(bench, [])
+                log("watch: full verdict rc=%d in %.1fs" % (rc, time.time() - t))
+            finally:
+                shutil.rmtree(bench.e2e / ".run.lock", ignore_errors=True)
     except KeyboardInterrupt:
         hot.close()
 

@@ -6,7 +6,8 @@
 #   lpe2e              build (if needed) + up + seed + inventory + discover + tests + perf + report, then down
 #                      however it ends; green only with every action covered (a plugin) and the visual review done
 #   lpe2e build        package the artefact and lay out the bench site (the assembled site is cached by composition)
-#   lpe2e up           start the bench on the shared server, wait for the application, seed
+#   lpe2e up           build when the sources changed, start the bench on the shared server, wait for the
+#                      application, seed
 #   lpe2e inventory    static inventory (artifacts/inventory.json)
 #   lpe2e discover     dynamic crawl of the running back office (artifacts/discovered.json)
 #   lpe2e test         every suite (screens, fo, scenarios, forms) against the running bench
@@ -17,9 +18,11 @@
 #                      only lacked it then counts as passed
 #   lpe2e upgrade      the previous version's database (v7 prepared by plugin-liquibase of the v7 line, a recette dump,
 #                      or the previous v8 war) taken over by the bench site, what the upgrade did, then every suite
-#   lpe2e watch        the hot loop on a running bench (KEEP=1 lpe2e first): a web file is served at once, a Java
-#                      method body redefined in the running JVM, anything else rebuilds the jar and restarts the JVM;
-#                      then the tests the change can break, then every suite. Ctrl-C to stop
+#   lpe2e watch        the hot loop on a running bench (KEEP=1 lpe2e first): a web file or test page is served at
+#                      once, a Java method body redefined in the running JVM, anything else packages the artefact
+#                      again and restarts the JVM; then the tests the change can break (a changed scenario file: its
+#                      scenarios), then every suite. It holds the bench only while those tests run: lpe2e test works
+#                      beside it. Ctrl-C to stop
 #   lpe2e selftest     proof that watch misses no bug on a running bench: a template bug then a Java bug injected
 #                      through watch's path right after a render, each red, reverted, green; sources restored
 #   lpe2e down         remove the bench's containers and database (the shared server stays)
@@ -43,7 +46,7 @@ BENCH=$(cd "$(dirname "$0")" && pwd)
 E2E=$(cd "${E2E_DIR:?run the bench through lpe2e, from the project}" && pwd)
 export E2E_DIR="$E2E"
 cd "$E2E"
-case "${1:-all}" in logs|status|port|sh|review|report|-h|--help) ;; *) . "$BENCH/tools/lock.sh"; E2E_LOCK_CMD="lpe2e $*" e2e_lock "$E2E" ;; esac
+case "${1:-all}" in logs|status|port|sh|review|report|watch|-h|--help) ;; *) . "$BENCH/tools/lock.sh"; E2E_LOCK_CMD="lpe2e $*" e2e_lock "$E2E" ;; esac
 # The environment wins over e2e.conf: E2E_VOLUME=large lpe2e must not be silently overwritten.
 _e2e_env=$(export -p | grep -E "^(declare -x |export )E2E_" || true)
 set -a; . ./e2e.conf; set +a
@@ -382,7 +385,7 @@ cmd_down() {
 
 case "${1:-all}" in
   build)     cmd_build ;;
-  up)        cmd_up ;;
+  up)        needs_build && cmd_build; cmd_up ;;
   inventory) cmd_inventory ;;
   discover)  cmd_discover ;;
   test)      shift; if [ $# -gt 0 ]; then runner "${PYTEST[@]}" -q --tb=short "$@"; else cmd_test; fi ;;

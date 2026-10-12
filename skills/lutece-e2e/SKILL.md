@@ -72,10 +72,10 @@ run and for the last one. In between, a fix is applied and checked by `lpe2e wat
 | Command | What it does | When |
 |---|---|---|
 | *(none)*, `all` | build if needed, start, inventory, crawl, smoke, suites, perf, report, visual review, stop | first and last run |
-| `watch` | the hot loop on a running bench (`KEEP=1 lpe2e` first): a web file is served at once, a Java method body is redefined in the running JVM, anything else rebuilds the jar and restarts the JVM; then the tests the change can break, then every suite | while fixing |
+| `watch` | the hot loop on a running bench (`KEEP=1 lpe2e` first): a web file or a test page of `e2e/harness/site/webapp` is served at once, a Java method body is redefined in the running JVM, anything else (bundles included) packages the jar and webapp zip again and restarts the JVM; then the tests the change can break (a changed scenario file: its scenarios), then every suite | while fixing |
 | `selftest` | proves on a running bench that `watch` misses no bug: a baseline verdict, then a template bug and a Java bug injected through `watch`'s own path right after a render, each required red, reverted and required green; the sources are restored; `SELFTEST PASSED` or exit 1 | after changing the hot loop, or before trusting it on a new project |
 | `build` | packages the artefact and lays out the bench site (the assembled site is cached) | after a source change, to work step by step |
-| `up` | starts the bench on a fresh database, waits for the application, seeds | to work step by step |
+| `up` | builds when the sources changed, starts the bench on a fresh database, waits for the application, seeds | to work step by step |
 | `inventory` | reads the sources: every screen, action, right and REST endpoint | to see what there is to cover |
 | `discover` | crawls the running site and completes the inventory | after `up` |
 | `test` | every suite against the running bench | after `up` |
@@ -137,10 +137,12 @@ lpe2e                                                # once at the end, then the
 ```
 
 `lpe2e watch` is the loop to fix in: run it in the background and follow its lines as events. Each batch of changes
-prints how it was applied (a template served at once, a method body redefined in the running JVM, or a jar rebuilt
-and the JVM restarted), the tests related to the change (the JSP screens or the front-office application that reach
-it) with their verdict, then the verdict of every suite. A compile error is printed and nothing runs until the next
-save. The classes `watch` keeps for a Java change stay in the bench site until the jar is packaged again: the next
+prints how it was applied (a template or a test page served at once, a method body redefined in the running JVM, or
+the jar and webapp zip packaged again and the JVM restarted), the tests related to the change (the JSP screens, test
+pages included, or the front-office application that reach it; the scenarios of a changed scenario file; the
+scenarios when no test is named after the change) with their verdict, then the verdict of every suite. A compile
+error is printed and nothing runs until the next save. `watch` holds the bench only while the tests of a batch run:
+`lpe2e test` works beside it, and a batch saved during such a run is applied, its tests left to that run. The classes `watch` keeps for a Java change stay in the bench site until the jar is packaged again: the next
 `lpe2e up` packages it first, so the bench starts on the current sources.
 
 `lpe2e selftest` proves that loop on the project: it breaks a template the first front-office XPage cites (else the
