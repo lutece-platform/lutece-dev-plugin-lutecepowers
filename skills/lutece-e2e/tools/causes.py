@@ -3,11 +3,14 @@
 present in the block, confirms it). Prints one line per failed test and writes artifacts/causes.json."""
 import datetime
 import json
-import os
 import pathlib
 import re
+import sys
 
-E2E = pathlib.Path(os.environ.get("E2E_DIR") or pathlib.Path(__file__).resolve().parents[1])
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "tests"))
+import lutece  # noqa: E402
+
+E2E = lutece.E2E
 A = E2E / "artifacts"
 EXC = re.compile(r"((?:[a-zA-Z_$][\w$]*\.)+[A-Z]\w*(?:Exception|Error)\b[^\n]{0,160}|Error \d{3} : [^\n]{0,160})")
 TS = re.compile(r"^\[(\d+)/(\d+)/(\d+), (\d+):(\d+):(\d+):(\d+) UTC\]")

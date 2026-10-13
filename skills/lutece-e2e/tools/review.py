@@ -11,18 +11,28 @@ layout sound, do screens of the same family look alike. This tool makes that ste
 Screens are grouped by (url path, kind): the same screen opened with twenty different ids is one group, reviewed
 once. Groups showing a mechanical rendering finding come first, then the unusual kinds, then the rest.
 """
+import argparse
 import collections
 import glob
 import hashlib
 import json
-import os
 import pathlib
 import re
 import sys
 
-E2E = pathlib.Path(os.environ.get("E2E_DIR") or pathlib.Path(__file__).resolve().parents[1])
+
+def parse_args(argv):
+    """The command, todo by default; --help prints the usage and exits before anything is read or written."""
+    p = argparse.ArgumentParser(prog="review.py", description="Visual review of the run, in the project's e2e folder (E2E_DIR).")
+    p.add_argument("cmd", nargs="?", default="todo", choices=("todo", "check"),
+                   help="todo: write artifacts/review-todo.md; check: exit 7 until artifacts/review.md judges every group")
+    return p.parse_args(argv).cmd
+
+
+CMD = parse_args(sys.argv[1:]) if __name__ == "__main__" else None
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "tests"))
 import lutece  # noqa: E402
+E2E = lutece.E2E
 A = E2E / "artifacts"
 
 
@@ -236,10 +246,9 @@ def check():
 
 
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "todo"
     # `todo() and 0` exited with the list itself when there was no group at all: python printed it and returned 1,
     # and run.sh, which runs under `set -e`, stopped right after the report — no server-error check, no review.
-    if cmd == "check":
+    if CMD == "check":
         sys.exit(check())
     todo()
     sys.exit(0)

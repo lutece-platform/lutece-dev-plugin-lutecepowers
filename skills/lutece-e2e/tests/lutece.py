@@ -4,10 +4,21 @@ import json
 import os
 import pathlib
 import re
+import sys
 import time
 import urllib.parse
 
-E2E = pathlib.Path(os.environ.get("E2E_DIR") or pathlib.Path(__file__).resolve().parents[1])
+
+
+def bench_dir():
+    """The project's e2e folder: E2E_DIR, else the current directory. Exits when that is the skill's own folder."""
+    d = pathlib.Path(os.environ.get("E2E_DIR") or os.getcwd()).resolve()
+    if (d / "SKILL.md").is_file():
+        sys.exit("e2e: %s is the skill, not a project's e2e folder: run the bench through lpe2e, or set E2E_DIR" % d)
+    return d
+
+
+E2E = bench_dir()
 ARTIFACTS = E2E / "artifacts"
 BASE = os.environ.get("E2E_BASE", "http://localhost:18080/lutece").rstrip("/")
 BENCH_HOSTS = sorted({"localhost", urllib.parse.urlsplit(BASE).hostname,

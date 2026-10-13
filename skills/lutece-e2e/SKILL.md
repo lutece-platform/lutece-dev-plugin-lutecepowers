@@ -45,7 +45,9 @@ Run it as `bash ${LUTECEPOWERS_ROOT}/skills/lutece-e2e/lpe2e <command>` from the
 convenient). Supported: a plugin or module (`E2E_TARGET=plugin`) and a site (`E2E_TARGET=site`: assembled with
 its own pom and `E2E_SITE_PROFILE`, the latest Lutece 8 core and plugin-liquibase forced over its BOM, every screen
 of the site tested), with the stand-ins of external systems (`E2E_FAKES=1`) and the real search engines
-(`E2E_SEARCH=1`) beside the application. The core is not supported: `lpe2e` refuses it (rc=2).
+(`E2E_SEARCH=1`) beside the application. The core is not supported: `lpe2e` refuses it (rc=2). A tool of
+`tools/` run by hand works on the project's e2e folder (`E2E_DIR`, else the current directory) and refuses the
+skill's own folder.
 
 ## Additional resources
 

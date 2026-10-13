@@ -8,13 +8,15 @@ Inputs: artifacts/results/*.jsonl (tests), perf.json, discovered.json, inventory
 import datetime
 import html
 import json
-import os
 import pathlib
 import re
 import statistics
 import sys
 
 import report_page
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "tests"))
+import lutece  # noqa: E402
 
 DECLARED_SKIP = "declared exclusion: "
 """Prefix the suites put on a skip the bench declared on purpose (tests/lutece.py), as opposed to one the run caused."""
@@ -29,7 +31,7 @@ def skip_reason(reason):
     """The written reason of a skip, without pytest's prefix nor the declared-exclusion marker."""
     return str(reason or "").replace("Skipped: ", "", 1).replace(DECLARED_SKIP, "", 1)
 
-E2E = pathlib.Path(os.environ.get("E2E_DIR") or pathlib.Path(__file__).resolve().parents[1])
+E2E = lutece.E2E
 A = E2E / "artifacts"
 BUDGET_MS = 1500
 """Per-screen navigation budget (browser-measured, small volume) flagged in the summary."""
