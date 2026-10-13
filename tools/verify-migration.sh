@@ -47,9 +47,25 @@ BG_DIR=$(mktemp -d)
 PF_PIDS=()
 trap 'kill "${PF_PIDS[@]}" 2>/dev/null; rm -rf "$BG_DIR"' EXIT
 
+# A check whose Python dies on an exception has not run. Its error is kept in LP_CRASH_FILE and the next result
+# reported (emit) turns into a FAIL naming it; a Python that feeds several results keeps it for each (CRASH_HOLD).
+LP_CRASH_FILE="$BG_DIR/crash"
+python3() {
+    local err rc
+    err=$(mktemp "$BG_DIR/py.XXXXXX")
+    command "$LP_PYTHON" "$@" 2> "$err"; rc=$?
+    cat "$err" >&2
+    if [ "$rc" -ne 0 ] && grep -q "^Traceback (most recent call last):" "$err"; then
+        grep -v "^[[:space:]]" "$err" | tail -1 >> "$LP_CRASH_FILE"
+    fi
+    rm -f "$err"
+    return "$rc"
+}
+export -fn python3
+
 # Starts a function in the background under a name.
 prefetch() {
-    { "$2" > "$BG_DIR/$1.out" 2> "$BG_DIR/$1.err"; echo $? > "$BG_DIR/$1.part"; mv "$BG_DIR/$1.part" "$BG_DIR/$1.rc"; } &
+    { LP_CRASH_FILE="$BG_DIR/$1.crash"; "$2" > "$BG_DIR/$1.out" 2> "$BG_DIR/$1.err"; echo $? > "$BG_DIR/$1.part"; mv "$BG_DIR/$1.part" "$BG_DIR/$1.rc"; } &
     PF_PIDS+=("$!")
     printf -v "PF_$1" '%s' "$!"
 }
@@ -62,6 +78,7 @@ fetched() {
     if [ -f "$BG_DIR/$1.rc" ]; then
         cat "$BG_DIR/$1.out"
         cat "$BG_DIR/$1.err" >&2
+        [ -f "$BG_DIR/$1.crash" ] && cat "$BG_DIR/$1.crash" >> "$LP_CRASH_FILE"
         return "$(cat "$BG_DIR/$1.rc")"
     fi
     "$2"
@@ -246,6 +263,11 @@ emit() {
     local id="$1" status="$2" description="$3" count="${4:-0}" matches="${5:-}"
 
     TOTAL=$((TOTAL + 1))
+    if [ -s "$LP_CRASH_FILE" ]; then
+        status=FAIL; count=1; matches=""
+        description="NOT EVALUATED, the check crashed: $(tail -1 "$LP_CRASH_FILE")"
+        ${CRASH_HOLD:-false} || : > "$LP_CRASH_FILE"
+    fi
 
     if $JSON_MODE; then
         $FIRST_CHECK || JSON_CHECKS="$JSON_CHECKS,"
@@ -1164,7 +1186,7 @@ if grep -q '<artifactId>plugin-xmltransformer</artifactId>' pom.xml 2>/dev/null 
 import glob, re
 owners = {}
 import subprocess, os
-run = subprocess.run(["python3", os.path.join(os.environ["SCRIPT_DIR"], "sql_paths.py"), "."], capture_output=True, text=True).stdout.split()
+run = subprocess.run(["python3", os.path.join(os.environ["SCRIPT_DIR"], "sql_paths.py"), "."], capture_output=True, encoding="utf-8", errors="replace").stdout.split()
 for f in sorted(run):
     m = re.search(r"sql/plugins/([^/]+)(/modules/[^/]+)?/", f.replace("\\", "/"))
     if m:
@@ -1535,7 +1557,7 @@ def changesets(text):
             cur[1].append(" ".join(line.split()))
     return [(i, "\n".join(b)) for i, b in out]
 def git(*args):
-    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    r = subprocess.run(["git", *args], capture_output=True, encoding="utf-8", errors="replace")
     return r.stdout if r.returncode == 0 else None
 tag = (git("describe", "--tags", "--abbrev=0") or "").strip()
 for f in sorted(glob.glob("src/sql/**/update_*.sql", recursive=True)):
@@ -1561,8 +1583,8 @@ PY
     SQ12_MATCHES=$(echo "$SQ1X" | sed -n 's/^SQ12 //p')
 fi
 COUNT=0; [ -n "$SQ11_MATCHES" ] && COUNT=$(echo "$SQ11_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "SQ11" "PASS" "No changeset identity reused in the upgrade scripts" 0
-else emit "SQ11" "FAIL" "Changeset identity declared twice in one file: Liquibase refuses the changelog; give the second one a new id" "$COUNT" "$SQ11_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then CRASH_HOLD=true emit "SQ11" "PASS" "No changeset identity reused in the upgrade scripts" 0
+else CRASH_HOLD=true emit "SQ11" "FAIL" "Changeset identity declared twice in one file: Liquibase refuses the changelog; give the second one a new id" "$COUNT" "$SQ11_MATCHES"; fi
 COUNT=0; [ -n "$SQ12_MATCHES" ] && COUNT=$(echo "$SQ12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "SQ12" "PASS" "No released or committed changeset of the upgrade scripts rewritten" 0
 else emit "SQ12" "WARN" "Released or committed changeset with another body (an id taken over in a rebase?): a base that ran it never gets the new body; add a new changeset, or say in its comment why the edit cannot wait (rules/sql-liquibase.md)" "$COUNT" "$SQ12_MATCHES"; fi
@@ -1821,7 +1843,7 @@ if [ -d webapp/WEB-INF/plugins ] || [ -d src/sql ]; then
         python3 - <<'EOF2'
 import glob, re
 for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
-    text = open(f, errors="replace").read()
+    text = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r"(?is)insert\s+into\s+core_admin_right\s*\(([^)]*)\)\s*values\s*(.*?);", text):
         cols = [c.strip().lower() for c in m.group(1).split(",")]
         if "admin_url" not in cols:
@@ -1852,7 +1874,7 @@ rows = {}
 for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
     if re.search(r"/upgrades?/", f):
         continue
-    text = uncommented(open(f, errors="replace").read())
+    text = uncommented(open(f, encoding="utf-8", errors="replace").read())
     steps = []
     for m in re.finditer(r"(?is)insert\s+into\s+core_admin_right\s*\(([^)]*)\)\s*values\s*(.*?);", text):
         cols = [c.strip().lower() for c in m.group(1).split(",")]
@@ -1870,7 +1892,7 @@ for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
             row.update({k: v for k, v in sets.items() if k != "id_right"})
             rows[sets.get("id_right", fid)] = (f, line, row)
 css = os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")) + "/lutece-core/webapp/themes/shared/css/tabler-icons.min.css"
-icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, errors="replace").read())) if os.path.isfile(css) else set()
+icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, encoding="utf-8", errors="replace").read())) if os.path.isfile(css) else set()
 def unknown(value):
     m = re.fullmatch(r"\s*ti\s+ti-([a-z0-9-]+)\s*", value or "")
     return icons and m and m.group(1) not in icons
@@ -1878,7 +1900,7 @@ for fid, (f, line, row) in sorted(rows.items()):
     if unknown(row.get("icon_url")):
         print("WB14 %s:%d: %s icon_url %s: no such Tabler icon (tabler-icons.min.css of the core)" % (f, line, fid, row["icon_url"]))
 for f in sorted(glob.glob("webapp/WEB-INF/plugins/*.xml")):
-    text = open(f, errors="replace").read()
+    text = open(f, encoding="utf-8", errors="replace").read()
     for m in re.finditer(r"<admin-feature>(.*?)</admin-feature>", text, re.S):
         line = text[:m.start()].count("\n") + 1
         get = lambda tag: (re.search(r"<%s>\s*([^<]*?)\s*</%s>" % (tag, tag), m.group(1)) or [None, None])[1]
@@ -1896,8 +1918,8 @@ EOF2
     WB13_MATCHES=$(echo "$WB1314" | sed -n 's/^WB13 //p'); WB14_MATCHES=$(echo "$WB1314" | sed -n 's/^WB14 //p')
 fi
 COUNT=0; [ -n "$WB13_MATCHES" ] && COUNT=$(echo "$WB13_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "WB13" "PASS" "Install SQL and descriptor agree on every admin feature url and icon" 0
-else emit "WB13" "FAIL" "Admin feature url or icon differs between the install SQL and the descriptor: align both (and give upgraded sites an UPDATE)" "$COUNT" "$WB13_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then CRASH_HOLD=true emit "WB13" "PASS" "Install SQL and descriptor agree on every admin feature url and icon" 0
+else CRASH_HOLD=true emit "WB13" "FAIL" "Admin feature url or icon differs between the install SQL and the descriptor: align both (and give upgraded sites an UPDATE)" "$COUNT" "$WB13_MATCHES"; fi
 COUNT=0; [ -n "$WB14_MATCHES" ] && COUNT=$(echo "$WB14_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB14" "PASS" "Every Tabler icon of the admin rights exists" 0
 else emit "WB14" "FAIL" "Admin feature icon that Tabler does not define: the menu shows an empty glyph" "$COUNT" "$WB14_MATCHES"; fi
@@ -1963,8 +1985,8 @@ for x in glob.glob("webapp/WEB-INF/plugins/*.xml"):
     if xv and "${" not in xv.group(1) and xv.group(1).strip() != pv:
         print("PV01 %s: <version>%s</version>, the pom says %s" % (x, xv.group(1).strip(), pv))
 try:
-    inside = subprocess.run(["git", "rev-parse", "--is-shallow-repository"], capture_output=True, text=True)
-    tags = subprocess.run(["git", "tag"], capture_output=True, text=True).stdout.split()
+    inside = subprocess.run(["git", "rev-parse", "--is-shallow-repository"], capture_output=True, encoding="utf-8", errors="replace")
+    tags = subprocess.run(["git", "tag"], capture_output=True, encoding="utf-8", errors="replace").stdout.split()
 except OSError:
     inside, tags = None, []
 if inside is None or inside.returncode:
@@ -1977,7 +1999,7 @@ if released:
     last = max(released)
     if version(pv) <= last[0]:
         why = " (plugin-liquibase compares the numbers only, PluginVersion of library-sql-utils: a qualifier such as -beta-03 or -SNAPSHOT does not count)" if re.search(r"\d-[A-Za-z]", last[1] + " " + pv) else ""
-        since = subprocess.run(["git", "diff", "--name-only", last[1], "HEAD", "--", "src/sql"], capture_output=True, text=True).stdout.split()
+        since = subprocess.run(["git", "diff", "--name-only", last[1], "HEAD", "--", "src/sql"], capture_output=True, encoding="utf-8", errors="replace").stdout.split()
         upgrades = [f for f in since if re.search(r"/upgrades?/[^/]+\.sql$", f)]
         if upgrades:
             print("PV02 pom.xml: version %s is not above the last release %s, and %d upgrade script(s) changed since (%s): a site on that release never runs them (a script ending at the installed version runs only with liquibase.accept.unstable.versions or accept.snapshot.versions and an upgrade as the last run, never after a fresh install): put the changes in a script ending above the release, and raise the version to it%s" % (pv, last[1], len(upgrades), ", ".join(os.path.basename(f) for f in upgrades[:3]), why))
@@ -1991,12 +2013,12 @@ PV01_MATCHES=$(echo "$PV_MATCHES" | grep "^PV01 " | sed 's/^PV01 //'); PV02_MATC
 PV02_UNJUDGED=$(echo "$PV_MATCHES" | grep "^PV02NE " | sed 's/^PV02NE //'); PV03_MATCHES=$(echo "$PV_MATCHES" | grep "^PV03 " | sed 's/^PV03 //')
 PV03_NOTE=$(echo "$PV_MATCHES" | sed -n 's/^PV03N //p')
 COUNT=0; [ -n "$PV01_MATCHES" ] && COUNT=$(echo "$PV01_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "PV01" "PASS" "pom and plugin descriptor carry the same version" 0
-else emit "PV01" "FAIL" "pom and plugin descriptor versions differ" "$COUNT" "$PV01_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then CRASH_HOLD=true emit "PV01" "PASS" "pom and plugin descriptor carry the same version" 0
+else CRASH_HOLD=true emit "PV01" "FAIL" "pom and plugin descriptor versions differ" "$COUNT" "$PV01_MATCHES"; fi
 COUNT=0; [ -n "$PV02_MATCHES" ] && COUNT=$(echo "$PV02_MATCHES" | wc -l)
-if [ -n "$PV02_UNJUDGED" ]; then emit "PV02" "WARN" "Version NOT EVALUATED against the last release" 1 "$PV02_UNJUDGED"
-elif [ "$COUNT" -eq 0 ]; then emit "PV02" "PASS" "The version is above the last release" 0
-else emit "PV02" "FAIL" "Version not above the last release while upgrade scripts changed since: upgraded sites skip them" "$COUNT" "$PV02_MATCHES"; fi
+if [ -n "$PV02_UNJUDGED" ]; then CRASH_HOLD=true emit "PV02" "WARN" "Version NOT EVALUATED against the last release" 1 "$PV02_UNJUDGED"
+elif [ "$COUNT" -eq 0 ]; then CRASH_HOLD=true emit "PV02" "PASS" "The version is above the last release" 0
+else CRASH_HOLD=true emit "PV02" "FAIL" "Version not above the last release while upgrade scripts changed since: upgraded sites skip them" "$COUNT" "$PV02_MATCHES"; fi
 COUNT=0; [ -n "$PV03_MATCHES" ] && COUNT=$(echo "$PV03_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ] && [ -n "$PV03_NOTE" ]; then emit "PV03" "PASS" "The $PV03_NOTE" 0
 elif [ "$COUNT" -eq 0 ]; then emit "PV03" "PASS" "The version is above the last release, or nothing to judge" 0

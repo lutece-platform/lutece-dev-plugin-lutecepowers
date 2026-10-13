@@ -82,7 +82,7 @@ def strip(text):
 
 def read_source(path):
     """The text of a source with CRLF read as LF and a lone CR kept, so line numbers match grep's."""
-    with open(path, errors="replace", newline="") as fh:
+    with open(path, encoding="utf-8", errors="replace", newline="") as fh:
         return fh.read().replace("\r\n", "\n")
 
 
@@ -155,7 +155,7 @@ def refers_to(code, name, target):
 def is_library(root):
     """Tells whether the project is a library: a jar packaging, whose beans its consumers may produce."""
     try:
-        with open(os.path.join(root, "pom.xml"), errors="replace") as fh:
+        with open(os.path.join(root, "pom.xml"), encoding="utf-8", errors="replace") as fh:
             pom = re.sub(r"<parent>.*?</parent>", "", fh.read(), flags=re.S)
     except OSError:
         return False
@@ -414,7 +414,7 @@ def column_types(root):
         for n in names:
             if not (n.endswith(".sql") and n.startswith("create")):
                 continue
-            with open(os.path.join(dirpath, n), errors="replace") as fh:
+            with open(os.path.join(dirpath, n), encoding="utf-8", errors="replace") as fh:
                 sql = re.sub(r"--[^\n]*", "", fh.read())
             for m in re.finditer(r"(?is)create\s+table\s+(?:if\s+not\s+exists\s+)?`?(\w+)`?\s*\((.*?)\)\s*(?:engine|default|;|$)", sql):
                 cols = tables.setdefault(m.group(1).lower(), {})
@@ -541,7 +541,7 @@ def core_types_for_removal():
         for n in names:
             if not n.endswith(".java"):
                 continue
-            with open(os.path.join(dirpath, n), errors="replace") as fh:
+            with open(os.path.join(dirpath, n), encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
             m = re.search(r"@Deprecated\s*\([^)]*forRemoval\s*=\s*true[^)]*\)\s*(?:@\w+(?:\([^)]*\))?\s*)*"
                           r"(?:public\s+|abstract\s+|final\s+)*(?:class|interface|enum)\s+(\w+)", text)
@@ -576,13 +576,13 @@ def core_types_gone():
     (where it moved), empty when it is gone."""
     core = os.path.dirname(os.path.dirname(CORE_SOURCES))
     r = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", "origin/develop7.x", "--", "src/java"],
-                       capture_output=True, text=True)
+                       capture_output=True, encoding="utf-8", errors="replace")
     if r.returncode or not os.path.isdir(CORE_SOURCES):
         return {}
     to_name = lambda rel: rel[len("src/java/"):-5].replace("/", ".")
     v7 = {to_name(f) for f in r.stdout.split() if f.endswith(".java")}
     refs = os.path.dirname(core)
-    libs = re.findall(r"<artifactId>(library-[\w.-]+)</artifactId>", open(os.path.join(core, "pom.xml"), errors="replace").read())
+    libs = re.findall(r"<artifactId>(library-[\w.-]+)</artifactId>", open(os.path.join(core, "pom.xml"), encoding="utf-8", errors="replace").read())
     roots = [CORE_SOURCES] + [os.path.join(refs, d, "src", "java") for d in os.listdir(refs) for lib in libs if d.endswith(lib)]
     v8 = {os.path.relpath(os.path.join(d, n), root)[:-5].replace(os.sep, ".")
           for root in roots for d, _, names in os.walk(root) for n in names if n.endswith(".java")}
@@ -614,7 +614,7 @@ def dp06(root):
     """Core types, methods and core_* tables the project uses that the core's develop has and its last published tag
     does not: the project needs a core nobody can install yet."""
     core = os.path.dirname(os.path.dirname(CORE_SOURCES))
-    git = lambda *a: subprocess.run(["git", "-C", core, *a], capture_output=True, text=True)
+    git = lambda *a: subprocess.run(["git", "-C", core, *a], capture_output=True, encoding="utf-8", errors="replace")
     tag = git("describe", "--tags", "--abbrev=0").stdout.strip()
     if not tag:
         return []
@@ -631,7 +631,7 @@ def dp06(root):
                     cache[fqcn] = None
                     continue
                 old = git("show", "%s:%s" % (tag, rel))
-                cache[fqcn] = "class" if old.returncode else methods(open(now, errors="replace").read()) - methods(old.stdout)
+                cache[fqcn] = "class" if old.returncode else methods(open(now, encoding="utf-8", errors="replace").read()) - methods(old.stdout)
             new = cache[fqcn]
             line = raw[:m.start()].count("\n") + 1
             if new == "class":
@@ -642,10 +642,10 @@ def dp06(root):
                 if used:
                     out.append("%s:%d: %s.%s on the core's develop, in no published core (last: %s)" % (
                         os.path.relpath(path, root), line, name, "/".join(used), tag))
-    created = tables(open(os.path.join(core, "src/sql/create_db_lutece_core.sql"), errors="replace").read()) \
+    created = tables(open(os.path.join(core, "src/sql/create_db_lutece_core.sql"), encoding="utf-8", errors="replace").read()) \
         - tables(git("show", "%s:src/sql/create_db_lutece_core.sql" % tag).stdout)
     for f in sorted(glob.glob(os.path.join(root, "src/sql/**/*.sql"), recursive=True)):
-        used = sorted(t for t in created if re.search(r"\b%s\b" % t, open(f, errors="replace").read()))
+        used = sorted(t for t in created if re.search(r"\b%s\b" % t, open(f, encoding="utf-8", errors="replace").read()))
         if used:
             out.append("%s: table %s created by the core's develop only (last published: %s)" % (os.path.relpath(f, root), ", ".join(used), tag))
     return out
@@ -658,7 +658,7 @@ def core_deprecated_singletons():
         for n in names:
             if not n.endswith(".java"):
                 continue
-            with open(os.path.join(dirpath, n), errors="replace") as fh:
+            with open(os.path.join(dirpath, n), encoding="utf-8", errors="replace") as fh:
                 text = strip(fh.read())
             pkg = re.search(r"(?m)^package\s+([\w.]+)\s*;", text)
             if pkg and re.search(r"@Deprecated\b[^;{]*?\bstatic\s+(?:synchronized\s+)?[\w<>]+\s+getInstance\s*\(", text):
@@ -807,7 +807,7 @@ def rl01(root):
 def pd02(root):
     """Plugin classes with a working init( ) that no plugin descriptor names: that init( ) never runs."""
     import glob
-    desc = " ".join(open(f, errors="replace").read() for f in glob.glob(os.path.join(root, "webapp", "WEB-INF", "plugins", "*.xml")))
+    desc = " ".join(open(f, encoding="utf-8", errors="replace").read() for f in glob.glob(os.path.join(root, "webapp", "WEB-INF", "plugins", "*.xml")))
     out = []
     if not desc:
         return out
@@ -888,12 +888,12 @@ def mv08(root):
     """@Pager defaultItemsPerPage keys no properties file of the project declares: the pager silently shows 50 items."""
     declared, own = set(), set()
     for f in glob.glob(os.path.join(root, "webapp", "WEB-INF", "conf", "**", "*.properties"), recursive=True):
-        with open(f, errors="replace") as fh:
+        with open(f, encoding="utf-8", errors="replace") as fh:
             own.update(m.group(1) for m in re.finditer(r"(?m)^\s*([^#!\s=:][^\s=:]*)\s*[=:]", fh.read()))
     core = os.path.join(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")), "lutece-core")
     for f in glob.glob(os.path.join(root, "webapp", "WEB-INF", "conf", "**", "*.properties"), recursive=True) + \
             glob.glob(os.path.join(core, "webapp", "WEB-INF", "conf", "*.properties")):
-        with open(f, errors="replace") as fh:
+        with open(f, encoding="utf-8", errors="replace") as fh:
             declared.update(m.group(1) for m in re.finditer(r"(?m)^\s*([^#!\s=:][^\s=:]*)\s*[=:]", fh.read()))
     out = []
     for path, raw in sorted(sources(root).items()):

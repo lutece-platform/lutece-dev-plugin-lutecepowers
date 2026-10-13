@@ -1210,7 +1210,7 @@ def main():
     if know.source == "reference clone" and "--no-exploded" not in sys.argv:
         print("no assembled webapp yet: running ensure-exploded.sh (mvn lutece:exploded-lite, it writes target/)", file=sys.stderr)
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ensure-exploded.sh")
-        result = subprocess.run(["bash", script, root], capture_output=True, text=True)
+        result = subprocess.run(["bash", script, root], capture_output=True, encoding="utf-8", errors="replace")
         for line in result.stderr.splitlines():
             print("  " + line, file=sys.stderr)
         know = Knowledge(root)

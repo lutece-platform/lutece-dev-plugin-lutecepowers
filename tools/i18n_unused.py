@@ -31,7 +31,7 @@ def project_files(root):
     """Text files of the project, bundles excluded: git's view when it is a repository, else a walk."""
     try:
         out = subprocess.run(["git", "-C", root, "ls-files", "-co", "--exclude-standard"], capture_output=True,
-                             text=True, check=True).stdout.split("\n")
+                             encoding="utf-8", errors="replace", check=True).stdout.split("\n")
     except (OSError, subprocess.CalledProcessError):
         out = [os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs]
     return [f for f in out if f and not f.startswith(SKIP_DIRS) and not BUNDLE.search(f)
@@ -64,7 +64,7 @@ def stems_of(text):
 def artifact_id(root):
     """The artifactId of a project's pom (the second one, after the parent's), or None."""
     try:
-        with open(os.path.join(root, "pom.xml"), errors="replace") as fh:
+        with open(os.path.join(root, "pom.xml"), encoding="utf-8", errors="replace") as fh:
             ids = re.findall(r"<artifactId>([^<]+)</artifactId>", re.sub(r"<parent>.*?</parent>", "", fh.read(), flags=re.S))
     except OSError:
         return None
@@ -113,7 +113,7 @@ def used_elsewhere(refs, fulls, own):
         patterns.write("\n".join(sorted(fulls)) + "\n")
     try:
         out = subprocess.run(["grep", "-rlF", "-f", patterns.name, "--exclude=*_messages*.properties", "--exclude-dir=target", refs],
-                             capture_output=True, text=True).stdout.splitlines()
+                             capture_output=True, encoding="utf-8", errors="replace").stdout.splitlines()
     finally:
         os.unlink(patterns.name)
     mine = artifact_id(own)

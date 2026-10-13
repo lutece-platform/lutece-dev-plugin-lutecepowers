@@ -12,6 +12,8 @@
 | Pattern | grep pattern used |
 | File Types | Which file types this check applies to |
 
+A check whose Python dies on an exception has not run: it reports FAIL `NOT EVALUATED, the check crashed: <error>`, never PASS. Files are read as UTF-8 with undecodable bytes replaced, so an ISO-8859-1 file is checked like any other.
+
 ---
 
 ## POM Dependencies (PM)

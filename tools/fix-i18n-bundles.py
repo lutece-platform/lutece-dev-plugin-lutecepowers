@@ -88,7 +88,7 @@ def fix_arrows(path, root):
 def referenced(root, full):
     """True when a file of the project other than a bundle names the full key."""
     out = subprocess.run(["grep", "-rlF", "--exclude=*_messages*.properties", "--exclude-dir=target", "--exclude-dir=.git",
-                          "--exclude-dir=e2e", full, root], capture_output=True, text=True).stdout
+                          "--exclude-dir=e2e", full, root], capture_output=True, encoding="utf-8", errors="replace").stdout
     return bool(out.strip())
 
 
@@ -96,7 +96,7 @@ def asked(root, key):
     """True when a file of the project other than a bundle names the key itself (after module.<plugin>. for a module), not as the tail of a longer key."""
     rx = r"(^|[^A-Za-z0-9_.]|module[.][A-Za-z0-9_]+[.])%s([^A-Za-z0-9_.]|$)" % re.escape(key).replace("\\.", "[.]")
     out = subprocess.run(["grep", "-rlE", "--exclude=*.properties", "--exclude-dir=target", "--exclude-dir=.git",
-                          "--exclude-dir=e2e", rx, root], capture_output=True, text=True).stdout
+                          "--exclude-dir=e2e", rx, root], capture_output=True, encoding="utf-8", errors="replace").stdout
     return bool(out.strip())
 
 
@@ -223,12 +223,12 @@ def main():
     dead = set()
     if "--drop" in args:
         i = args.index("--drop")
-        dead = {k.strip() for k in open(args[i + 1]) if k.strip()}
+        dead = {k.strip() for k in open(args[i + 1], encoding="utf-8", errors="replace") if k.strip()}
         del args[i:i + 2]
     entries = []
     if "--add" in args:
         i = args.index("--add")
-        for ln in open(args[i + 1], encoding="utf-8"):
+        for ln in open(args[i + 1], encoding="utf-8", errors="replace"):
             m = re.match(r"\s*([A-Za-z0-9_.-]+?)(_[a-z]{2})?:([^=\s]+)=(.*?)\r?\n?$", ln)
             if m:
                 entries.append(("%s_messages%s.properties" % (m.group(1), m.group(2) or ""), m.group(3), m.group(4)))

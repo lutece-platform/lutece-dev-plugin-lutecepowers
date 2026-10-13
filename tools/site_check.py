@@ -460,7 +460,7 @@ class War:
                         ordinal = int(dict(pairs).get("config_ordinal", 100))
                         out.append((ordinal, f"{jar.name}!microprofile-config.properties", pairs))
                     if svc in names:
-                        for impl in z.read(svc).decode().split():
+                        for impl in z.read(svc).decode("utf-8", "replace").split():
                             if impl.startswith("#") or impl.startswith("fr.paris.lutece.util.Lutece"):
                                 continue
                             cls = impl.replace(".", "/") + ".class"
@@ -638,7 +638,7 @@ def floor_parent():
     if os.environ.get("V8_FLOOR_SITE_PARENT"):
         return os.environ["V8_FLOOR_SITE_PARENT"]
     r = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("latest-lutece.py")), "release",
-                        "fr.paris.lutece.tools:lutece-site-pom"], capture_output=True, text=True)
+                        "fr.paris.lutece.tools:lutece-site-pom"], capture_output=True, encoding="utf-8", errors="replace")
     return r.stdout.strip().split(":")[2] if r.stdout.count(":") >= 2 else "8.0.0"
 
 
@@ -1232,7 +1232,7 @@ def read_decisions(path):
     """kind -> {id: reason} from a decisions file; a reason shorter than 12 characters does not count."""
     res = {"key": {}, "plugin": {}, "file": {}, "profile": {}}
     if path and pathlib.Path(path).exists():
-        for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
+        for line in pathlib.Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
             m = DECISION.match(line)
             if m and len(m.group(3).strip()) >= 12:
                 res[m.group(1)][m.group(2)] = m.group(3).strip()
@@ -1356,7 +1356,7 @@ def later_commits(site, ref):
     import subprocess
     if not ref:
         return []
-    git = lambda *a: subprocess.run(["git", "-C", str(site.path), *a], capture_output=True, text=True).stdout
+    git = lambda *a: subprocess.run(["git", "-C", str(site.path), *a], capture_output=True, encoding="utf-8", errors="replace").stdout
     head = git("rev-parse", "HEAD").strip()
     res = []
     for b in git("branch", "-r", "--contains", ref, "--format=%(refname:short)").split():
@@ -1380,7 +1380,7 @@ def before_site_files(site, ref, env=None):
     out = {}
     for prefix in ["webapp/", "src/conf/default/"] + ([f"src/conf/{env}/"] if env else []):
         names = subprocess.run(["git", "-C", str(site.path), "ls-tree", "-r", "--name-only", ref, "--", prefix],
-                               capture_output=True, text=True).stdout.split("\n")
+                               capture_output=True, encoding="utf-8", errors="replace").stdout.split("\n")
         for n in filter(None, names):
             out[n[len(prefix):]] = subprocess.run(["git", "-C", str(site.path), "show", f"{ref}:{n}"], capture_output=True).stdout
     return out
@@ -1663,7 +1663,7 @@ def gate(war_dir, bom, offline, site_dir=None, m2=None, extra=()):
         if art in managed:
             print(f"BOM        {art:48} {ver:24} -> {managed[art][0]}")
             continue
-        bom_version = re.search(r"<artifactId>lutece-bom</artifactId>\s*<version>([^<]+)</version>", pathlib.Path(bom).read_text()) if bom else None
+        bom_version = re.search(r"<artifactId>lutece-bom</artifactId>\s*<version>([^<]+)</version>", pathlib.Path(bom).read_text(encoding="utf-8", errors="replace")) if bom else None
         if art.endswith("-starter") and bom_version:
             print(f"STARTER    {art:48} {ver:24} -> {bom_version.group(1)} (the version of the target lutece-bom)")
             continue
@@ -1764,7 +1764,7 @@ def main():
             print(f"UNCONVERTED {f}", file=sys.stderr)
         return 0
     if a.cmd == "config":
-        env = dict(l.split("=", 1) for l in pathlib.Path(a.env).read_text().splitlines() if "=" in l) if a.env else None
+        env = dict(l.split("=", 1) for l in pathlib.Path(a.env).read_text(encoding="utf-8", errors="replace").splitlines() if "=" in l) if a.env else None
         if a.against:
             return 1 if config_against(War(a.war, env), a.against, a.profile) else 0
         for k, (v, origin) in sorted(War(a.war).effective(a.profile).items()):
