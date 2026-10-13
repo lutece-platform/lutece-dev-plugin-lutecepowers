@@ -6,7 +6,8 @@
 # original content, else the committed version) checked at the same path. A project below Lutece 8, or a file or a
 # project already carrying Lutece 7 code, gets one non-blocking note per session instead: leave it unless the user asks,
 # ask once the task is done whether to run the update skill. During an update (a .migration directory), every finding
-# of the file comes back. Silent on a file of another kind, outside a Lutece project and when Python is missing.
+# of the file comes back. Silent on a file of another kind, under the e2e folder of a project (the bench, never shipped),
+# outside a Lutece project and when Python is missing.
 set -uo pipefail
 
 IN=$(cat)
@@ -31,6 +32,7 @@ F=$(cd "$(dirname "$F")" && pwd)/$(basename "$F")
 
 D=$(dirname "$F"); ROOT=""; MIGRATING=false
 while [ -n "$D" ] && [ "$D" != "/" ]; do
+    [ "$(basename "$D")" = e2e ] && [ -f "$(dirname "$D")/pom.xml" ] && exit 0
     [ -d "$D/.migration" ] && MIGRATING=true
     [ -z "$ROOT" ] && [ -f "$D/pom.xml" ] && ROOT="$D"
     D=$(dirname "$D")

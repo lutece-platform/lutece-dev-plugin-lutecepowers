@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the verify-edit PostToolUse hook: hands back what an edit adds (exit 2), leaves the committed debt of a file
-# and a project below Lutece 8 to one non-blocking note per session, stays silent on a clean file and outside a
-# Lutece project.
+# and a project below Lutece 8 to one non-blocking note per session, stays silent on a clean file, outside a
+# Lutece project and under the e2e folder of a project.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT="$HERE/../.."
@@ -59,4 +59,12 @@ mkdir -p "$T/plugins/plugin-w/webapp/WEB-INF/plugins" && printf '%s\n' "$POM" > 
 printf '<plug-in><application-class>x</application-class></plug-in>\n' > "$T/plugins/plugin-w/before.xml"
 printf '<plug-in><application-class>x</application-class><!-- c --></plug-in>\n' > "$T/plugins/plugin-w/webapp/WEB-INF/plugins/w.xml"
 check "a check that reads the path sees the same path before the edit" '[ "$(runo "$T/plugins/plugin-w/webapp/WEB-INF/plugins/w.xml" "$T/plugins/plugin-w/before.xml" s7)" = 0 ] && [ ! -s "$T/err" ]'
+mkdir -p "$T/e/e2e/harness/site/webapp/jsp/e2e" "$T/e/webapp/jsp/admin" "$T/e/src/java/x/e2e" && printf '%s\n' "$POM" > "$T/e/pom.xml"
+printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>8.0.2</version></parent><artifactId>site-e2e</artifactId><packaging>lutece-site</packaging></project>\n' > "$T/e/e2e/harness/site/pom.xml"
+printf '<%%@ page contentType="text/plain" %%><%% out.print("ok"); %%>\n' > "$T/e/e2e/harness/site/webapp/jsp/e2e/probe.jsp"
+cp "$T/e/e2e/harness/site/webapp/jsp/e2e/probe.jsp" "$T/e/webapp/jsp/admin/Probe.jsp"
+cp "$T/p/src/java/Bad.java" "$T/e/src/java/x/e2e/Bad.java"
+check "a test page of the e2e folder is silent" '[ "$(run "$T/e/e2e/harness/site/webapp/jsp/e2e/probe.jsp" s8)" = 0 ] && [ ! -s "$T/err" ] && [ ! -s "$T/out" ]'
+check "the same page shipped by the project is handed back" '[ "$(run "$T/e/webapp/jsp/admin/Probe.jsp" s8)" = 2 ] && grep -q "JS02" "$T/err"'
+check "a source package named e2e is still checked" '[ "$(run "$T/e/src/java/x/e2e/Bad.java" s8)" = 2 ] && grep -q "JX01" "$T/err"'
 if [ $fail = 0 ]; then echo "PASS: verify-edit hands back what an edit adds, notes the debt once, stays silent otherwise"; else exit 1; fi

@@ -85,7 +85,7 @@ Coding agents without a usable session hook load the bootstrap another way: Open
 
 ## Other hooks
 
-- `hooks/verify-edit` (after each edit, Claude Code): runs `tools/verify-file.sh` on the edited file of a Lutece project and hands back, at once, the FAIL and WARN lines the edit added to the committed version. A file that already broke checks, a project whose sources still carry Lutece 7 code, or a project below Lutece 8, gets one non-blocking note per session: leave it unless the user asks, and ask at the end whether to run the update skill. While a project carries `.migration/`, every finding of the edited file comes back.
+- `hooks/verify-edit` (after each edit, Claude Code): runs `tools/verify-file.sh` on the edited file of a Lutece project and hands back, at once, the FAIL and WARN lines the edit added to the committed version. A file that already broke checks, a project whose sources still carry Lutece 7 code, or a project below Lutece 8, gets one non-blocking note per session: leave it unless the user asks, and ask at the end whether to run the update skill. While a project carries `.migration/`, every finding of the edited file comes back. Files under the e2e folder of a project (the bench, never shipped) are left alone.
 - `hooks/check-result` (on the first prompt, Claude Code): once the background `lutece-check.sh --quick` is done, shows its first lines to the user and all of it to the agent, as existing debt to leave unless asked.
 - `hooks/migration-gate` (Stop, Claude Code): while a project carries `.migration/gate-required`, refuses to end the turn until a full `final-gate.sh` passes.
 
