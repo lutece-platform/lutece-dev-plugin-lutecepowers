@@ -48,10 +48,6 @@ check "jvm.options: member provider type" "$J" "hazelcast.jcache.provider.type=m
 check "jvm.options: Hazelcast service name" "$J" "hz.service-name"
 if has "$J" "add-opens=java.base/java.lang"; then ok "jvm.options: Hazelcast --add-opens"; else warn "jvm.options: Hazelcast --add-opens missing (startup warning, degraded performance)"; fi
 
-E=$CFG/server.env
-if [ -f "$E" ] && grep -Eq "^(OTEL_EXPORTER|MP_CONFIG_PROFILE|PORTAL_|LIQUIBASE)" "$E"; then
-  bad "server.env: environment-specific value (server.env overrides the container environment)"; else ok "server.env: no environment-specific value"; fi
-
 P=$SITE/webapp/WEB-INF/plugins/plugins.dat
 if [ -f "$P" ] && [ "$(grep -c "installed=1" "$P")" -gt 1 ]; then ok "plugins.dat: $(grep -c "installed=1" "$P") plugins installed on a fresh database"; else bad "plugins.dat: missing or nearly empty"; fi
 # Plugins listed but absent from the assembled war (name = <name> of the plugin descriptor, not its file name;

@@ -59,8 +59,6 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   `sessionCache-1.0` starts as a client and there is no member.
 - **`include` location**: a variable used in an `<include location>` must come from `bootstrap.properties`
   (`liberty.bootstrap.*` in the pom), not from `configDropins`.
-- **`server.env` overrides the container environment**: never put an environment-specific value there (e.g.
-  `MP_CONFIG_PROFILE`, `OTEL_EXPORTER_OTLP_ENDPOINT`); the deployment could not change it.
 - **No member-side `cache:` configuration for the Lutece caches**: the client creates a declared cache as soon as Lutece asks for
   it by name, bypassing the enabled/disabled state Lutece keeps in database.
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
