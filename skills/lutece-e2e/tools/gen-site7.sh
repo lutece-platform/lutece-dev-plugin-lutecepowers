@@ -97,6 +97,33 @@ PYPIN
   echo ">> v7 dependency pinned: $PG:$PA -> $PV"
 done
 
+# The v7 build reaches the network as the user's Maven does: a bench settings file (E2E_MVN7="mvn -s <file>") gets
+# the proxies and mirrors of ~/.m2/settings.xml in a copy beside the worktree, outside git. A repository that does
+# not answer stops the run here, in seconds, rather than a Maven waiting on a connection that never opens.
+NET_SETTINGS="$HOME/.m2/settings.xml"
+read -ra _mvn <<< "$MVN7"
+for i in "${!_mvn[@]}"; do
+  case "${_mvn[$i]}" in
+    -s|--settings)
+      j=$((i + 1)); [ -n "${_mvn[$j]:-}" ] || break
+      NET_SETTINGS="$(cd "$SITE/.." && pwd)/settings7.xml"
+      python3 "$BENCH/tools/maven-net.py" merge "${_mvn[$j]}" "$HOME/.m2/settings.xml" "$NET_SETTINGS"
+      echo ">> v7 Maven settings: ${_mvn[$j]}, with the proxies and mirrors of $HOME/.m2/settings.xml ($NET_SETTINGS)"
+      _mvn[$j]="$NET_SETTINGS"; MVN7="${_mvn[*]}" ;;
+  esac
+done
+case " $MVN7 " in
+  *" -o "*|*" --offline "*) ;;
+  *)
+    REPOS=$(sed -n 's:.*<url>\(http[^<]*\)</url>.*:\1:p' "$SITE/pom.xml.tpl")
+    if ! DOWN=$(python3 "$BENCH/tools/maven-net.py" probe "$NET_SETTINGS" https://repo.maven.apache.org/maven2/ $REPOS); then
+      echo "gen-site7.sh: the v7 build cannot reach its Maven repositories (settings $NET_SETTINGS):" >&2
+      echo "$DOWN" >&2
+      echo "  connect the network they need (VPN, proxy of $HOME/.m2/settings.xml) and run again" >&2
+      exit 1
+    fi ;;
+esac
+
 # The v7 sources carry the same version as an artefact another bench or the developer installed: installed in the
 # shared local repository they would replace it, or bring back an older build under its number. Maven reads that
 # repository as the tail of a chained one (Maven 3.9) whose head, beside the worktree, takes the install and the

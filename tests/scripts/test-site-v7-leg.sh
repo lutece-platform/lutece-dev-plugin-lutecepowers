@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks the v7 leg of gen-site7.sh. Site mode: the v7 site of lpe2e upgrade is the site's own v7 war (E2E_V7_WAR),
 # with the bench's database settings laid over the site's, and the versions it ships read from its plugin descriptors
-# and its core jar. Plugin mode: every Maven run writes to the bench's own repository, the shared one only read.
+# and its core jar. Plugin mode: every Maven run writes to the bench's own repository, the shared one only read; a
+# bench settings file gets the user's proxies and mirrors, and a repository that does not answer stops the run fast.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 SKILL="$HERE/../../skills/lutece-e2e"
@@ -10,7 +11,7 @@ trap 'rm -rf "$T"' EXIT
 B="$T/bench"; E="$T/project/e2e"; S="$T/state/site7"
 mkdir -p "$B/tools" "$B/harness/site7" "$E" "$T/v7/WEB-INF/lib" "$T/v7/WEB-INF/plugins" "$T/v7/WEB-INF/conf"
 cp "$SKILL/tools/gen-site7.sh" "$B/tools/"
-cp "$HERE/../../tools/python.sh" "$B/tools/"
+cp "$HERE/../../tools/python.sh" "$SKILL/tools/maven-net.py" "$B/tools/"
 cp -a "$SKILL/harness/site7/." "$B/harness/site7/"
 printf 'E2E_TARGET=site\nE2E_SRC=..\nE2E_V7_WAR=%s\n' "$T/v7" > "$E/e2e.conf"
 echo "portal.url=jdbc:mysql://production-host:3306/site" > "$T/v7/WEB-INF/conf/db.properties"
@@ -44,8 +45,32 @@ case " \$* " in
 esac
 MVN
 chmod +x "$T/bin/mvn"
-OUT3=$(cd "$T" && PATH="$T/bin:$PATH" E2E_DIR="$P/e2e" E2E_SITE7_BUILD="$S7" bash "$B/tools/gen-site7.sh" 2>&1); RC3=$?
+python3 -c '
+import http.server, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def answer(self):
+        open(sys.argv[2], "a").write(self.path + "\n"); self.send_response(200); self.end_headers()
+    do_GET = do_HEAD = answer
+    def log_message(self, *a): pass
+s = http.server.HTTPServer(("127.0.0.1", 0), H); open(sys.argv[1], "w").write(str(s.server_port)); s.serve_forever()' "$T/proxy.port" "$T/proxy.log" &
+PROXY=$!
+trap 'kill $PROXY 2>/dev/null; rm -rf "$T"' EXIT
+for _ in $(seq 50); do [ -s "$T/proxy.port" ] && break; sleep 0.1; done
+mkdir -p "$T/home/.m2" "$P/e2e/harness"
+user_settings() { printf '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"><proxies><proxy><id>p</id><protocol>http</protocol><host>%s</host><port>%s</port><username>u</username><password>secret</password></proxy></proxies><mirrors><mirror><id>m</id><mirrorOf>*</mirrorOf><url>http://repo.invalid/maven2</url></mirror></mirrors><servers><server><id>s</id><password>server-secret</password></server></servers></settings>\n' "$1" "$2" > "$T/home/.m2/settings.xml"; }
+user_settings 127.0.0.1 "$(cat "$T/proxy.port")"
+printf '<settings><profiles><profile><id>v7</id></profile></profiles></settings>\n' > "$P/e2e/harness/settings7.xml"
+printf 'E2E_MVN7="mvn -s %s"\n' "$P/e2e/harness/settings7.xml" >> "$P/e2e/e2e.conf"
+OUT3=$(cd "$T" && HOME="$T/home" PATH="$T/bin:$PATH" E2E_DIR="$P/e2e" E2E_SITE7_BUILD="$S7" bash "$B/tools/gen-site7.sh" 2>&1); RC3=$?
 check "gen-site7.sh assembles a plugin's v7 site" "[ $RC3 -eq 0 ]"
 check "every v7 Maven run but the probe writes to the bench's repository, the shared one as its tail" "! grep -v settings.localRepository '$T/mvn.log' | grep -qv -- '-Dmaven.repo.local=$T/state7/build7/m2 -Dmaven.repo.local.tail=$SHARED'"
 check "the v7 install lands in the bench's repository, never in the shared one" "[ -f '$T/state7/build7/m2/g/plugin-x/1.0.0/plugin-x-1.0.0.jar' ] && [ -z \"\$(ls -A '$SHARED')\" ]"
-[ $fail -eq 0 ] || { echo "$OUT"; echo "$OUT3"; cat "$T/mvn.log"; exit 1; }
+N7="$T/state7/build7/settings7.xml"
+check "the bench settings file gets the user's proxies and mirrors, never the servers" "grep -q '<host>127.0.0.1</host>' '$N7' && grep -q '<id>m</id>' '$N7' && grep -q '<id>v7</id>' '$N7' && ! grep -q server-secret '$N7' && [ \"\$(stat -c %a '$N7')\" = 600 ]"
+check "every v7 Maven run reads that copy" "! grep -v -- '-s $N7' '$T/mvn.log' | grep -q ."
+check "the repositories are probed through the user's proxy" "grep -q '^http://repo.invalid/maven2' '$T/proxy.log'"
+user_settings 10.255.255.1 8080
+START=$(date +%s)
+OUT4=$(cd "$T" && HOME="$T/home" PATH="$T/bin:$PATH" E2E_DIR="$P/e2e" E2E_SITE7_BUILD="$S7" timeout 60 bash "$B/tools/gen-site7.sh" 2>&1); RC4=$?
+check "a repository that does not answer stops the v7 build in seconds, with the reason" "[ $RC4 -eq 1 ] && [ $(( $(date +%s) - START )) -lt 30 ] && echo \"\$OUT4\" | grep -q 'cannot reach its Maven repositories' && echo \"\$OUT4\" | grep -q 'through the proxy 10.255.255.1:8080'"
+[ $fail -eq 0 ] || { echo "$OUT"; echo "$OUT3"; echo "$OUT4"; cat "$T/mvn.log"; exit 1; }
