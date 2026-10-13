@@ -16,6 +16,13 @@ if "playwright" not in sys.modules:
     pw, api = types.ModuleType("playwright"), types.ModuleType("playwright.sync_api")
     api.expect = None
     sys.modules.update({"playwright": pw, "playwright.sync_api": api})
+try:
+    import pytest
+except ImportError:
+    pytest = types.ModuleType("pytest")
+    pytest.mark = types.SimpleNamespace(parametrize=lambda *a, **k: (lambda f: f), serial=None)
+    pytest.param = lambda *a, **k: a
+    sys.modules["pytest"] = pytest
 import lutece
 lutece.ARTIFACTS = pathlib.Path(sys.argv[2]) / "artifacts"
 import test_scenarios as ts
