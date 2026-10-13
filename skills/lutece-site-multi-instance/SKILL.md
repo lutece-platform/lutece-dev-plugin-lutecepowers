@@ -15,7 +15,8 @@ Imposed choices:
 - **HTTP session**: OpenLiberty `sessionCache-1.0` over an **embedded Hazelcast member** (one member per pod, in-line topology).
 - **Lutece cache** (JCache): **Hazelcast client** connected to the member of its own pod, with a **near cache**.
 - **Daemons**: `plugin-quartz-scheduler` (clustered Quartz), exclusive daemons declared per id.
-- No session affinity is required (it remains possible).
+- No session affinity is required. It remains useful: it limits node switches, so the session limits of the plugins below only
+  show on a failure or a restart; its cookie must not be named `JSESSIONID` (see *Kubernetes prerequisites*).
 
 Configure only: the skill writes the files and checks them statically. Proving the cluster (two instances, node switch, failover)
 is a separate step; the verification list at the end gives the checks.
@@ -46,7 +47,7 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 | `Dockerfile` | `Dockerfile` | Configuration copied, war copied, `configure.sh` |
 | Kubernetes (chart) | `kubernetes-rbac.yaml` | Service on 5701, Role/RoleBinding for the discovery |
 | Kubernetes (chart) | `kubernetes-deployment.yaml` | Replicas, probes, preStop, grace period, CPU limit above request |
-| Kubernetes (chart) | `kubernetes-ingress.yaml` | No affinity, replay on connection errors only |
+| Kubernetes (chart) | `kubernetes-ingress.yaml` | Optional affinity (own cookie), replay on connection errors only |
 
 ### Rules that are easy to get wrong (all observed)
 
@@ -131,15 +132,29 @@ attachment field.
   in its namespace (`templates/kubernetes-rbac.yaml`).
 - `terminationGracePeriodSeconds` above `hazelcast.graceful.shutdown.max.wait` (45 s → 60 s), a readiness probe and a short
   `preStop` so that the pod leaves the Service before OpenLiberty stops (otherwise `The cache closed` errors during shutdown).
+  Measured behind ingress-nginx, 10 k6 users, one rolling restart of 2 replicas: 24 and 11 errors 502 with the 30 s default and
+  no `preStop`, 0 and 0 with 60 s and a 10 s `preStop`.
+- Session affinity, when used: the ingress cookie must have its own name. Named `JSESSIONID` (as the OpenLiberty session cookie,
+  same path), the first response carries two `JSESSIONID` cookies, the browser keeps the OpenLiberty one and the ingress no longer
+  finds its route: 6 new sessions out of 10 changed pod right after their first request (minikube). Harmless with the session in
+  Hazelcast, a lost session without it. With its own cookie (`lutece-route`), 10 out of 10 stayed on their pod.
 - Probes and the database: readiness checks the database, liveness checks the webapp only (plugin-health:
   `application-liveness`, webapp loaded and no deadlock), startup probe about twice the slowest start (template: 3 min).
   Lutece reconnects by itself when the database comes back (verified: 9 s restart and 90 s outage, pages back at once), so
   a liveness on the database only restarts every replica at the same time, cold. A replica started while the database is
   down never loads its webapp (404 until restarted): the startup probe restarts it. `-XX:+ExitOnOutOfMemoryError` in
   `jvm.options` (OpenJ9: keep the default dump agents, the option is one of them).
-- Probe timeouts: readiness `timeoutSeconds: 5`, liveness `timeoutSeconds: 10` (template). With the 1 s default, the
-  replica left alone with the whole load after the loss of the other one answered its health checks late (they wait in the
-  bounded thread pool) and was killed by its liveness probe: one crash took both replicas down (reproduced on minikube).
+- Probe timeouts: readiness `timeoutSeconds: 5`, liveness `timeoutSeconds: 10`, startup `timeoutSeconds: 5` (template). With the
+  1 s default, the replica left alone with the whole load after the loss of the other one answered its health checks late (they
+  wait in the bounded thread pool) and was killed by its liveness probe: one crash took both replicas down (reproduced on
+  minikube); the startup probe times out while two replicas start together. No `initialDelaySeconds`: the startup probe holds
+  the other probes until the webapp is started.
+- Database connections: the limit of the application user (`max_user_connections`, `maxUserConnections` of mariadb-operator)
+  must cover every replica, rolling update surge and autoscaling maximum included. The executor bounds the pool in practice
+  (2 replicas of 4 threads under a saturating load: 11 connections), but OpenLiberty allows 50 per replica by default: bound it
+  (`<connectionManager maxPoolSize="…"/>` on the data source) or size the limit on replicas x pool.
+- Autoscaling on CPU only: a JVM does not give its memory back, an autoscaler on memory grows to its maximum and never scales
+  down. New pods start cold (see the warm-up below).
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
@@ -156,8 +171,18 @@ attachment field.
   zone, the server reads them in its session time zone, while some columns are filled by `CURRENT_TIMESTAMP` on the server side.
   `TZ=Europe/Paris` on the pods alone (database in UTC) stores the dates written by Java 2 h in the future next to correct
   server-side dates (measured: new `forms_response.creation_date` at now + 2 h, new `forms_form.creation_date` correct). Either
-  keep everything in UTC, or set the pods (`TZ`, `-Duser.timezone`) and the database session together, for instance with
-  `connectionTimeZone=Europe/Paris&forceConnectionTimeZoneToSession=true` on the JDBC URL (needs the time zone tables of MariaDB).
+  keep everything in UTC, or align the database with the pods (`TZ`, `-Duser.timezone`). Tested with mariadb-java-client 3.5,
+  pods in `Europe/Paris`, server in UTC without time zone tables (`mysql.time_zone_name` empty, the default of mariadb-operator):
+  - server time zone = pods: with mariadb-operator, `spec.timeZone: Europe/Paris` loads the tables and sets the default time
+    zone, no JDBC option needed. The field is immutable: on an existing server, load the tables
+    (`mariadb-tzinfo-to-sql /usr/share/zoneinfo | mariadb -u root -p mysql`) then set `default_time_zone=Europe/Paris` in
+    `myCnf` (setting it without the tables stops the server from starting);
+  - server kept in UTC: `connectionTimeZone=UTC&preserveInstants=true` on the JDBC URL, the driver converts (dates stored in
+    UTC, shown in Paris time). `connectionTimeZone` alone has no effect; `connectionTimeZone=LOCAL&forceConnectionTimeZoneToSession=true`
+    fails without the tables (`Unknown or incorrect time zone`).
+  Either change on a database already in use shifts its past `TIMESTAMP` values written by Java (+1 or +2 h); the ones filled by
+  `CURRENT_TIMESTAMP` become right, `DATETIME` columns do not move. Recompute the Java ones per column, after the switch:
+  `UPDATE <table> SET <column> = CONVERT_TZ(<column>, 'Europe/Paris', 'UTC')` (verified).
   Dates computed by the browser (form availability "today") are local dates: with a UTC server a form published between
   00:00 and 02:00 Paris time is not listed until 02:00.
 - Ingress replays a request on another pod when the connection to a pod fails, never a request already sent

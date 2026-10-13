@@ -55,6 +55,8 @@ spec:
             # 3 min, about twice the slowest measured start (26 to 100 s): a pod started while the database is down fails
             # to load the webapp and is restarted after 3 min instead of 5; measure the start of the target cluster first
             failureThreshold: 36
+            # The 1 s default times out while two replicas start together
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health/ready
