@@ -9,8 +9,8 @@ SKILL="$HERE/../../skills/lutece-e2e"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 B="$T/bench"; P="$T/plugin-demo"; E="$P/e2e"
-mkdir -p "$B/tools" "$B/server" "$T/bin" "$P/src" "$E/scenarios" "$E/artifacts"
-cp "$SKILL/run.sh" "$B/"; cp "$SKILL/tools/lock.sh" "$SKILL/tools/src-digest.sh" "$SKILL/tools/dep-digest.py" "$B/tools/"; cp "$HERE/../../tools/python.sh" "$B/tools/"
+mkdir -p "$B/tools" "$B/server" "$B/tests" "$T/bin" "$P/src" "$E/scenarios" "$E/artifacts"
+cp "$SKILL/run.sh" "$B/"; cp "$SKILL/tests/lutece.py" "$B/tests/"; cp "$SKILL/tools/lock.sh" "$SKILL/tools/src-digest.sh" "$SKILL/tools/dep-digest.py" "$B/tools/"; cp "$HERE/../../tools/python.sh" "$B/tools/"
 printf '<project><artifactId>plugin-demo</artifactId></project>\n' > "$P/pom.xml"
 printf 'E2E_TARGET=plugin\nE2E_SRC=..\nE2E_NAME=demo-e2e\n' > "$E/e2e.conf"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$B/tools/check-v8-floor.sh"

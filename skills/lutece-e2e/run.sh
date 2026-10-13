@@ -194,13 +194,18 @@ PY
 }
 
 # A suite that had something to prove and proved nothing: every test skipped while the inventory lists elements
-# for that surface, fails the run (code 8). A skip the bench declared is not counted.
+# for that surface, fails the run (code 8). A skip the bench declared is not counted. The front office has something
+# to prove when a front-office screen of the artefact is one the fo suite opens (lutece.scope): a JSP under jsp/site/
+# without page= or page_id= is an endpoint, proven by the scenarios that call it (coverage.py --gate).
 skipped_suites() {
-  python3 - <<'PY'
+  python3 - "$BENCH/tests" <<'PY'
 import json, pathlib, sys, xml.etree.ElementTree as ET
+sys.path.insert(0, sys.argv[1])
+import lutece
 inv = json.loads(pathlib.Path("artifacts/inventory.json").read_text()) if pathlib.Path("artifacts/inventory.json").exists() else {}
 tgt = [s for s in inv.get("screens", []) if s.get("origin", "target") == "target"]
-fo = any(s.get("surface") == "fo" for s in tgt)
+in_scope = lutece.scope()
+fo = any(s.get("surface") == "fo" and in_scope(lutece.with_params(s.get("url", ""))) for s in tgt)
 bo = any(s.get("surface", "bo") == "bo" for s in tgt)
 scen = any(p.name != "screens.yaml" and not p.name.startswith("coverage-") for p in pathlib.Path("scenarios").glob("*.yaml"))
 bad = []

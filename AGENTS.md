@@ -73,6 +73,7 @@ bash tests/scripts/test-source-key.sh
 bash tests/scripts/test-site-checks.sh
 bash tests/scripts/test-site-v7-leg.sh
 bash tests/scripts/test-skill-dir.sh
+bash tests/scripts/test-skipped-suites.sh
 bash tests/scripts/test-gen-site-fresh.sh
 bash tests/scripts/test-latest-lutece.sh
 bash tests/scripts/test-upgrade.sh

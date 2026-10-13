@@ -317,8 +317,10 @@ exposes, are in [reference/traps.md](reference/traps.md) § Naming a rendering d
 - `artifacts/fingerprint.json` (also on the first line of `summary.md`) names what was tested: sources commit,
   source key (`tools/source-key.py`, the same for two builds of the same sources), image digests — a green run
   with no fingerprint is a green run of nothing in particular.
-- **A skip is not a proof.** A suite with something to prove (the fo suite when the inventory has a front
-  office, the scenarios, the screens) whose every test is skipped fails the run with code 8. An exclusion the bench
+- **A skip is not a proof.** A suite with something to prove (the fo suite when the inventory has a front-office
+  page of the artefact, the scenarios, the screens) whose every test is skipped fails the run with code 8. A JSP under
+  `jsp/site/` without `page=` or `page_id=` (a JSON endpoint, a `Do…` action) is not a page of the fo suite: the
+  scenarios that call it prove it, and the coverage gate asks for them. An exclusion the bench
   declared and justified is not that silence: when every skip of the suite comes from a rule written in
   `scenarios/screens.yaml` or from a scenario's `versions`, the run stays green and the summary names the reason.
 
