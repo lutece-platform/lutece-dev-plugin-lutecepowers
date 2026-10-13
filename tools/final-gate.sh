@@ -81,17 +81,24 @@ HAS_TESTS=false
 # Steps 1 and 2 never write the local repository: a download, a newer snapshot or an update check there would change
 # what the benches of other projects carry and invalidate their green runs. Every Maven they start (MAVEN_ARGS, the
 # build and the floor and assembly checks of verify-migration.sh) reads the local repository as the tail of a chained
-# one (Maven 3.9) whose head, ~/.lutecepowers-e2e/gate-m2, takes whatever has to be written. The build runs offline
-# first, so it compiles against what the bench site was assembled from, online only when a dependency is missing.
+# one (Maven 3.9) whose head, ~/.lutecepowers-e2e/gate-m2, takes whatever has to be written. A file of the head hides
+# the same file of the tail: the snapshot metadata and the unversioned snapshot copies of the head are dropped before
+# the build, which updates every snapshot (-U) and compiles against the newest one the remote repositories or the
+# local repository hold. When the remote repositories do not answer, it runs offline on an empty head whose tails are
+# the local repository, then gate-m2.
 M2_LOCAL=$(sed -n 's:.*<localRepository>\(.*\)</localRepository>.*:\1:p' "$SETTINGS" 2>/dev/null | head -1)
 M2_LOCAL=${M2_LOCAL:-${M2_REPO:-$HOME/.m2/repository}}
 M2_LOCAL=${M2_LOCAL/#\~/$HOME}; M2_LOCAL=${M2_LOCAL//\$\{user.home\}/$HOME}
 GATE_M2="${LUTECEPOWERS_E2E_HOME:-$HOME/.lutecepowers-e2e}/gate-m2"
 GATE_MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$GATE_M2 -Dmaven.repo.local.tail=$M2_LOCAL"
+find "$GATE_M2" -path '*-SNAPSHOT/*' -type f \( -name '*-SNAPSHOT*' -o -name 'maven-metadata*' -o -name resolver-status.properties \) -delete 2>/dev/null
 mvn_build( ) {
-    MAVEN_ARGS="$GATE_MAVEN_ARGS" mvn -B -s "$SETTINGS" -o "$@" > $LOGS-build.log 2>&1 && return 0
-    grep -qE "offline mode|has not been downloaded from it before" $LOGS-build.log || return 0
-    MAVEN_ARGS="$GATE_MAVEN_ARGS" mvn -B -s "$SETTINGS" "$@" > $LOGS-build.log 2>&1 || true
+    MAVEN_ARGS="$GATE_MAVEN_ARGS" mvn -B -U -s "$SETTINGS" "$@" > $LOGS-build.log 2>&1 && return 0
+    grep -qE "^\[ERROR\].*Could not transfer" $LOGS-build.log || return 0
+    echo "  the remote repositories do not answer: the build reads the local repository alone"
+    rm -rf "$LOGS-m2"
+    GATE_MAVEN_ARGS="${MAVEN_ARGS:-} -Dmaven.repo.local=$LOGS-m2 -Dmaven.repo.local.tail=$M2_LOCAL,$GATE_M2"
+    MAVEN_ARGS="$GATE_MAVEN_ARGS" mvn -B -o -s "$SETTINGS" "$@" > $LOGS-build.log 2>&1 || true
 }
 if ! $HAS_TESTS; then
     mvn_build clean compile $WARNFLAGS
