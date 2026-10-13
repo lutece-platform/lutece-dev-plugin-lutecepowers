@@ -83,6 +83,7 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   `DATABASECHANGELOGLOCK` locked: stop every replica, release the lock, start one replica.
 - **`plugins.dat`**: on a fresh database only the plugins listed there are installed. A dependency may ship its own file that
   overwrites the core one: the site ships its own (`<plugin>.installed=1` per plugin; names with spaces cannot be listed).
+  Remove the plugins taken out of the pom: `check-site.sh` warns about the names missing from the assembled war (`target/`).
 - **Forms Lucene index on a shared volume** (`ReadWriteMany`, mounted on the parent directory `/opt/data/lucene`, with
   `forms.internalIndexer.lucene.indexInWebapp=false`). Not optional: the back office authorization on a form response searches the
   local index, so with one index per pod the response detail shows "access denied" as soon as the request changes pod (verified on
@@ -91,7 +92,8 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 
 ## Plugin prerequisites (report, do not patch)
 
-Check the resolved versions. Each line was reproduced with two replicas behind nginx.
+Check the resolved versions. Each line was reproduced with two replicas behind nginx, except the workflow lines (found by
+review, covered by the plugin-workflow tests).
 
 | Component | Defect | Symptom | Fixed by |
 |---|---|---|---|
@@ -100,14 +102,17 @@ Check the resolved versions. Each line was reproduced with two replicas behind n
 | plugin-forms | Quota lock row never created; acquire query sets `is_locked=0` | Forms with quota refuse every response; quota exceeded under concurrency | `LockDAO` fix |
 | lutece-core ≥ 8.0.2-beta-04 + plugin-forms | Admin actions checked by CSRF token from startup, step form posts several actions | Back office "add a response" fails at the first step (`Invalid security token`) | core checks an action under its `securityTokenAction`; forms shares one key |
 | lutece-core | Admin MVC JSPs write after a redirect | OpenLiberty closes the keep-alive connection; behind ingress-nginx the next request gets a **502** | `MainFilter` discards the body after `sendRedirect` |
-| lutece-core, plugin-htmlpage | Caches iterated on every page (security headers, plugin list, html pages), session attributes read ~10 times per page, CSRF tokens never trimmed | Most of the CPU and of the latency under load with Hazelcast | see the guide, section performance |
+| lutece-core | Caches iterated on every page (security headers, plugin list), session attributes read ~10 times per page, CSRF tokens never trimmed | Most of the CPU and of the latency under load with Hazelcast | see the guide, section performance |
+| plugin-htmlpage < 6.0.1 | Page include counts then lists the html page cache on every portal page, and the refresh clears the shared cache before reloading it; a created page keeps the id 0 | Every portal page iterates the whole cache over the network (and queries the database when the site has no html page); concurrent readers find the cache empty and reload it again | index entry of the cached ids read by key (near cache), refresh without clear, generated key read on insert |
 | plugin-genericattributes | Asynchronous uploads kept in a static map of the instance | A file uploaded on one replica is missing when the form is submitted on another (silently: the response has no file) | uploads kept in the session (`SessionMultipartItem`, content copied only when the session is serialized) |
 | module-workflow-upload | Same static map, keyed by the session id | Workflow "upload" task loses its files on a node switch, and after a login | same fix |
 | plugin-genericattributes | Numbering entries counted in a static map | Two responses get the same number | counter table `genatt_entry_numbering`, incremented in database (upgrade script `3.0.2-3.0.3`, run by Liquibase) |
 | plugin-htmltopdf | Builder bean keeps the HTML and a static renderer | Two concurrent PDF exports swap their contents (one replica is enough) | one rendering object per call |
 | lutece-core | Mail queue: next mail selected then locked without check | The same mail sent twice if two replicas run `mailSender` | atomic lock; keep `mailSender` exclusive anyway |
 | module-mylutece-database | `DatabaseUserParameterService` without non-private constructor | `WELD-001435` when a session moves to another replica | protected constructor |
-| module-mylutece-oauth2 | Registry of the sessions to refresh kept per instance | A user update notified by the identity provider only reaches the sessions of the replica that receives it | not fixed (needs a shared store); thread safety fixed |
+| module-mylutece-oauth2 < 3.0.3 | Registry of the sessions to refresh kept per instance | A user update notified by the identity provider only reaches the sessions of the replica that receives it | version of each notified user in a Lutece cache (Hazelcast), the session keeps the version it has seen and refreshes the user when they differ |
+| library-workflow-core < 4.0.2, plugin-workflow < 7.0.2 | Nothing prevents two requests from processing an action on the same resource at the same time (two agents on two replicas, an agent and the automatic action daemon) | The action runs twice, the tasks (notification, assignment) are repeated and the resource ends in a state computed from a stale one | resource claimed by a single conditional `UPDATE` on `workflow_resource_workflow.lock_date` (released after the action, expires after `workflow.resourceWorkflow.lockTimeout`, 300 s); a refused claim throws `ResourceWorkflowLockedException` (wrapped in `AppException` by the core) |
+| plugin-forms < 4.0.2, workflow-rest < 3.0.0, actionsbatch < 2.0.0, alertforms < 3.0.1, extend-comment < 2.0.0, extend-feedback < 3.0.1, plugin-appointment < 4.0.0, module-appointment-alert < 4.0.0 | Callers of the workflow do not handle `ResourceWorkflowLockedException` | With the claim above, an action refused because another replica is processing the resource shows an error page instead of a message | catch the exception (or an `AppException` caused by it) and display "action in progress, try again" |
 
 Plugin code storing per-item session attributes (one attribute per token, per uploaded file, created and removed at run time)
 does not survive node switches with OpenLiberty `sessionCache`: an instance that already holds the session in memory misses

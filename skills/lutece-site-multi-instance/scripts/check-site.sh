@@ -54,6 +54,15 @@ if [ -f "$E" ] && grep -Eq "^(OTEL_SDK_DISABLED|OTEL_EXPORTER|MP_CONFIG_PROFILE|
 
 P=$SITE/webapp/WEB-INF/plugins/plugins.dat
 if [ -f "$P" ] && [ "$(grep -c "installed=1" "$P")" -gt 1 ]; then ok "plugins.dat: $(grep -c "installed=1" "$P") plugins installed on a fresh database"; else bad "plugins.dat: missing or nearly empty"; fi
+# Plugins listed but absent from the assembled war (name = <name> of the plugin descriptor, not its file name;
+# core_extensions comes from the plugins.dat of lutece-core and matches no descriptor)
+W=$(ls -d "$SITE"/target/*/WEB-INF/plugins 2>/dev/null | head -1)
+if [ -f "$P" ] && [ -n "$W" ]; then
+  names=$(find "$W" -name "*.xml" -exec grep -m1 -ho "<name>[^<]*</name>" {} + | sed 's/<[^>]*>//g'; echo core_extensions)
+  missing=$(grep -o "^[^#=]*\.installed=1" "$P" | sed 's/\.installed=1$//' | while read -r n; do
+    printf '%s\n' "$names" | grep -qxF "$n" || printf '%s ' "$n"; done)
+  if [ -n "$missing" ]; then warn "plugins.dat: listed but absent from the war: $missing"; else ok "plugins.dat: every listed plugin is in the war"; fi
+fi
 
 if grep -rqsa "disallowedClusterConcurrentExecution=true" "$SITE/webapp/WEB-INF/conf/override/"; then
   ok "Quartz: $(grep -rhsa "disallowedClusterConcurrentExecution=true" "$SITE/webapp/WEB-INF/conf/override/" | grep -vc "^#") exclusive daemons declared"
