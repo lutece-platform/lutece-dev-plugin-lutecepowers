@@ -155,6 +155,12 @@ attachment field.
   must cover every replica, rolling update surge and autoscaling maximum included. The executor bounds the pool in practice
   (2 replicas of 4 threads under a saturating load: 11 connections), but OpenLiberty allows 50 per replica by default: bound it
   (`<connectionManager maxPoolSize="…"/>` on the data source) or size the limit on replicas x pool.
+- Database memory: the InnoDB buffer pool plus the memory of the concurrent queries (sort buffers, temporary tables), not the
+  number of connections. Measured on mariadb-operator (MariaDB 11.4, 256 MB buffer pool): 120 idle connections cost 18 MiB;
+  10 heavy queries at once (group by on 400,000 computed rows) got `mariadbd` OOMKilled under a 512 Mi limit, then its liveness
+  probe timed out and restarted it again; under 1 Gi, 20 of them passed. MariaDB keeps that memory after the load (856 MiB still
+  allocated): size the limit on the peak, about the buffer pool + 768 MiB (1 Gi for 256 MB, 1.5 Gi for 512 MB, 3 Gi for 1 GB).
+  For a site with heavy exports, `tmp_table_size` and `max_heap_table_size` at 8M send large temporary tables to disk sooner.
 - Autoscaling on CPU only: a JVM does not give its memory back, an autoscaler on memory grows to its maximum and never scales
   down. New pods start cold (see the warm-up below).
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
