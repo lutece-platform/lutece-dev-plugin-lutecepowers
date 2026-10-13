@@ -16,7 +16,8 @@
     <httpOptions persistTimeout="75s" />
 </httpEndpoint>
 
-<!-- Thread pool bounded to 2 threads per CPU of the container (EXECUTOR_THREADS adapts it to the CPU limit): unbounded,
-     Liberty grows the pool beyond the CPU quota, each request costs twice the CPU and the throughput falls under load -->
+<!-- Thread pool bounded to the CPU limit of the deployment (4 for 2 CPUs, 5 for 3, 7 for 4; set here by the site, the
+     EXECUTOR_THREADS environment variable overrides it): unbounded, Liberty grows the pool beyond the CPU quota, each request
+     costs twice the CPU and the throughput falls under load -->
 <variable name="executor.threads" defaultValue="4" />
 <executor coreThreads="${executor.threads}" maxThreads="${executor.threads}" />

@@ -66,12 +66,14 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
 - **Liberty thread pool bounded to the CPU limit** (`<executor coreThreads="${executor.threads}" maxThreads="${executor.threads}"/>`,
-  `EXECUTOR_THREADS` in the deployment). Unbounded, Liberty grows the pool up to 12 threads for 2 CPUs: the extra threads
-  compete for the CPU quota, each request costs twice the CPU and the throughput of one replica falls as the load rises (k6,
-  40 users: 13.5 req/s bounded to 4, 5 to 8 req/s unbounded; 6 threads already halve it). Size it with
-  threads = CPU x (1 + wait / compute): Forms requests wait 0.4 to 0.6 of their compute time (database 23 %, Hazelcast 6 %,
-  files 4 % of the samples of busy request threads), more with a slow outgoing call (GRU): 4 threads for 2 CPUs, 5 for 3,
-  7 for 4.
+  `executor.threads` set in `server.xml` by the site for the CPU limit of its deployment: the right count also depends on the
+  site, through its wait / compute ratio. An `EXECUTOR_THREADS` environment variable overrides it: keep it out of the
+  deployment, except to adjust a release whose CPU limit changed before the site is rebuilt). Unbounded, Liberty grows the
+  pool up to 12 threads for 2 CPUs: the extra threads compete for the CPU quota, each request costs twice the CPU and the
+  throughput of one replica falls as the load rises (k6, 40 users: 13.5 req/s bounded to 4, 5 to 8 req/s unbounded; 6 threads
+  already halve it). Size it with threads = CPU x (1 + wait / compute): Forms requests wait 0.4 to 0.6 of their compute time
+  (database 23 %, Hazelcast 6 %, files 4 % of the samples of busy request threads), more with a slow outgoing call (GRU):
+  4 threads for 2 CPUs, 5 for 3, 7 for 4.
 - **`persistTimeout` above the load balancer keep-alive** (`<httpOptions persistTimeout="75s"/>` in `server.xml`): Liberty closes
   idle connections after 30 s, ingress-nginx reuses its upstream connections up to 60 s; a POST sent on a connection Liberty has
   just closed gets a 502, nginx does not retry it (seen once in 7,500 k6 journeys).
