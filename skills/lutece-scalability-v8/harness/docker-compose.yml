@@ -2,7 +2,7 @@ services:
 
   mariadb:
     image: mariadb:11.8
-    container_name: lutece-mariadb
+    container_name: ${BENCH_NAME:-lutece}-mariadb
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: rootpwd
@@ -30,8 +30,8 @@ services:
   # ---------------------------------------------------------------------------
   app1:
     build: { context: ., dockerfile: Dockerfile }
-    image: lutece-site:latest
-    container_name: lutece-app1
+    image: ${BENCH_NAME:-lutece}-site:latest
+    container_name: ${BENCH_NAME:-lutece}-app1
     restart: unless-stopped
     environment:
       portal.serverName: mariadb
@@ -60,8 +60,8 @@ services:
 
   app2:
     # image built by app1 (same tag) -> no rebuild here
-    image: lutece-site:latest
-    container_name: lutece-app2
+    image: ${BENCH_NAME:-lutece}-site:latest
+    container_name: ${BENCH_NAME:-lutece}-app2
     restart: unless-stopped
     environment:
       portal.serverName: mariadb
@@ -84,8 +84,8 @@ services:
 
   app3:
     # image built by app1 (same tag) -> no rebuild here
-    image: lutece-site:latest
-    container_name: lutece-app3
+    image: ${BENCH_NAME:-lutece}-site:latest
+    container_name: ${BENCH_NAME:-lutece}-app3
     restart: unless-stopped
     environment:
       portal.serverName: mariadb
@@ -109,7 +109,7 @@ services:
   # (depends on app1/migrator healthy => schema ready). Runs once then stops.
   dbinit:
     image: mariadb:11.8
-    container_name: lutece-dbinit
+    container_name: ${BENCH_NAME:-lutece}-dbinit
     restart: "no"
     depends_on:
       app1: { condition: service_healthy }
@@ -120,10 +120,10 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: lutece-nginx
+    container_name: ${BENCH_NAME:-lutece}-nginx
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${BENCH_PORT:-8080}:8080"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on: [app1, app2, app3]

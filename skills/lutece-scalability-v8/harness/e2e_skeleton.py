@@ -7,11 +7,12 @@ asyncio.gather, DB as source of truth via docker exec, docker-log scan.
 
 Exit code: 0 = GREEN, 1 = RED, 2 = harness/setup error.
 """
-import argparse, asyncio, json, pathlib, subprocess, sys, time
+import argparse, asyncio, json, os, pathlib, subprocess, sys, time
 from playwright.async_api import async_playwright
 
 # ---- CONFIG (adapt per plugin) ----------------------------------------------
-BASE = "http://localhost:8080/lutece"
+NAME = os.environ.get("BENCH_NAME", "lutece")                                # container prefix of docker-compose.yml
+BASE = f"http://localhost:{os.environ.get('BENCH_PORT', '8080')}/lutece"
 FO_USER, FO_PASS = "test", "testtest"
 LOGIN_URL = f"{BASE}/jsp/site/Portal.jsp?page=mylutece&action=login&auth_provider=mylutece-database"
 FORM_URL = f"{BASE}/jsp/site/Portal.jsp?page=<xpage>&view=<view>&<params>"   # the contended form
@@ -25,7 +26,7 @@ ARTIFACTS = pathlib.Path(__file__).parent / "artifacts"
 def db(query):
     """SQL against the cluster's shared MariaDB (not exposed to the host)."""
     out = subprocess.run(
-        ["docker", "exec", "lutece-mariadb", "mariadb", "-ulutece", "-psome_password",
+        ["docker", "exec", f"{NAME}-mariadb", "mariadb", "-ulutece", "-psome_password",
          "core", "-N", "-B", "-e", query], capture_output=True, text=True, check=True)
     return [l for l in out.stdout.splitlines() if l]
 
@@ -33,11 +34,23 @@ def db(query):
 def docker_logs_since(since_iso):
     """Logs of the three app nodes since the given local timestamp, one block per node."""
     chunks = []
-    for node in ("lutece-app1", "lutece-app2", "lutece-app3"):
+    for node in (f"{NAME}-app1", f"{NAME}-app2", f"{NAME}-app3"):
         out = subprocess.run(["docker", "logs", "--since", since_iso, node],
                              capture_output=True, text=True)
         chunks.append(f"===== {node} =====\n{out.stdout}\n{out.stderr}")
     return "\n".join(chunks)
+
+
+def ffdc_incidents():
+    """FFDC incidents of the three app nodes (first line of each stack dump). A session Liberty cannot deserialize
+    (WELD-001435) or serialize is reported only there, never on the console."""
+    found = []
+    for node in (f"{NAME}-app1", f"{NAME}-app2", f"{NAME}-app3"):
+        out = subprocess.run(["docker", "exec", node, "sh", "-c",
+                              "grep -h 'Stack Dump = ' /opt/wlp/usr/servers/defaultServer/logs/ffdc/ffdc_*.log 2>/dev/null"],
+                             capture_output=True, text=True)
+        found += [f"{node}: {line.strip()[:200]}" for line in out.stdout.splitlines()]
+    return found
 
 
 async def login(ctx):
@@ -134,8 +147,11 @@ async def run(n_clients, n_rounds):
 
     logs = docker_logs_since(start_iso)
     errors = logs.count(LOG_ERROR_PATTERN)
+    report["ffdc"] = ffdc_incidents()
     report["verdict"] = "RED" if (red or errors) else "GREEN"
     (ARTIFACTS / "repro_docker_logs.txt").write_text(logs)
+    for incident in report["ffdc"]:
+        print(f"FFDC {incident}")
     (ARTIFACTS / "repro_result.json").write_text(json.dumps(report, indent=2))
     print(f"docker logs: {errors} '{LOG_ERROR_PATTERN}' — VERDICT: {report['verdict']}")
     return 1 if report["verdict"] == "RED" else 0

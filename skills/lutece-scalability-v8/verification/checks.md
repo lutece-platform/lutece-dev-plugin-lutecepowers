@@ -27,4 +27,4 @@
 - [ ] **Failover proof**: `docker kill` the node that served the mid-point of a stateful flow, then complete the flow → it finishes on a **survivor** and the result lands in the DB (proves the session lives in Hazelcast, not on the origin node). Peers log only "removing dead endpoint" warnings; the killed node rejoins the mesh on restart.
 - [ ] If the plugin manages a contended resource: under **N concurrent** real operations on one resource (capacity M) → **exactly M succeed, never more**, counters never drift (verified in the DB). For a counter resource, the over-capacity attempts are rejected by the CAS guard (`SlotFull`-style) in the logs.
 
-A fix is **done only when the empirical run is green** — with Hazelcast enabled (ehcache hides serialization bugs), reading the docker logs **before AND after** the functional test.
+A fix is **done only when the empirical run is green** — with Hazelcast enabled (ehcache hides serialization bugs), reading the server logs (console, `messages.log`, FFDC incidents) **before AND after** the functional test.

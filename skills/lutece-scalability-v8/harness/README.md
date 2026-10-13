@@ -49,7 +49,7 @@ round-robin LB. Things that make a basic run fail until you know them:
   per response — assert the steps are served by different nodes yet the flow completes. That is the proof.
 - **Read the app's own field validation**: generic-attribute/identity fields can reject inputs (e.g. names
   with digits) — a validation bounce looks exactly like a state bug. Capture the re-rendered form, not just the URL.
-- **Always read docker logs before AND after** (`docker logs --since <t> <node>`): the decisive evidence
+- **Always read the server logs before AND after**: `docker logs --since <t> <node>` for the console, and `logs/messages.log` + `logs/ffdc/` inside the node (`cluster-verify.sh` section 8): a session a node cannot deserialize (`WELD-001435`) is only an FFDC incident. The decisive evidence
   (e.g. the atomic guard rejecting over-capacity writes) is server-side, not in the browser.
 
 ## Boot & seed — gotchas
@@ -68,7 +68,7 @@ round-robin LB. Things that make a basic run fail until you know them:
   `docker compose up -d` once app1 is healthy. If it stays unhealthy, the migration
   failed: read its logs.
 - **Waiting for health**: grep on `healthy` also matches **un**healthy — use
-  `docker inspect -f '{{.State.Health.Status}}' lutece-app1`.
+  `docker inspect -f '{{.State.Health.Status}}' lutece-app1` (`<BENCH_NAME>-app1`).
 - **Right after boot**: nginx keeps an upstream that refused a connection marked down for 10 s (default
   `fail_timeout`), so `cluster-verify.sh` section 2 may see one backend; wait 10 s once the three nodes are ready.
 - **dbinit re-runs on every `up`**: keep `db/post-init.sql` idempotent (INSERT IGNORE).
@@ -85,6 +85,11 @@ bash ../scripts/gen-test-site.sh --local . --enable <plugin,deps> --out e2e/.sca
 LOCK_TABLE=<plugin>_lock bash ../scripts/cluster-verify.sh e2e/.scalability-test
 ( cd e2e/.scalability-test && docker compose down -v )
 ```
+
+| Variable | Default | Used by |
+|---|---|---|
+| `BENCH_NAME` | `lutece` | container prefix (`<name>-app1`…) and image tag: `docker-compose.yml`, `cluster-verify.sh`, `e2e_skeleton.py` |
+| `BENCH_PORT` | `8080` | host port of nginx: same three files |
 
 > Kept on disk after the run: the generated `e2e/.scalability-test/` is part of the deliverable (see the artifact retention rule in `SKILL.md`); only the containers are torn down.
 > Image base: `eclipse-temurin:21-jdk-noble` + the Open Liberty runtime zip (version pinned in `Dockerfile`), as in the lutece-e2e bench.

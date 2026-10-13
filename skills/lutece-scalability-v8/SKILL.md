@@ -161,7 +161,7 @@ The eight steps the Verifier (`teammates/verifier.md`) runs — rebuild, redeplo
 e2e, prove failover, read the logs again, route failures, tear down — are in
 [reference/cluster-runbook.md](reference/cluster-runbook.md).
 
-> **Reading the Docker logs before AND after the functional test is a mandatory step, not optional.** Most cluster-only defects (schema not deployed, class-loader serialization, session not replicating, swallowed exceptions) are invisible from HTTP status codes and only show in the logs.
+> **Reading the server logs before AND after the functional test is a mandatory step, not optional**: the console (`docker compose logs`) and each node's Liberty `logs/messages.log` and FFDC incidents (`logs/ffdc/`, `cluster-verify.sh` section 8). Most cluster-only defects (schema not deployed, class-loader serialization, session not replicating, swallowed exceptions) are invisible from HTTP status codes; a session Liberty cannot deserialize (`WELD-001435`) shows only as an FFDC incident.
 
 A green run proves: 3 instances serving, shared DB, single Liquibase migration, both Hazelcast groups formed, session replicated across nodes (no sticky) **and surviving a node kill** (failover), and — for a contended resource — that concurrent real operations never exceed capacity (no double-booking / oversell), with clean logs throughout.
 
