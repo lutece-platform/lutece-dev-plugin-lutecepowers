@@ -26,7 +26,7 @@ IncrementalIndexingDaemon (interval `daemon.incrementalIndexingDaemon.interval`,
 Incremental path:
 Entity CRUD → CDI event fired
     ↓ observed by
-MyEntityIndexerEventListener (@ObservesAsync)
+MyEntityIndexerEventListener (@Observes or @ObservesAsync, as the event is fired)
     ↓ calls
 DataSourceIncrementalService.addTask(dataSourceId, entityId, taskType)
     ↓ queues in DB → daemon processes
@@ -268,6 +268,15 @@ public class MyEntityDataObject extends AbstractDataObject
 
 ## Step 4 — CDI Event Listener (Incremental Updates)
 
+The observer follows how the event is sent (CDI 4.0, Observer resolution): `fire( )` reaches only `@Observes` methods, `fireAsync( )` only `@ObservesAsync` methods. An observer of the wrong kind is never called, without any error.
+
+| Event | Sent by | Observer |
+|-------|---------|----------|
+| `FormResponseEvent` | `fireAsync` (`lutece-form-plugin-forms/src/java/**/service/FormService.java`) | `@ObservesAsync` (`lutece-form-module-elasticdata-forms/src/java/**/FormResponseIndexerEventListener.java`) |
+| `ResourceEvent` of the workflow | `fire` (`lutece-core/src/java/fr/paris/lutece/portal/service/workflow/WorkflowService.java`, `registerResourceEvent`) | `@Observes` (`lutece-search-plugin-solr/src/java/**/SolrEventRessourceListener.java`) |
+
+Read how the entity's events are sent before writing the listener. The example below observes an event its own service sends with `fireAsync`:
+
 ```java
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.ObservesAsync;
@@ -432,7 +441,7 @@ public class MyAttributeProvider implements IDataSourceExternalAttributesProvide
 }
 ```
 
-Providers are auto-discovered via CDI and called during full indexing (`completeDataObjectWithFullData`).
+plugin-elasticdata does not discover providers: `DataSourceService` calls those the data source returns from `getExternalAttributesProvider( )`, an empty list in `AbstractDataSource` unless the data source fills it with `setExternalAttributesProvider( )`. They are called from `completeDataObjectWithFullData`, on full and incremental indexing (`DataSourceService`, `DataSourceIncrementalService`).
 
 ## Indexing Lifecycle
 
@@ -450,7 +459,7 @@ Providers are auto-discovered via CDI and called during full indexing (`complete
 | `pom.xml` | Maven module with plugin-elasticdata dependency |
 | `MyEntityDataSource.java` | `@ApplicationScoped` extending `AbstractDataSource`, `@ConfigProperty` constructor |
 | `MyEntityDataObject.java` | Extends `AbstractDataObject`, typed fields + `Map<String,Object>` |
-| `MyEntityIndexerEventListener.java` | `@ObservesAsync` CDI listener |
+| `MyEntityIndexerEventListener.java` | CDI listener, `@Observes` or `@ObservesAsync` as the event is fired |
 | `elasticdata-myentity.properties` | `@ConfigProperty` values (id, name, index, mappings) |
 | `WEB-INF/plugins/myentity-elasticdata.xml` | plugin.xml descriptor |
 | `src/main/resources/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
