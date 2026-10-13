@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Checks the site mode of gen-site7.sh: the v7 site of lpe2e upgrade is the site's own v7 war (E2E_V7_WAR), with the
-# bench's database settings laid over the site's, and the versions it ships read from its plugin descriptors and its
-# core jar.
+# Checks the v7 leg of gen-site7.sh. Site mode: the v7 site of lpe2e upgrade is the site's own v7 war (E2E_V7_WAR),
+# with the bench's database settings laid over the site's, and the versions it ships read from its plugin descriptors
+# and its core jar. Plugin mode: every Maven run writes to the bench's own repository, the shared one only read.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 SKILL="$HERE/../../skills/lutece-e2e"
@@ -25,4 +25,27 @@ check "versions.properties names the core and the plugins of the v7 war" "grep -
 printf 'E2E_TARGET=site\nE2E_SRC=..\n' > "$E/e2e.conf"
 OUT2=$(E2E_DIR="$E" E2E_SITE7_BUILD="$S" bash "$B/tools/gen-site7.sh" 2>&1); RC2=$?
 check "a site target without E2E_V7_WAR is refused with the reason" "[ $RC2 -eq 2 ] && echo \"\$OUT2\" | grep -q E2E_V7_WAR"
-[ $fail -eq 0 ] || { echo "$OUT"; exit 1; }
+
+P="$T/plugin"; S7="$T/state7/build7/site7"; SHARED="$T/shared-m2"
+mkdir -p "$P/webapp/WEB-INF/plugins" "$P/e2e" "$T/bin" "$SHARED" "$B/harness/site"
+cp "$SKILL/harness/site/plugins.dat.tpl" "$B/harness/site/"
+printf '<project><parent><artifactId>lutece-global-pom</artifactId>\n<version>7.0.2</version></parent></project>\n' > "$P/pom.xml"
+echo "<plug-in><name>x</name><version>1.0.0</version></plug-in>" > "$P/webapp/WEB-INF/plugins/x.xml"
+printf 'E2E_TARGET=plugin\nE2E_SRC=..\nE2E_MYLUTECE=0\n' > "$P/e2e/e2e.conf"
+git -C "$P" init -q && git -C "$P" add -A && git -C "$P" -c user.name=t -c user.email=t@t commit -qm v7
+cat > "$T/bin/mvn" <<MVN
+#!/usr/bin/env bash
+echo "\$*" >> "$T/mvn.log"
+case " \$* " in
+  *help:evaluate*) case " \$* " in *settings.localRepository*) printf '%s' "$SHARED" ;; *project.groupId*) printf g ;;
+                   *project.artifactId*) printf plugin-x ;; *project.version*) printf 1.0.0 ;; *) printf lutece-plugin ;; esac ;;
+  *" install "*) r=\$(printf '%s\\n' "\$@" | sed -n 's/^-Dmaven.repo.local=//p'); mkdir -p "\$r/g/plugin-x/1.0.0" && touch "\$r/g/plugin-x/1.0.0/plugin-x-1.0.0.jar" ;;
+  *lutece:site-assembly*) mkdir -p target/e2e-site7-x/WEB-INF/lib target/e2e-site7-x/WEB-INF/plugins ;;
+esac
+MVN
+chmod +x "$T/bin/mvn"
+OUT3=$(cd "$T" && PATH="$T/bin:$PATH" E2E_DIR="$P/e2e" E2E_SITE7_BUILD="$S7" bash "$B/tools/gen-site7.sh" 2>&1); RC3=$?
+check "gen-site7.sh assembles a plugin's v7 site" "[ $RC3 -eq 0 ]"
+check "every v7 Maven run but the probe writes to the bench's repository, the shared one as its tail" "! grep -v settings.localRepository '$T/mvn.log' | grep -qv -- '-Dmaven.repo.local=$T/state7/build7/m2 -Dmaven.repo.local.tail=$SHARED'"
+check "the v7 install lands in the bench's repository, never in the shared one" "[ -f '$T/state7/build7/m2/g/plugin-x/1.0.0/plugin-x-1.0.0.jar' ] && [ -z \"\$(ls -A '$SHARED')\" ]"
+[ $fail -eq 0 ] || { echo "$OUT"; echo "$OUT3"; cat "$T/mvn.log"; exit 1; }

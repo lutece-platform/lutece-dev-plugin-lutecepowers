@@ -3,6 +3,8 @@
 # artefact BEFORE its migration, on a Lutece 7 site, for the database upgrade (lpe2e upgrade). A site target (E2E_TARGET=site) brings its own v7 war (E2E_V7_WAR). The v7 sources are the git ref the clone still carries — HEAD while
 # the migration is staged and not committed — checked out in a worktree and
 # built with plain mvn (the site pom declares the Lutece repositories), or with E2E_MVN7 when a developer keeps separate settings.
+# The local repository is only read: the v7 install and every download go to a repository of the bench (m2 beside the
+# worktree), chained in front of it.
 set -euo pipefail
 . "$(dirname "$0")/python.sh"
 BENCH=$(cd "$(dirname "$0")/.." && pwd)
@@ -94,6 +96,16 @@ open(pom, "w", encoding="utf-8").write(t2)
 PYPIN
   echo ">> v7 dependency pinned: $PG:$PA -> $PV"
 done
+
+# The v7 sources carry the same version as an artefact another bench or the developer installed: installed in the
+# shared local repository they would replace it, or bring back an older build under its number. Maven reads that
+# repository as the tail of a chained one (Maven 3.9) whose head, beside the worktree, takes the install and the
+# downloads.
+M2_TAIL=$($MVN7 -q -o -N help:evaluate -Dexpression=settings.localRepository -DforceStdout 2>/dev/null </dev/null || true)
+[ -d "$M2_TAIL" ] || M2_TAIL="$HOME/.m2/repository"
+M2_HEAD="$(cd "$SITE/.." && pwd)/m2"
+MVN7="$MVN7 -Dmaven.repo.local=$M2_HEAD -Dmaven.repo.local.tail=$M2_TAIL"
+echo ">> v7 Maven repository: $M2_HEAD, reading $M2_TAIL"
 
 if [ "${1:-}" != "--no-install" ]; then
   echo ">> mvn install (v7, ref $REF, parent $V7_PARENT) $WT"

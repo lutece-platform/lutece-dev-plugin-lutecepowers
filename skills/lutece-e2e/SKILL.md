@@ -38,7 +38,8 @@ Lutece repositories and Maven Central at the first run. The artefact resolves th
 (`tools/v8-floor.conf`); `lpe2e build` stops with rc=10 otherwise.
 
 **The first assembly of a site installs the artefact under test in `~/.m2`**, where it shadows the published snapshot
-for every other project on the machine.
+for every other project on the machine. The v7 site of `lpe2e upgrade` only reads `~/.m2`: its install and downloads
+go to the bench's own repository.
 
 Run it as `bash ${LUTECEPOWERS_ROOT}/skills/lutece-e2e/lpe2e <command>` from the project (an alias `lpe2e` is
 convenient). Supported: a plugin or module (`E2E_TARGET=plugin`) and a site (`E2E_TARGET=site`: assembled with

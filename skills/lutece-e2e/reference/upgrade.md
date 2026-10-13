@@ -23,7 +23,9 @@ lpe2e upgrade
      before its migration on a Lutece 7 site — the git ref `E2E_V7_REF` in a disposable worktree, `lutece-site-pom`
      `E2E_V7_SITE_POM`, core `E2E_V7_CORE`, the extra artefacts of `E2E_V7_PLUGINS` at their v7 versions, the
      plugin-liquibase of the v7 line (`tools/latest-lutece.py snapshot --line 7`). The site is cached under
-     `~/.lutecepowers-e2e/sites7/<key>` (the v7 sources, the `E2E_V7_*` settings, the bench files that shape it). Its
+     `~/.lutecepowers-e2e/sites7/<key>` (the v7 sources, the `E2E_V7_*` settings, the bench files that shape it). It is
+     built without writing the local repository: Maven reads it as the tail of a chained repository whose head,
+     `~/.lutecepowers-e2e/benches/<name>/build7/m2`, takes the install of the v7 sources and every download. Its
      Ant build creates the schema (`harness/tomcat/entrypoint.sh`), then the bench seed runs with `E2E_VERSION=v7`
      (`harness/db/seed-*.sql`, plus `seed7-*.sql` for rows only the v7 schema needs), and the portlet types a v7
      plugin installation registers (`tools/v7-portlet-types.py`).
