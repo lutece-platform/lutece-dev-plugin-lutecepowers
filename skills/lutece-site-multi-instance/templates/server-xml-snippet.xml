@@ -1,4 +1,5 @@
-<!-- In server.xml, instead of the sessionCache feature and the Hazelcast elements:
+<!-- Merged into the site server.xml, not pasted: an element with the id of an existing one (defaultHttpEndpoint, jdbcLib)
+     completes it. In server.xml, instead of the sessionCache feature and the Hazelcast elements:
      multi-instance configuration in cluster.xml. The local profile of the pom (mvn liberty:run -Dlocal) writes
      cluster.config=none.xml in bootstrap.properties: the optional include is skipped and Lutece uses Ehcache.
      The value must come from bootstrap.properties: a configDropins variable is not read for an include. -->

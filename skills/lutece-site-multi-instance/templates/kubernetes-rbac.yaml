@@ -1,4 +1,10 @@
-# Hazelcast Kubernetes discovery (member join "kubernetes"): Service on 5701 and read rights in the namespace.
+# Hazelcast Kubernetes discovery (member join "kubernetes"): service account of the pods, Service on 5701 and read rights
+# in the namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: <site>
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -34,4 +40,4 @@ roleRef:
   name: <site>-hazelcast
 subjects:
   - kind: ServiceAccount
-    name: <service-account-of-the-pods>
+    name: <site>

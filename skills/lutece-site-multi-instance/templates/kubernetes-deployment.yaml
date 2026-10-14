@@ -1,5 +1,10 @@
 # Deployment of the site replicas, tested on minikube (rolling restart and forced pod deletion under load: no error).
-# Use with kubernetes-rbac.yaml (Hazelcast Service + Role/RoleBinding).
+# Use with kubernetes-rbac.yaml (service account, Hazelcast Service, Role/RoleBinding) and kubernetes-service.yaml
+# (Service, shared volume).
+#
+# Liquibase is off on the replicas. On a fresh database and after each new war, run the migrations from one replica:
+#   scale to 1 replica with -Dliquibase.enabled.at.startup=true in JVM_ARGS, wait until it is ready, then apply this
+#   Deployment again (false, 2 replicas). A system property (JVM_ARGS) wins over conf/override.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,18 +24,23 @@ spec:
       labels:
         app: <site>
     spec:
-      serviceAccountName: <service-account-of-the-pods>
-      # Above hazelcast.graceful.shutdown.max.wait (45 s) + preStop
-      terminationGracePeriodSeconds: 70
+      serviceAccountName: <site>
+      # Above preStop (10 s) + hazelcast.graceful.shutdown.max.wait (45 s)
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # OpenLiberty runs as 1001, group 0: group 0 writes on the shared volume
+        fsGroup: 0
       containers:
         - name: lutece
           image: <registry>/<site>:<version>
           env:
-            - name: MP_CONFIG_PROFILE
-              value: <profile>
-            # Liquibase runs from one instance only (a job or a single replica), never from every replica
+            # Optional: MicroProfile Config profile of the environment (%<profile>.key in conf/override)
+            # - name: MP_CONFIG_PROFILE
+            #   value: <profile>
+            # Liquibase from one replica only (see above); Forms Lucene index on the shared volume: the plugin default
+            # (java.io.tmpdir/plugins/forms/index) is local to the pod
             - name: JVM_ARGS
-              value: "-Dliquibase.enabled.at.startup=false"
+              value: "-Dliquibase.enabled.at.startup=false -Dforms.internalIndexer.lucene.indexPath=/opt/data/lucene/plugins/forms/index"
           ports:
             - name: http
               containerPort: 9090
@@ -78,7 +88,7 @@ spec:
               exec:
                 command: ["sleep", "10"]
           volumeMounts:
-            # Parent directory of the Forms Lucene index (indexPath=/opt/data/lucene/plugins/forms/index)
+            # Parent directory of the Forms Lucene index (indexPath in JVM_ARGS)
             - name: lucene
               mountPath: /opt/data/lucene
       volumes:

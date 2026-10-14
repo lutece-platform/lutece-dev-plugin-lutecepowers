@@ -36,17 +36,18 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 
 | File | Template | Purpose |
 |---|---|---|
-| `pom.xml` | `pom-profiles.xml` | Profile `cluster` active by default (`!local`): Hazelcast runtime, Ehcache `provided`; profile `local` (`-Dlocal`): no Hazelcast, `liberty.bootstrap.cluster.config=none.xml` |
-| `src/main/liberty/config/server.xml` | `server-xml-snippet.xml` | Includes `cluster.xml` through the `cluster.config` variable (optional include) |
+| `pom.xml` | `pom-profiles.xml` | Hazelcast repository (required for the Hazelcast version of the template), `plugin-quartz-scheduler` dependency, profile `cluster` active by default (`!local`): Hazelcast runtime, Ehcache `provided`; profile `local` (`-Dlocal`): no Hazelcast, `liberty.bootstrap.cluster.config=none.xml` |
+| `src/main/liberty/config/server.xml` | `server-xml-snippet.xml` | Merged into the site file (same ids: `defaultHttpEndpoint`, `jdbcLib`): `cluster.xml` include through the `cluster.config` variable, executor, `persistTimeout`, `remoteIp` |
 | `src/main/liberty/config/cluster.xml` | `cluster.xml` | `sessionCache-1.0`, session library, `httpSessionCache`, Lutece cache provider variables |
 | `src/main/liberty/config/hazelcast-config-api-mode.yaml` | same name | Member: cluster name, graceful shutdown, immediate cache invalidations, fixed port, Kubernetes discovery |
 | `src/main/liberty/config/hazelcast-client-config-api-mode.yaml` | same name | Client of the Lutece cache: own pod member, near cache |
 | `src/main/liberty/config/jvm.options` | `jvm.options` | Member provider type, service name, Hazelcast `--add-opens` |
-| `webapp/WEB-INF/conf/override/<profiles>.properties` | `quartz-daemons.properties` | Exclusive daemons (`disallowedClusterConcurrentExecution`) |
+| `webapp/WEB-INF/conf/override/quartz-daemons.properties` | same name | Clustered scheduler on (`quartzscheduler.cluster.enable=true`), exclusive daemons (`disallowedClusterConcurrentExecution`) |
 | `webapp/WEB-INF/plugins/plugins.dat` | generated | Plugins installed on a fresh database |
 | `Dockerfile` | `Dockerfile` | Configuration copied, war copied, `configure.sh` |
-| Kubernetes (chart) | `kubernetes-rbac.yaml` | Service on 5701, Role/RoleBinding for the discovery |
-| Kubernetes (chart) | `kubernetes-deployment.yaml` | Replicas, probes, preStop, grace period, CPU limit above request |
+| Kubernetes (chart) | `kubernetes-rbac.yaml` | Service account of the pods, Service on 5701, Role/RoleBinding for the discovery |
+| Kubernetes (chart) | `kubernetes-service.yaml` | Service of the site, ReadWriteMany volume of the Forms index |
+| Kubernetes (chart) | `kubernetes-deployment.yaml` | Replicas, probes, preStop, grace period, CPU limit above request, Liquibase off, Forms index path |
 | Kubernetes (chart) | `kubernetes-ingress.yaml` | Optional affinity (own cookie), replay on connection errors only |
 
 ### Rules that are easy to get wrong (all observed)
@@ -86,16 +87,26 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
 - **`hazelcast.cache.invalidation.batch.enabled: false`** on the member: otherwise near-cache invalidations are batched and a
   change takes seconds to be visible on the other replicas.
 - **Liquibase**: run migrations from one instance only. Disable at startup with `-Dliquibase.enabled.at.startup=false` in
-  `JVM_ARGS` (the `LIQUIBASE_*` environment names are reserved by Liquibase). A replica killed during a migration leaves
-  `DATABASECHANGELOGLOCK` locked: stop every replica, release the lock, start one replica.
-- **`plugins.dat`**: on a fresh database only the plugins listed there are installed. A dependency may ship its own file that
+  `JVM_ARGS` (the `LIQUIBASE_*` environment names are reserved by Liquibase; a system property wins over `conf/override`).
+  On a fresh database and after each new war: one replica with `true`, wait until it is ready, then the replicas with
+  `false` (procedure at the top of `kubernetes-deployment.yaml`). With `false` everywhere, a fresh database gets no table.
+  A replica killed during a migration leaves `DATABASECHANGELOGLOCK` locked: stop every replica, release the lock, start
+  one replica.
+- **`plugins.dat`**: on a fresh database only the plugins listed there are installed (one line per `<name>` of the war descriptors plus `core_extensions`; keep `installed=0` only for a plugin the site wants off). A dependency may ship its own file that
   overwrites the core one: the site ships its own (`<plugin>.installed=1` per plugin; names with spaces cannot be listed).
   Remove the plugins taken out of the pom: `check-site.sh` warns about the names missing from the assembled war (`target/`).
 - **Forms Lucene index on a shared volume** (`ReadWriteMany`, mounted on the parent directory `/opt/data/lucene`, with
-  `forms.internalIndexer.lucene.indexInWebapp=false`). Not optional: the back office authorization on a form response searches the
+  `forms.internalIndexer.lucene.indexInWebapp=false`, the plugin default, and
+  `-Dforms.internalIndexer.lucene.indexPath=/opt/data/lucene/plugins/forms/index` in `JVM_ARGS`: the default path,
+  `java.io.tmpdir/plugins/forms/index`, is local to the pod; `fsGroup: 0` lets OpenLiberty, user 1001 group 0, write). Not optional: the back office authorization on a form response searches the
   local index, so with one index per pod the response detail shows "access denied" as soon as the request changes pod (verified on
   minikube).
-- **Quartz**: every daemon that must run once per cluster is listed with its `daemon-id` (from `core.xml` and each plugin `.xml`).
+- **Quartz**: `quartzscheduler.cluster.enable=true` (the plugin ships `false`: without it no clustered scheduler starts and
+  the daemons declared exclusive still run on every replica, verified in the plugin source), and every daemon that acts on
+  shared state (database, mails, workflow, purges) listed with its `daemon-id` (from `core.xml` and each plugin `.xml`).
+  A daemon working on a resource of its own pod stays local: the core search `indexer` (one index per pod) and
+  `threadLauncherDaemon`. The logs show `Lutece clustered job scheduler started.` and `qrtz_SCHEDULER_STATE` one row per
+  replica.
 
 ## Plugin prerequisites (report, do not patch)
 

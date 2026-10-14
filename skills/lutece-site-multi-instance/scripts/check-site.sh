@@ -61,6 +61,10 @@ if [ -f "$P" ] && [ -n "$W" ]; then
   if [ -n "$missing" ]; then warn "plugins.dat: listed but absent from the war: $missing"; else ok "plugins.dat: every listed plugin is in the war"; fi
 fi
 
+if grep -rqsa "^quartzscheduler.cluster.enable=true" "$SITE/webapp/WEB-INF/conf/override/"; then ok "Quartz: clustered scheduler enabled"
+else bad "Quartz: quartzscheduler.cluster.enable=true missing in conf/override (exclusive daemons run on every replica)"; fi
+if grep -rqsa "^forms.index.writer.ms.timeout.lock=" "$SITE/webapp/WEB-INF/conf/override/"; then ok "Forms: Lucene lock lease set"
+elif has "$SITE/pom.xml" "plugin-forms\|forms-starter"; then warn "Forms: forms.index.writer.ms.timeout.lock not set (a lock left by a crashed replica blocks indexing 15 min)"; fi
 if grep -rqsa "disallowedClusterConcurrentExecution=true" "$SITE/webapp/WEB-INF/conf/override/"; then
   ok "Quartz: $(grep -rhsa "disallowedClusterConcurrentExecution=true" "$SITE/webapp/WEB-INF/conf/override/" | grep -vc "^#") exclusive daemons declared"
 else bad "Quartz: no exclusive daemon declared in conf/override"; fi
