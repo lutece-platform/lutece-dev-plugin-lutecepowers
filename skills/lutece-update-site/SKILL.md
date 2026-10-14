@@ -177,6 +177,8 @@ decisions file, the runtime comparison, the bench result with each failure attri
 profile each environment must set, the secrets to put in Vault (SI30), and `git status --porcelain`. **Never
 commit.** A commit message the user writes from this is true by construction: it lists what the tools listed.
 
+A site that must then run as several replicas: `lutece-site-multi-instance`.
+
 ## Rules the tools cannot enforce
 
 - Never delete a key, a file or a dependency because "the pack, the starter or a configuration library provides
