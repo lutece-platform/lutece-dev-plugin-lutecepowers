@@ -306,7 +306,7 @@ public class MyEntityIndexerEventListener
     public void onEntityDeleted(
             @ObservesAsync @Type( EventAction.REMOVE ) MyEntityEvent event )
     {
-        _dataSource.indexDocument( event.getEntityId( ), IndexerAction.TASK_DELETE );
+        _dataSource.deleteDocument( event.getEntityId( ) );
     }
 }
 ```
@@ -341,7 +341,39 @@ public void remove( int nIdEntity )
 - `IndexerAction.TASK_MODIFY` (2) — Partial update
 - `IndexerAction.TASK_DELETE` (3) — Delete by query
 
-The `IncrementalIndexingDaemon` processes the queue on the interval set by `daemon.incrementalIndexingDaemon.interval` (seconds; plugin-elasticdata ships `3000`, and `daemon.fullIndexingDaemon.interval=86400`). It handles conflict resolution automatically (e.g., CREATE followed by DELETE = task removed).
+The `IncrementalIndexingDaemon` processes the queue on the interval set by `daemon.incrementalIndexingDaemon.interval` (seconds; plugin-elasticdata ships `3000`, and `daemon.fullIndexingDaemon.interval=86400`).
+
+`addTask` keeps one task per resource. A DELETE on a pending CREATE removes the CREATE and queues nothing
+(`DataSourceIncrementalService.addTask`): a document indexed before stays in the index until the next full indexing.
+Queue the deletion twice: the first call cancels the CREATE, the second queues the DELETE (a DELETE on a pending
+DELETE is ignored).
+
+```java
+public void deleteDocument( int nIdEntity )
+{
+    indexDocument( nIdEntity, IndexerAction.TASK_DELETE );
+    indexDocument( nIdEntity, IndexerAction.TASK_DELETE );
+}
+```
+
+### When the entity's plugin fires no event
+
+Every write that changes an indexed field needs an event, counters included (votes, comments, views): without one, the
+field is refreshed only by the full indexing. The events a plugin already sends for its search indexer
+(`ResourceEvent` for Lucene or Solr) follow the published state: a REMOVE there can mean "unpublished", and a
+non-published entity sends nothing. Do not build the index on them.
+
+Add a typed event to the entity's plugin, fired from the service every write goes through, as forms does
+(`lutece-form-plugin-forms/src/java/**/service/FormService.java`):
+
+- an event class carrying the ids (`FormResponseEvent`), in `service/event/`;
+- `@Inject Event<MyEntityEvent>` in the `@ApplicationScoped` service, `select( new TypeQualifier( action ) ).fireAsync( … )`
+  after the write, CREATE / UPDATE / REMOVE;
+- `fireAsync` throws `RejectedExecutionException` while the server stops: catch it and fire again with
+  `NotificationOptions.ofExecutor( Runnable::run )` (`FormService.fireAsync`).
+
+A workflow action reaches the module without any change in the plugin: the core fires a `ResourceEvent` UPDATE whose
+`getTypeResource( )` is the workflow resource type (`@Observes`, filter on the type).
 
 ## Step 5 — Elasticsearch Mappings
 
@@ -452,6 +484,21 @@ plugin-elasticdata does not discover providers: `DataSourceService` calls those 
 
 **Transaction safety:** Incremental indexing wraps ES operations + DB task removal in a single transaction. If ES fails, the task remains in queue for retry.
 
+## Verify on a bench
+
+`E2E_SEARCH=1` in `e2e.conf` starts a real Elasticsearch beside the application (skill `lutece-e2e`,
+`reference/external-systems.md`). Then, for each write the module must follow (create, update, each counter, remove):
+
+1. do the write through the screens;
+2. read the queue: `jsp/admin/plugins/elasticdata/ManageElasticData.jsp?view=manageIndexerActions` lists one task
+   per resource (`1` create, `3` delete);
+3. run "Indexation incrémentale" on `ManageElasticData.jsp`, then read the document back:
+   `curl localhost:9200/<targetIndexName>/_doc/<lutece.name>_<dataSourceId>_<id>` (the id is
+   `DataSourceService.getIdDocument`); a removed entity answers 404.
+
+An empty queue after a write is a missing event; a document unchanged after the incremental run is a field the
+DataSource does not read.
+
 ## File Checklist
 
 | File | What to create |
@@ -459,7 +506,7 @@ plugin-elasticdata does not discover providers: `DataSourceService` calls those 
 | `pom.xml` | Maven module with plugin-elasticdata dependency |
 | `MyEntityDataSource.java` | `@ApplicationScoped` extending `AbstractDataSource`, `@ConfigProperty` constructor |
 | `MyEntityDataObject.java` | Extends `AbstractDataObject`, typed fields + `Map<String,Object>` |
-| `MyEntityIndexerEventListener.java` | CDI listener, `@Observes` or `@ObservesAsync` as the event is fired |
+| `MyEntityIndexerEventListener.java` | CDI listener, `@Observes` or `@ObservesAsync` as the event is fired; DELETE queued twice |
 | `elasticdata-myentity.properties` | `@ConfigProperty` values (id, name, index, mappings) |
 | `WEB-INF/plugins/myentity-elasticdata.xml` | plugin.xml descriptor |
 | `src/main/resources/META-INF/beans.xml` | CDI descriptor (empty `<beans>` tag) |
