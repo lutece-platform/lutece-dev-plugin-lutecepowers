@@ -377,5 +377,75 @@ expect("SI89 fails a theme install inserting a datastore key the core install in
        "FAIL [SI89] WEB-INF/classes/sql/themes/t/init_db_theme_t.sql: inserts portal.a that" in out, out)
 expect("SI89 leaves a key deleted first, an upsert and a key of the theme's own", "portal.b" not in out and "portal.c" not in out and "theme.t.own" not in out, out)
 
+CLUSTER_XML = """<server><featureManager><feature>sessionCache-1.0</feature></featureManager>
+<library id="hz"><fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="*.jar"/></library>
+<httpSessionCache libraryRef="hz" writeContents="GET_AND_SET_ATTRIBUTES" uri="file:${server.config.dir}/hazelcast-config-api-mode.yaml"/>
+<variable name="lutece.cache.jcache.cachingprovider" value="com.hazelcast.client.cache.HazelcastClientCachingProvider"/></server>"""
+SERVER_XML = """<server><variable name="cluster.config" defaultValue="cluster.xml"/><include location="${server.config.dir}/${cluster.config}" optional="true"/>
+<httpEndpoint id="defaultHttpEndpoint"><httpOptions persistTimeout="75s"/><remoteIp/></httpEndpoint>
+<executor coreThreads="4" maxThreads="4"/><dataSource jndiName="jdbc/portal"><connectionManager maxPoolSize="20"/></dataSource></server>"""
+MEMBER = """hazelcast:
+  cluster-name: s
+  properties:
+    hazelcast.shutdownhook.policy: GRACEFUL
+    hazelcast.shutdownhook.enabled: false
+    hazelcast.cache.invalidation.batch.enabled: false
+  network:
+    port:
+      auto-increment: false
+    join:
+      kubernetes:
+        enabled: true
+"""
+CLIENT = "hazelcast-client:\n  cluster-name: s\n  network:\n    cluster-members:\n      - 127.0.0.1:5701\n  near-cache:\n    x: {}\n"
+QUARTZ = "<dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-quartz-scheduler</artifactId><type>lutece-plugin</type></dependency>\n"
+HZ = "<dependency><groupId>com.hazelcast</groupId><artifactId>hazelcast</artifactId><version>5.7.2</version></dependency>\n"
+cw = war("cluster-war", extra={"WEB-INF/conf/core.xml": "<core><daemons><daemon><daemon-id>mailSender</daemon-id></daemon><daemon><daemon-id>indexer</daemon-id></daemon></daemons></core>",
+                                "WEB-INF/plugins/workflow.xml": "<plug-in><name>workflow</name><daemons><daemon><daemon-id>automaticActionDaemon</daemon-id></daemon></daemons></plug-in>"})
+good = site("cluster-good", pom_extra=QUARTZ + HZ, files={
+    "src/main/liberty/config/cluster.xml": CLUSTER_XML, "src/main/liberty/config/server.xml": SERVER_XML,
+    "src/main/liberty/config/hazelcast-config-api-mode.yaml": MEMBER, "src/main/liberty/config/hazelcast-client-config-api-mode.yaml": CLIENT,
+    "src/main/liberty/config/jvm.options": "-Dhazelcast.jcache.provider.type=member\n-Dhz.service-name=s-hazelcast\n--add-opens=java.base/java.lang=ALL-UNNAMED\n",
+    "Dockerfile": "RUN configure.sh\n",
+    "webapp/WEB-INF/conf/override/quartz-daemons.properties": "quartzscheduler.cluster.enable=true\nquartzscheduler.daemon.mailSender.disallowedClusterConcurrentExecution=true\n"
+                                                              "quartzscheduler.daemon.automaticActionDaemon.disallowedClusterConcurrentExecution=true\nforms.index.writer.ms.timeout.lock=120000\n",
+    "k8s/deploy.yaml": "kind: Deployment\nterminationGracePeriodSeconds: 60\npreStop: x\nstartupProbe: x\nlivenessProbe:\n  path: /health/live\nreadinessProbe:\n  path: /health/ready\n"
+                       "value: \"-Dliquibase.enabled.at.startup=false -Dforms.internalIndexer.lucene.indexPath=/opt/data/lucene/plugins/forms/index\"\n"
+                       "accessModes: [\"ReadWriteMany\"]\n---\nkind: Role\nresources: [\"endpoints\", \"pods\", \"services\"]\n---\nkind: Service\nport: 5701\n"
+                       "---\nkind: Ingress\nnginx.ingress.kubernetes.io/proxy-next-upstream: \"error timeout\"\n"})
+rc, out = run("check", good, "--war", cw, "--k8s", good / "k8s", "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI60-SI72 pass a complete multi-instance site and its manifests",
+       "PASS [SI60]" in out and "PASS [SI70]" in out and not any(f"[SI6{i}]" in out.replace("PASS [SI60]", "") for i in range(10)) and "[SI7" not in out.replace("PASS [SI70]", ""), out)
+bad = site("cluster-bad", pom_extra=HZ, files={
+    "src/main/liberty/config/cluster.xml": "<server><featureManager><feature>sessionCache-1.0</feature></featureManager><library id=\"hz\"><fileset includes=\"hazelcast-*.jar\"/></library>"
+                                           "<httpSessionCache libraryRef=\"hz\"/></server>",
+    "src/main/liberty/config/server.xml": "<server><featureManager><feature>sessionCache-1.0</feature></featureManager></server>",
+    "src/main/liberty/config/hazelcast-config-api-mode.yaml": "hazelcast:\n  cluster-name: a\n  cache:\n    x: {}\n",
+    "src/main/liberty/config/hazelcast-client-config-api-mode.yaml": "hazelcast-client:\n  cluster-name: b\n",
+    "Dockerfile": "COPY x y\n",
+    "webapp/WEB-INF/conf/override/q.properties": "quartzscheduler.daemon.ghost.disallowedClusterConcurrentExecution=true\n",
+    "k8s/deploy.yaml": "kind: Deployment\nlivenessProbe:\n  path: /health/ready\nhazelcast\n---\nkind: Ingress\nsession-cookie-name: JSESSIONID\nproxy-next-upstream: \"error timeout non_idempotent\"\n"})
+rc, out = run("check", bad, "--war", cw, "--k8s", bad / "k8s", "--bom", BOM, "--m2", ROOT / "m2")
+for code, what in (("FAIL [SI61] httpSessionCache: the session library", "a session library without every jar"),
+                   ("FAIL [SI61] httpSessionCache: writeContents", "the default writeContents"),
+                   ("FAIL [SI62]", "no Lutece cache provider"), ("FAIL [SI63] hazelcast-config-api-mode.yaml: cache section", "a member cache section"),
+                   ("FAIL [SI63] Hazelcast member and client cluster-name differ", "two cluster names"),
+                   ("FAIL [SI64]", "no member provider type"), ("WARN [SI65] server.xml: persistTimeout", "the default persistTimeout"),
+                   ("WARN [SI65] server.xml: no <remoteIp/>", "no remoteIp"), ("FAIL [SI66] pom.xml: no plugin-quartz-scheduler", "no Quartz plugin"),
+                   ("WARN [SI67] server.xml: cluster.xml is not included", "cluster.xml not included by variable"),
+                   ("WARN [SI67] Dockerfile", "a Dockerfile without configure.sh"), ("WARN [SI68]", "Forms without lock lease"),
+                   ("WARN [SI70] liveness on /health/ready", "a liveness on the database"), ("WARN [SI70] no preStop", "no preStop"),
+                   ("WARN [SI71]", "no discovery Role"), ("FAIL [SI72] ingress affinity cookie named JSESSIONID", "the JSESSIONID cookie"),
+                   ("FAIL [SI72] proxy-next-upstream replays", "non_idempotent replay")):
+    expect(f"{code.split(']')[0]}] reports {what}", code in out, out)
+q = site("cluster-quartz-off", pom_extra=QUARTZ + HZ, files={"src/main/liberty/config/cluster.xml": CLUSTER_XML, "src/main/liberty/config/server.xml": SERVER_XML,
+    "webapp/WEB-INF/conf/override/q.properties": "quartzscheduler.daemon.ghost.disallowedClusterConcurrentExecution=true\n"})
+rc, out = run("check", q, "--war", cw, "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI66 fails exclusive daemons without the clustered scheduler switch", "FAIL [SI66] conf/override: no quartzscheduler.cluster.enable=true" in out, out)
+expect("SI66 warns about a daemon no descriptor of the war declares", "WARN [SI66] conf/override: daemon ghost" in out, out)
+expect("SI66 lists the daemons left on every replica", "INFO [SI66] daemons of the war running on every replica: automaticActionDaemon, mailSender" in out, out)
+rc, out = run("check", site("single"), "--war", cw, "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI60-SI68 say nothing on a single-instance site", "[SI6" not in out, out)
+
 sys.exit(1 if failures else 0)
 PY
