@@ -1,5 +1,6 @@
-# Ingress (ingress-nginx) of a multi-instance Lutece site. Session affinity is optional (the HTTP session is in Hazelcast); it
-# limits node switches. Replace <site> and <host>.
+# Ingress (ingress-nginx) of a multi-instance Lutece site. Session affinity is optional (the HTTP session is shared); it
+# limits node switches. The site answers under its context root (/lutece/): to serve it at the root of the host, add
+# nginx.ingress.kubernetes.io/app-root: /lutece/ (redirects / only) or change the context root in server.xml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

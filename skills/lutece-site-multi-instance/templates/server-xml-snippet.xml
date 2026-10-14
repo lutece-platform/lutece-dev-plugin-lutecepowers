@@ -25,3 +25,15 @@
      costs twice the CPU and the throughput falls under load -->
 <variable name="executor.threads" defaultValue="4" />
 <executor coreThreads="${executor.threads}" maxThreads="${executor.threads}" />
+
+<!-- Connection pool bounded too (OpenLiberty allows 50 per replica): about 3 x executor.threads covers the requests and
+     the daemons (measured: 11 connections for 2 replicas of 4 threads under a saturating load). The database user limit
+     (max_user_connections) must cover (replicas + rolling surge + migration run) x maxPoolSize. Added to the existing
+     dataSource of the site: -->
+<variable name="db.pool.max" defaultValue="12" />
+<!--
+<dataSource jndiName="jdbc/portal">
+    <connectionManager maxPoolSize="${db.pool.max}" />
+    ...
+</dataSource>
+-->

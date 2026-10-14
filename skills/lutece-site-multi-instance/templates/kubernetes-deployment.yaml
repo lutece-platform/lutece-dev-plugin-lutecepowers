@@ -2,9 +2,8 @@
 # Use with kubernetes-rbac.yaml (service account, Hazelcast Service, Role/RoleBinding) and kubernetes-service.yaml
 # (Service, shared volume).
 #
-# Liquibase is off on the replicas. On a fresh database and after each new war, run the migrations from one replica:
-#   scale to 1 replica with -Dliquibase.enabled.at.startup=true in JVM_ARGS, wait until it is ready, then apply this
-#   Deployment again (false, 2 replicas). A system property (JVM_ARGS) wins over conf/override.
+# Liquibase is off on the replicas (a system property in JVM_ARGS wins over conf/override). On a fresh database and
+# before each new war, run the migrations once with kubernetes-migration.yaml, then apply this Deployment.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
