@@ -158,8 +158,10 @@ attachment field.
 - Database memory: the InnoDB buffer pool plus the memory of the concurrent queries (sort buffers, temporary tables), not the
   number of connections. Measured on mariadb-operator (MariaDB 11.4, 256 MB buffer pool): 120 idle connections cost 18 MiB;
   10 heavy queries at once (group by on 400,000 computed rows) got `mariadbd` OOMKilled under a 512 Mi limit, then its liveness
-  probe timed out and restarted it again; under 1 Gi, 20 of them passed. MariaDB keeps that memory after the load (856 MiB still
-  allocated): size the limit on the peak, about the buffer pool + 768 MiB (1 Gi for 256 MB, 1.5 Gi for 512 MB, 3 Gi for 1 GB).
+  probe timed out and restarted it again; under 1 Gi, 20 of them passed. With a 512 MB buffer pool filled with data, 1536 Mi held
+  20 and was OOMKilled at 40 (about 40 MB per heavy query). MariaDB keeps that memory after the load (856 MiB still allocated):
+  size the limit on the peak, from the number of heavy queries the site may run at once (buffer pool + base + queries x 40 MB):
+  1 Gi for 256 MB, 2 Gi for 512 MB, 4 Gi for 1 GB.
   For a site with heavy exports, `tmp_table_size` and `max_heap_table_size` at 8M send large temporary tables to disk sooner.
 - Autoscaling on CPU only: a JVM does not give its memory back, an autoscaler on memory grows to its maximum and never scales
   down. New pods start cold (see the warm-up below).
