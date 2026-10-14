@@ -168,6 +168,13 @@ attachment field.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+- Pod sizes (measured on minikube, form journey, 1 replica, database not limiting): 2 CPUs and 4 threads reached about
+  25 req/s (CPU throttled), 4 CPUs and 7 threads 58 req/s, 8 CPUs and 13 threads above 80 req/s with under 5 CPUs used: past
+  6 CPUs, add replicas rather than CPUs. Start in 30 s at every size; without uploads a pod stayed under 900 Mi. Uploads drive
+  the memory: an uploaded file stays in the Hazelcast session (plus its backup copy on another member) until the journey ends
+  or the session expires, so abandoned uploads stay 30 min; 20 users uploading 1 to 5 MB files added about 450 Mi per pod
+  (3 replicas). Sizes: 1 / 2 CPUs and 1536 Mi, 2 / 4 CPUs and 3 Gi, 3 / 6 CPUs and 4 Gi (request / limit, memory request =
+  limit), threads 4, 7 and 10. OpenJ9 sizes its default heap on the limit (limit - 512 MB up to 2 GB, 75 % above): no `-Xmx`.
 - Warm-up of a new pod (optional, measured): the shared class cache that `configure.sh` builds only holds the startup path. A
   layer trained on real traffic (container started with `-Xshareclasses:…,createLayer -Xscmx100m`, a few minutes of the site
   journeys, layer file copied into the image) halved the p95 of the first minute of the new pods during a rolling restart

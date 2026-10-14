@@ -39,11 +39,12 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: 1600Mi
-            # CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load
+              memory: 1536Mi
+            # CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+            # Measured sizes (request / limit, memory): 1 / 2 CPU 1536Mi, 2 / 4 CPU 3Gi, 3 / 6 CPU 4Gi
             limits:
               cpu: "2"
-              memory: 1600Mi
+              memory: 1536Mi
           startupProbe:
             httpGet:
               path: /health/started
@@ -58,7 +59,7 @@ spec:
             httpGet:
               path: /health/ready
               port: http
-            periodSeconds: 5
+            periodSeconds: 10
             # A loaded pod answers slowly (the health check waits in the bounded thread pool): leave it the time to
             # answer; readiness takes it out of the Service, it does not kill it
             timeoutSeconds: 5
