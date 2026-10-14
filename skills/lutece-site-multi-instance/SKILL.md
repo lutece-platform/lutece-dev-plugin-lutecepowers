@@ -73,10 +73,16 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   throughput of one replica falls as the load rises (k6, 40 users: 13.5 req/s bounded to 4, 5 to 8 req/s unbounded; 6 threads
   already halve it). Size it with threads = CPU x (1 + wait / compute): Forms requests wait 0.4 to 0.6 of their compute time
   (database 23 %, Hazelcast 6 %, files 4 % of the samples of busy request threads), more with a slow outgoing call (GRU):
-  4 threads for 2 CPUs, 5 for 3, 7 for 4.
+  4 threads for 2 CPUs, 7 for 4, 10 for 6.
 - **`persistTimeout` above the load balancer keep-alive** (`<httpOptions persistTimeout="75s"/>` in `server.xml`): Liberty closes
   idle connections after 30 s, ingress-nginx reuses its upstream connections up to 60 s; a POST sent on a connection Liberty has
   just closed gets a 502, nginx does not retry it (seen once in 7,500 k6 journeys).
+- **Client address behind the ingress** (`<remoteIp />` in the `httpEndpoint`): without it `getRemoteAddr()` returns the
+  ingress address for every user, and the upload DOS Guard of the core (`lutece.upload.dosguard.minInterval`, one upload
+  above 10 KB every 2 s per address) throttles all users together: 387 of 411 uploads refused (500) for 10 users with
+  distinct addresses on minikube, 0 with `remoteIp`. Liberty reads `X-Forwarded-For` only from a proxy in the private ranges
+  (default `proxies`); ingress-nginx replaces a client-supplied `X-Forwarded-For` by default, so a forged header changes
+  nothing (verified). With a load balancer in front of the ingress, `use-forwarded-headers` must be set on ingress-nginx.
 - **`hazelcast.cache.invalidation.batch.enabled: false`** on the member: otherwise near-cache invalidations are batched and a
   change takes seconds to be visible on the other replicas.
 - **Liquibase**: run migrations from one instance only. Disable at startup with `-Dliquibase.enabled.at.startup=false` in

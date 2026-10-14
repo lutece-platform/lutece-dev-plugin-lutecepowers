@@ -14,6 +14,9 @@
      load balancer reuses a connection Liberty has just closed and a POST (not retried) gets a 502 -->
 <httpEndpoint host="*" httpPort="${http.port}" httpsPort="${https.port}" id="defaultHttpEndpoint">
     <httpOptions persistTimeout="75s" />
+    <!-- Client address read from X-Forwarded-For when the connection comes from a proxy (private addresses by default):
+         otherwise every user has the ingress address and the upload DOS Guard of the core throttles them together -->
+    <remoteIp />
 </httpEndpoint>
 
 <!-- Thread pool bounded to the CPU limit of the deployment (4 for 2 CPUs, 7 for 4, 10 for 6; set here by the site, the
