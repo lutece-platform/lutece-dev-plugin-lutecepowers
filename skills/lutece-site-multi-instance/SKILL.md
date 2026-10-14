@@ -101,6 +101,10 @@ Templates are in `templates/`; replace `<site>` with the site code. Keep the use
   `java.io.tmpdir/plugins/forms/index`, is local to the pod; `fsGroup: 0` lets OpenLiberty, user 1001 group 0, write). Not optional: the back office authorization on a form response searches the
   local index, so with one index per pod the response detail shows "access denied" as soon as the request changes pod (verified on
   minikube).
+- **Data changed outside Lutece** (SQL script, restore): the Lutece caches live in Hazelcast and survive a rolling restart
+  as long as one member stays up. Reset them from the back office (system, caches: applies to the whole cluster) or stop
+  every replica. Verified: a form inserted in SQL after the form list was cached stayed invisible to the Forms indexer
+  ("associated form not found") across a rolling restart, and was found after the reset.
 - **Quartz**: `quartzscheduler.cluster.enable=true` (the plugin ships `false`: without it no clustered scheduler starts and
   the daemons declared exclusive still run on every replica, verified in the plugin source), and every daemon that acts on
   shared state (database, mails, workflow, purges) listed with its `daemon-id` (from `core.xml` and each plugin `.xml`).
