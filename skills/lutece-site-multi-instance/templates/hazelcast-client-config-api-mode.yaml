@@ -9,12 +9,14 @@ hazelcast-client:
       - 127.0.0.1:5701
     redo-operation: true
   # Near cache: local copy of the entries read, invalidated on every change (immediate with
-  # hazelcast.cache.invalidation.batch.enabled=false on the member). Page latency about halved.
+  # hazelcast.cache.invalidation.batch.enabled=false on the member). Required: without it every cache read is a network
+  # call (measured: 2.2 req/s against 37). OBJECT: no copy on read (BINARY: a third more CPU). An expiry or eviction on
+  # the member does not invalidate it: its time-to-live stays below the shortest member lifetime of the Lutece caches.
   near-cache:
     "*":
       in-memory-format: OBJECT
       invalidate-on-change: true
-      time-to-live-seconds: 0
+      time-to-live-seconds: 600
       max-idle-seconds: 0
       eviction:
         eviction-policy: LRU

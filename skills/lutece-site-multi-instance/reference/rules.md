@@ -11,21 +11,41 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   `sessionCache-1.0` starts as a client and there is no member.
 - **`include` location**: a variable used in an `<include location>` must come from `bootstrap.properties`
   (`liberty.bootstrap.*` in the pom), not from `configDropins`.
-- **No member-side `cache:` configuration for the Lutece caches**: the client creates a declared cache as soon as Lutece asks for
-  it by name, bypassing the enabled/disabled state Lutece keeps in database. A `"*"` entry also matches the session caches of
-  OpenLiberty: on a cluster started from zero, `SESN0307E Incompatible cache key types` and the application does not start;
-  a rolling restart hides it, the running members keeping the session caches already created (verified on minikube).
-- **The Lutece cache settings do not reach Hazelcast**: sizes and lifetimes of `caches.properties` and of
-  `core.cache.status.*` only apply to Ehcache. With the Hazelcast client every Lutece cache is eternal, 10,000 entries LRU
-  (verified: `formsCacheService` and its 24 h TTL included). A `time-to-live-seconds` on the near cache does not change that:
-  the near cache reloads the entry from the member, which still holds it.
-- **Near cache required**: without it every cache read is a network call (k6, 16 users, 2 replicas: 2.2 req/s and 1.7 s of CPU
-  per request, against 37.6 req/s and 73 ms with it). `in-memory-format: OBJECT` returns the same instance to every reader of
-  the pod (Ehcache returns a copy): code that modifies an object read from a cache changes it for the concurrent requests of the
-  pod; `BINARY` copies at each read for about a third more CPU per request (97 ms against 73 ms).
-- **Cache screen of the back office**: reset only. Enabling or disabling a cache acts on the replica that receives the request,
-  is not saved in database, and disabling clears the shared cache: verified, a value written through the disabled replica
-  stayed stale on the other one, and on both after it was enabled again.
+- **Member cache configuration: by exact name, never `"*"`**. A `"*"` entry also matches the session caches of OpenLiberty:
+  on a cluster started from zero, `SESN0307E Incompatible cache key types` and the application does not start; a rolling
+  restart hides it, the running members keeping the session caches already created (verified on minikube). A Lutece cache
+  declared by its JCache name (the Lutece name without spaces: `DatastoreCacheService`, `formsCacheService`) is created from
+  that declaration, which replaces the Lutece configuration of the cache: lifetime, size and backups are all set there.
+  It is the only way to size a Lutece cache under Hazelcast (verified: `formsCacheService` at 20,000 entries, same throughput
+  and CPU as without it). With a lutece-core whose cache layer is not fixed (`plugin-prerequisites.md`), a cache declared on
+  the member becomes active even when Lutece has it disabled in database.
+- **Lifetimes under Hazelcast**: the JCache configuration carries no size, so every Lutece cache not declared on the member
+  holds 10,000 entries LRU. Its lifetime reaches Hazelcast only with the fixed lutece-core; before it every Lutece cache is
+  eternal. The near cache is not invalidated by an expiry or an eviction on the member (Hazelcast documentation): its
+  `time-to-live-seconds` (600 in `templates/hazelcast-client-config-api-mode.yaml`) stays below the shortest member lifetime.
+  Data changed outside Lutece is then stale for at most member lifetime + near-cache lifetime (measured: 40 s with 30 + 20 s).
+- **OpenLiberty session caches: defaults**. Declared on the member with their types (`com.ibm.ws.session.attr.*`: key
+  `java.lang.String`, value `[B`; `com.ibm.ws.session.meta.*`: `java.util.ArrayList`) they start from zero without error,
+  but an asynchronous backup measured no gain (39.2 req/s and 70 ms of CPU per request against 35.7 and 72) and can lose
+  the last session write when a pod stops: keep the synchronous backup.
+- **Near cache required, `OBJECT`, `INVALIDATE`** (k6, 16 users, 2 replicas, third run, CPU per request from the pods):
+
+  | Client near cache | req/s | CPU / request |
+  |---|---|---|
+  | none | 2.2 | 1,669 ms |
+  | `BINARY` | 33.2 | 97 ms |
+  | `OBJECT` | 37.2 | 78 ms |
+  | `OBJECT`, `time-to-live-seconds: 600` | 34.7 - 35.7 | 72 - 83 ms |
+  | `OBJECT`, `local-update-policy: CACHE_ON_UPDATE` | 37.3 | 76 ms |
+  | `OBJECT`, `cluster-routing: SINGLE_MEMBER` | 32.6 | 90 ms |
+
+  The lifetime costs nothing measurable; `CACHE_ON_UPDATE` gains nothing on a read-mostly site; `SINGLE_MEMBER` loses on
+  every run (keep the default `ALL_MEMBERS`). `OBJECT` returns the same instance to every reader of the pod (Ehcache returns a
+  copy): code that modifies an object read from a cache changes it for the concurrent requests of the pod.
+- **Cache screen of the back office**: reset only. Enabling or disabling a cache acts on the replica that receives the request;
+  the others keep their state until they restart. With a lutece-core whose cache layer is not fixed, the state is not even
+  saved and disabling clears the shared cache: verified, a value written through the disabled replica stayed stale on the
+  other one, and on both after it was enabled again (with the fix: saved, and both replicas stay consistent).
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.

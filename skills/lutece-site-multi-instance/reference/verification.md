@@ -18,7 +18,8 @@ browser load the resources over HTTPS and the back office breaks: test behind TL
 
 How the checks were run on minikube (a bench to rebuild, nothing of it ships with the site):
 
-- Every step on another replica: port-forward each pod and put a small reverse proxy in front that sends each dynamic
+- Every step on another replica: reach each pod (a NodePort service per pod, selected by a label set on it, relayed to
+  `localhost`: `kubectl port-forward` resets under load and fails the load runs) and put a small reverse proxy in front that sends each dynamic
   request (`.jsp`, `/upload`, servlets) to the next pod and adds a response header naming it; drive the form journey with
   Playwright through it (step 1, step 2 with an upload, summary, save) and assert against the database: the response has
   its file, the numbers of concurrent responses are distinct. The same journey on a single pod must pass first (control).
