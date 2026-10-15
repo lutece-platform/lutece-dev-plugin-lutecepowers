@@ -420,7 +420,7 @@ bad = site("cluster-bad", pom_extra=HZ, files={
     "src/main/liberty/config/cluster.xml": "<server><featureManager><feature>sessionCache-1.0</feature></featureManager><library id=\"hz\"><fileset includes=\"hazelcast-*.jar\"/></library>"
                                            "<httpSessionCache libraryRef=\"hz\"/></server>",
     "src/main/liberty/config/server.xml": "<server><featureManager><feature>sessionCache-1.0</feature></featureManager></server>",
-    "src/main/liberty/config/hazelcast-config-api-mode.yaml": "hazelcast:\n  cluster-name: a\n  cache:\n    x: {}\n",
+    "src/main/liberty/config/hazelcast-config-api-mode.yaml": "hazelcast:\n  cluster-name: a\n  cache:\n    \"*\": {}\n    formsCacheService: {}\n    \"com.ibm.ws.session.attr.*\": {}\n",
     "src/main/liberty/config/hazelcast-client-config-api-mode.yaml": "hazelcast-client:\n  cluster-name: b\n",
     "Dockerfile": "COPY x y\n",
     "webapp/WEB-INF/conf/override/q.properties": "quartzscheduler.daemon.ghost.disallowedClusterConcurrentExecution=true\n",
@@ -428,7 +428,7 @@ bad = site("cluster-bad", pom_extra=HZ, files={
 rc, out = run("check", bad, "--war", cw, "--k8s", bad / "k8s", "--bom", BOM, "--m2", ROOT / "m2")
 for code, what in (("FAIL [SI61] httpSessionCache: the session library", "a session library without every jar"),
                    ("FAIL [SI61] httpSessionCache: writeContents", "the default writeContents"),
-                   ("FAIL [SI62]", "no Lutece cache provider"), ("FAIL [SI63] hazelcast-config-api-mode.yaml: cache section", "a member cache section"),
+                   ("FAIL [SI62]", "no Lutece cache provider"), ("FAIL [SI63] hazelcast-config-api-mode.yaml: member cache entry *:", "a member \"*\" cache entry"), ("INFO [SI63] member caches declared by name (formsCacheService)", "a member cache declared by name"),
                    ("FAIL [SI63] Hazelcast member and client cluster-name differ", "two cluster names"),
                    ("FAIL [SI64]", "no member provider type"), ("WARN [SI65] server.xml: persistTimeout", "the default persistTimeout"),
                    ("WARN [SI65] server.xml: no <remoteIp/>", "no remoteIp"), ("FAIL [SI66] pom.xml: no plugin-quartz-scheduler", "no Quartz plugin"),

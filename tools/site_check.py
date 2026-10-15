@@ -1187,6 +1187,21 @@ def war_daemons(war):
     return ids
 
 
+def member_cache_names(member):
+    """Returns the names declared under the cache section of a Hazelcast member YAML, quotes removed."""
+    names, inside = [], False
+    for line in member.splitlines():
+        if re.match(r"^  cache:\s*$", line):
+            inside = True
+        elif inside and re.match(r"^ {0,2}\S", line):
+            inside = False
+        elif inside:
+            m = re.match(r"^    (['\"]?)([^'\":#][^'\"]*?)\1\s*:", line)
+            if m:
+                names.append(m.group(2))
+    return names
+
+
 def check_cluster(site, war, out):
     """SI60-SI68: the configuration of a site set up for several replicas (sessionCache-1.0 or sessionDatabase-1.0,
     a cluster.xml or a Hazelcast dependency): HTTP session, Lutece cache, Hazelcast member and client, JVM options,
@@ -1227,9 +1242,14 @@ def check_cluster(site, war, out):
         out.add("FAIL", "SI62", "no lutece.cache.jcache.cachingprovider: the Lutece caches stay local to each replica (stale data on the others)")
         n += 1
     if hazelcast:
-        if re.search(r"^  cache:", member, re.M):
-            out.add("FAIL", "SI63", "hazelcast-config-api-mode.yaml: cache section on the member: it creates Lutece caches disabled in database")
+        caches = member_cache_names(member)
+        generic = [c for c in caches if "*" in c and not c.startswith("com.ibm.ws.session.")]
+        if generic:
+            out.add("FAIL", "SI63", f"hazelcast-config-api-mode.yaml: member cache entry {', '.join(generic)}: it also matches the OpenLiberty session caches (SESN0307E, the application does not start on a cluster started from zero)")
             n += 1
+        named = [c for c in caches if "*" not in c]
+        if named:
+            out.add("INFO", "SI63", f"member caches declared by name ({', '.join(named)}): this configuration replaces the Lutece one for them (lifetime, size, backups)")
         mn, cn = (re.search(r"cluster-name:\s*(\S+)", t) for t in (member, client))
         if member and client and (not mn or not cn or mn.group(1) != cn.group(1)):
             out.add("FAIL", "SI63", "Hazelcast member and client cluster-name differ: the client of the Lutece cache never connects")
