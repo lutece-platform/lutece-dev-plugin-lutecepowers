@@ -65,8 +65,9 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
 
 - Session library = **every jar of the war**, and `writeContents="GET_AND_SET_ATTRIBUTES"`: otherwise partitions do not
   migrate, and `@SessionScoped` beans modified in place are lost on a node switch.
-- `-Dhazelcast.jcache.provider.type=member` in `jvm.options`; no `cache:` section on the member; JVM shutdown hook off and
-  graceful shutdown on; near-cache invalidations not batched.
+- `-Dhazelcast.jcache.provider.type=member` in `jvm.options`; no `cache:` section on the member (a `"*"` entry stops the
+  application at the next full restart); JVM shutdown hook off and graceful shutdown on; near cache on the client, its
+  invalidations not batched.
 - Quartz: `quartzscheduler.cluster.enable=true` (the plugin ships `false`) and every daemon acting on shared state declared
   exclusive; the core `indexer` and `threadLauncherDaemon` stay local (table in `reference/rules.md`).
 - Liquibase from one replica only: `-Dliquibase.enabled.at.startup=false` on the replicas, `kubernetes-migration.yaml`
@@ -79,7 +80,9 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
   limit covers (replicas + surge + migration run) x `maxPoolSize`.
 - Kubernetes: preStop 10 s and grace period 60 s, startup probe, readiness on the database, liveness on the webapp only,
   probe timeouts 5 s / 10 s, CPU limit above the request, autoscaling on CPU only.
-- Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them.
+- Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them, and with
+  Hazelcast every Lutece cache is eternal (the sizes and lifetimes of `caches.properties` apply to Ehcache only). Never
+  enable or disable a cache from the back office: it acts on one replica only.
 
 ## Checks
 

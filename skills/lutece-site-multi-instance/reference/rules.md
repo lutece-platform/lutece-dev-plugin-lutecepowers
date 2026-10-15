@@ -12,7 +12,20 @@ Each rule was observed on minikube or podman with two or three replicas behind i
 - **`include` location**: a variable used in an `<include location>` must come from `bootstrap.properties`
   (`liberty.bootstrap.*` in the pom), not from `configDropins`.
 - **No member-side `cache:` configuration for the Lutece caches**: the client creates a declared cache as soon as Lutece asks for
-  it by name, bypassing the enabled/disabled state Lutece keeps in database.
+  it by name, bypassing the enabled/disabled state Lutece keeps in database. A `"*"` entry also matches the session caches of
+  OpenLiberty: on a cluster started from zero, `SESN0307E Incompatible cache key types` and the application does not start;
+  a rolling restart hides it, the running members keeping the session caches already created (verified on minikube).
+- **The Lutece cache settings do not reach Hazelcast**: sizes and lifetimes of `caches.properties` and of
+  `core.cache.status.*` only apply to Ehcache. With the Hazelcast client every Lutece cache is eternal, 10,000 entries LRU
+  (verified: `formsCacheService` and its 24 h TTL included). A `time-to-live-seconds` on the near cache does not change that:
+  the near cache reloads the entry from the member, which still holds it.
+- **Near cache required**: without it every cache read is a network call (k6, 16 users, 2 replicas: 2.2 req/s and 1.7 s of CPU
+  per request, against 37.6 req/s and 73 ms with it). `in-memory-format: OBJECT` returns the same instance to every reader of
+  the pod (Ehcache returns a copy): code that modifies an object read from a cache changes it for the concurrent requests of the
+  pod; `BINARY` copies at each read for about a third more CPU per request (97 ms against 73 ms).
+- **Cache screen of the back office**: reset only. Enabling or disabling a cache acts on the replica that receives the request,
+  is not saved in database, and disabling clears the shared cache: verified, a value written through the disabled replica
+  stayed stale on the other one, and on both after it was enabled again.
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
