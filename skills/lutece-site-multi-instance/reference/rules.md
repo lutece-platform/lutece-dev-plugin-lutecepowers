@@ -19,11 +19,17 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   It is the only way to size a Lutece cache under Hazelcast (verified: `formsCacheService` at 20,000 entries, same throughput
   and CPU as without it). With a lutece-core whose cache layer is not fixed (`plugin-prerequisites.md`), a cache declared on
   the member becomes active even when Lutece has it disabled in database.
-- **Lifetimes under Hazelcast**: the JCache configuration carries no size, so every Lutece cache not declared on the member
-  holds 10,000 entries LRU. Its lifetime reaches Hazelcast only with the fixed lutece-core; before it every Lutece cache is
-  eternal. The near cache is not invalidated by an expiry or an eviction on the member (Hazelcast documentation): its
+- **Lifetimes and sizes under Hazelcast**: with the fixed lutece-core, the Lutece lifetime of a cache is its JCache expiry
+  (`CreatedExpiryPolicy`, 3600 s by default, 86400 s for `formsCacheService`; eternal for the caches Lutece declares
+  eternal). The JCache configuration carries no size: `library-cache-hazelcast` (not released yet, in the `cluster` profile
+  only) sets the Lutece size of each cache on the member (verified on 3 podman replicas: 10,000 entries LRU by default,
+  1,000 for `LuteceUserCacheService`, 100,000 for the oauth2 version cache, 20,000 for `formsCacheService` set in Lutece).
+  Without the library every cache holds 10,000 entries LRU; with the core not fixed every cache is also eternal. The near
+  cache is not invalidated by an expiry or an eviction on the member (Hazelcast documentation): its
   `time-to-live-seconds` (600 in `templates/hazelcast-client-config-api-mode.yaml`) stays below the shortest member lifetime.
   Data changed outside Lutece is then stale for at most member lifetime + near-cache lifetime (measured: 40 s with 30 + 20 s).
+  Measured with both (k6, 45 users, 3 replicas, three runs): 28.2, 32.5, 34.9 req/s, p95 1.9, 1.3, 1.04 s, 185 to 146 ms of
+  CPU per request, no error.
 - **OpenLiberty session caches: defaults**. Declared on the member with their types (`com.ibm.ws.session.attr.*`: key
   `java.lang.String`, value `[B`; `com.ibm.ws.session.meta.*`: `java.util.ArrayList`) they start from zero without error,
   but an asynchronous backup measured no gain (39.2 req/s and 70 ms of CPU per request against 35.7 and 72) and can lose
@@ -42,10 +48,12 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   The lifetime costs nothing measurable; `CACHE_ON_UPDATE` gains nothing on a read-mostly site; `SINGLE_MEMBER` loses on
   every run (keep the default `ALL_MEMBERS`). `OBJECT` returns the same instance to every reader of the pod (Ehcache returns a
   copy): code that modifies an object read from a cache changes it for the concurrent requests of the pod.
-- **Cache screen of the back office**: reset only. Enabling or disabling a cache acts on the replica that receives the request;
-  the others keep their state until they restart. With a lutece-core whose cache layer is not fixed, the state is not even
-  saved and disabling clears the shared cache: verified, a value written through the disabled replica stayed stale on the
-  other one, and on both after it was enabled again (with the fix: saved, and both replicas stay consistent).
+- **Cache screen of the back office**: with the fixed lutece-core, the state of each cache is saved and every replica
+  reloads it every `lutece.cache.status.refreshSeconds` (30 by default with a shared provider, 0 with Ehcache): a cache
+  enabled or disabled on one replica is in the same state on the others within 35 s (verified both ways on 3 replicas), and
+  a value written through a replica where the cache is disabled is still removed from the shared cache. Before the fix,
+  enabling or disabling acts on the replica that receives the request only, the state is not saved and disabling clears the
+  shared cache (verified: a value written through the disabled replica stayed stale on the other one).
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.

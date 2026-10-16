@@ -26,9 +26,10 @@ hazelcast:
         # No namespace: the namespace of the pod. Default in jvm.options, overridable with JVM_ARGS="-Dhz.service-name=...".
         service-name: ${hz.service-name}
         service-port: 5701
-  # Lutece caches: no "cache:" section by default (lifetime from Lutece, 10,000 entries LRU). Never "*": it also matches
-  # the OpenLiberty session caches and the application no longer starts on a cluster started from zero (SESN0307E).
-  # A cache that needs another size is declared by its JCache name (Lutece name without spaces); the declaration
+  # Lutece caches: no "cache:" section by default (lifetime from Lutece; size from Lutece with library-cache-hazelcast,
+  # 10,000 entries LRU without it). Never "*": it also matches the OpenLiberty session caches and the application no
+  # longer starts on a cluster started from zero (SESN0307E).
+  # Without the library, a cache that needs another size is declared by its JCache name (Lutece name without spaces); the declaration
   # replaces the Lutece configuration of that cache, lifetime included, and needs a lutece-core whose cache layer is
   # fixed (reference/plugin-prerequisites.md):
   # cache:

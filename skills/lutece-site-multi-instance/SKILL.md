@@ -80,9 +80,11 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
   limit covers (replicas + surge + migration run) x `maxPoolSize`.
 - Kubernetes: preStop 10 s and grace period 60 s, startup probe, readiness on the database, liveness on the webapp only,
   probe timeouts 5 s / 10 s, CPU limit above the request, autoscaling on CPU only.
-- Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them, and with
-  Hazelcast every Lutece cache is eternal (the sizes and lifetimes of `caches.properties` apply to Ehcache only). Never
-  enable or disable a cache from the back office: it acts on one replica only.
+- Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them. Under
+  Hazelcast a Lutece cache keeps its Lutece lifetime and size only with the fixed lutece-core and
+  `library-cache-hazelcast` in the cluster profile; before, every Lutece cache is eternal and holds 10,000 entries. Enabling
+  or disabling a cache from the back office reaches the other replicas within `lutece.cache.status.refreshSeconds` (30 s)
+  with the fixed lutece-core, never before it.
 
 ## Checks
 
