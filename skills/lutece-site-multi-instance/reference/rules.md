@@ -22,8 +22,11 @@ Each rule was observed on minikube or podman with two or three replicas behind i
 - **Lifetimes and sizes under Hazelcast**: with the fixed lutece-core, the Lutece lifetime of a cache is its JCache expiry
   (`CreatedExpiryPolicy`, 3600 s by default, 86400 s for `formsCacheService`; eternal for the caches Lutece declares
   eternal). The JCache configuration carries no size: `library-cache-hazelcast` (not released yet, in the `cluster` profile
-  only) sets the Lutece size of each cache on the member (verified on 3 podman replicas: 10,000 entries LRU by default,
-  1,000 for `LuteceUserCacheService`, 100,000 for the oauth2 version cache, 20,000 for `formsCacheService` set in Lutece).
+  only) sets `maxElementsInMemory` of each cache as its entry count, LRU, on the member:
+  `core.cache.status.<JCache name>.maxElementsInMemory` (properties or datastore), else
+  `lutece.cache.default.maxElementsInMemory` (`caches.properties`, 10,000). The size is applied when the cache is created in
+  the cluster: a new size needs every replica stopped. Verified on 3 podman replicas: 10,000 by default, 1,000 for
+  `LuteceUserCacheService`, 100,000 for the oauth2 version cache, 20,000 for `formsCacheService` set by its key.
   Without the library every cache holds 10,000 entries LRU; with the core not fixed every cache is also eternal. The near
   cache is not invalidated by an expiry or an eviction on the member (Hazelcast documentation): its
   `time-to-live-seconds` (600 in `templates/hazelcast-client-config-api-mode.yaml`) stays below the shortest member lifetime.
