@@ -10,7 +10,17 @@ templates carry them.
   `preStop` so that the pod leaves the Service before OpenLiberty stops (otherwise `The cache closed` errors during shutdown).
   Measured behind ingress-nginx, 10 k6 users, one rolling restart of 2 replicas: 24 and 11 errors 502 with the 30 s default and
   no `preStop`, 0 and 0 with 60 s and a 10 s `preStop`.
-- Session affinity, when used: the ingress cookie must have its own name. Named `JSESSIONID` (as the OpenLiberty session cookie,
+- Session affinity (recommended, see `SKILL.md`): measured with k6 through ingress-nginx, 2 replicas of 2 CPU, an 11-step
+  declaration form, 10 min per rate, a new route cookie per declaration (affinity-mode `balanced`, load stays even):
+
+  | Declarations/min | Affinity | p50 / p95 / p99 | Server time per declaration (p50) | CPU per request | Failures |
+  |---|---|---|---|---|---|
+  | 90 | no | 103 / 372 / 694 ms | 1.64 s | 116 ms | 0 |
+  | 90 | yes | 86 / 289 / 530 ms | 1.36 s | 92 ms | 0 |
+  | 150 | no | 203 / 708 / 977 ms | 3.38 s | 111 ms | 0 |
+  | 150 | yes | 138 / 542 / 777 ms | 2.28 s | 98 ms | 0 |
+
+  The ingress cookie must have its own name. Named `JSESSIONID` (as the OpenLiberty session cookie,
   same path), the first response carries two `JSESSIONID` cookies, the browser keeps the OpenLiberty one and the ingress no longer
   finds its route: 6 new sessions out of 10 changed pod right after their first request (minikube). Harmless with the session in
   Hazelcast, a lost session without it. With its own cookie (`lutece-route`), 10 out of 10 stayed on their pod.
@@ -49,6 +59,11 @@ templates carry them.
   or the session expires, so abandoned uploads stay 30 min; 20 users uploading 1 to 5 MB files added about 450 Mi per pod
   (3 replicas). Sizes: 1 / 2 CPUs and 1536 Mi, 2 / 4 CPUs and 3 Gi, 3 / 6 CPUs and 4 Gi (request / limit, memory request =
   limit), threads 4, 7 and 10. OpenJ9 sizes its default heap on the limit (limit - 512 MB up to 2 GB, 75 % above): no `-Xmx`.
+- One replica against two (measured on minikube, 11-step declaration form, k6 arrival rate with 1 to 3 s of think time per
+  step, 10 min per rate, pods of 1 / 2 CPUs): one replica (local Ehcache) held 60 declarations/min (p99 1.4 s) and saturated
+  at 90 (p50 3.3 s, 4 % of the declarations failed) and 120 (25 % failed); two replicas behind the ingress, without affinity,
+  held 120 (p99 0.63 s) and 150 (p99 0.98 s) with no failure. Without affinity a replica spends 30 to 50 % more CPU per request
+  than the single instance, whose requests skip the ingress and keep the session in memory.
 - Warm-up of a new pod (optional, measured): the shared class cache that `configure.sh` builds only holds the startup path. A
   layer trained on real traffic (container started with `-Xshareclasses:…,createLayer -Xscmx100m`, a few minutes of the site
   journeys, layer file copied into the image) halved the p95 of the first minute of the new pods during a rolling restart

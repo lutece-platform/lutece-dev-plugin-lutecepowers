@@ -1,5 +1,6 @@
-# Ingress (ingress-nginx) of a multi-instance Lutece site. Session affinity is optional (the HTTP session is shared); it
-# limits node switches. The site answers under its context root (/lutece/): to serve it at the root of the host, add
+# Ingress (ingress-nginx) of a multi-instance Lutece site. Session affinity is recommended: the HTTP session is shared, but a
+# request following a redirect can reach the other pod before the session is written (back office actions), and staying on
+# one pod costs less CPU. The site answers under its context root (/lutece/): to serve it at the root of the host, add
 # nginx.ingress.kubernetes.io/app-root: /lutece/ (redirects / only) or change the context root in server.xml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -16,11 +17,11 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
     # Above the longest page (multiview, PDF export)
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
-    # Optional affinity. Never name the cookie JSESSIONID: it collides with the OpenLiberty session cookie and the route is
-    # lost after the first request.
-    # nginx.ingress.kubernetes.io/affinity: cookie
-    # nginx.ingress.kubernetes.io/session-cookie-name: lutece-route
-    # nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
+    # Session affinity. Never name the cookie JSESSIONID: it collides with the OpenLiberty session cookie and the route is
+    # lost after the first request. balanced: a new route spreads new users when a pod is added.
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/affinity-mode: balanced
+    nginx.ingress.kubernetes.io/session-cookie-name: lutece-route
 # OpenShift Route (HAProxy): the router already retries a failed connection on another pod (retries + option redispatch);
 # do not enable a retry on HTTP status codes for the same reason as non_idempotent.
 spec:

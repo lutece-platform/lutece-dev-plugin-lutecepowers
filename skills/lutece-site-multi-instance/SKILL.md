@@ -23,7 +23,11 @@ Other stores fit OpenLiberty and Lutece: sessions in a database (`sessionDatabas
 (Infinispan, Redis through Redisson, a separate Hazelcast cluster). They are not tested with Lutece; when the user wants
 one, follow `reference/session-options.md` (OpenLiberty documentation links) and keep every other rule below.
 
-Session affinity is not required. It still limits node switches; its cookie must not be named `JSESSIONID`.
+Session affinity is recommended, its cookie never named `JSESSIONID`. The session stays shared (a replica lost, its users
+continue on the other one), but OpenLiberty writes it at the end of the request, after a redirect is sent: the request that
+follows the redirect can reach the other replica first and read the session before the POST (back office actions and their
+`AdminMessage`: `Invalid security token`). Form steps answer 200 without a redirect and pass without affinity. Measured on 2
+replicas, 11-step form: −12 to −21 % CPU per request and p50 −17 to −32 % with affinity (`reference/kubernetes.md`).
 
 ## Before writing anything
 
@@ -59,7 +63,7 @@ on one replica, for comparison.
 | Kubernetes | `kubernetes-service.yaml` | Service of the site, ReadWriteMany volume of the Forms index |
 | Kubernetes | `kubernetes-migration.yaml` | One-replica Liquibase run, before the replicas |
 | Kubernetes | `kubernetes-deployment.yaml` | Replicas, sizes, probes, preStop, grace period, Liquibase off, Forms index path |
-| Kubernetes | `kubernetes-ingress.yaml` | Replay on connection errors only, optional affinity, context root |
+| Kubernetes | `kubernetes-ingress.yaml` | Replay on connection errors only, session affinity (own cookie name), context root |
 
 The Kubernetes templates are plain manifests: add the namespace and the image pull policy of the target, or turn them into
 the templates of the organisation's chart.
