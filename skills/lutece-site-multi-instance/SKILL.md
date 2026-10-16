@@ -11,7 +11,7 @@ metadata:
 
 Configures a **site** (`packaging lutece-site`, OpenLiberty image) for N replicas behind a load balancer: the files of the
 site, the Kubernetes manifests, and the checks. It does not change plugin code: a plugin defect found on the way is reported
-(`reference/plugin-prerequisites.md`); fixing a plugin is `lutece-scalability-v8`.
+(`reference/platform-versions.md`); fixing a plugin is `lutece-scalability-v8`.
 
 Two things must be shared between the replicas: the HTTP session and the Lutece cache. This skill writes **one way** of
 doing it, the one tested with Lutece:
@@ -30,7 +30,7 @@ Session affinity is not required. It still limits node switches; its cookie must
 1. Read the site: `pom.xml`, `src/main/liberty/config/*`, `Dockerfile`, `webapp/WEB-INF/conf/override/*.properties`,
    `webapp/WEB-INF/plugins/plugins.dat`.
 2. Note the site code (`<site>` in the templates: cluster name, Kubernetes names), the database, the plugins.
-3. Check `reference/plugin-prerequisites.md` against the versions the site resolves (the war `WEB-INF/lib`).
+3. Check `reference/platform-versions.md`: `lutece-platform` BOM and starter 8.0.0-beta-04 or later, nothing pinned below them.
 4. Ask the user only what cannot be read: the session store if not Hazelcast, the Kubernetes service name of the Hazelcast
    port and the Hazelcast version if the organisation imposes them, the ReadWriteMany storage class.
 
@@ -81,10 +81,9 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
 - Kubernetes: preStop 10 s and grace period 60 s, startup probe, readiness on the database, liveness on the webapp only,
   probe timeouts 5 s / 10 s, CPU limit above the request, autoscaling on CPU only.
 - Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them. Under
-  Hazelcast a Lutece cache keeps its Lutece lifetime and size only with the fixed lutece-core and
-  `library-cache-hazelcast` in the cluster profile; before, every Lutece cache is eternal and holds 10,000 entries. Enabling
-  or disabling a cache from the back office reaches the other replicas within `lutece.cache.status.refreshSeconds` (30 s)
-  with the fixed lutece-core, never before it.
+  Hazelcast a Lutece cache keeps its Lutece lifetime, and its size with `library-cache-hazelcast` in the cluster profile.
+  Enabling or disabling a cache from the back office reaches the other replicas within
+  `lutece.cache.status.refreshSeconds` (30 s).
 
 ## Checks
 
@@ -109,5 +108,5 @@ test behind TLS or through `localhost`.
 - `reference/session-options.md`: Hazelcast and the other stores, OpenLiberty links.
 - `reference/rules.md`: the rules with their evidence, the classification of the daemons.
 - `reference/kubernetes.md`: cluster prerequisites, sizes, probes, database connections, memory and time zone.
-- `reference/plugin-prerequisites.md`: plugin defects found with several replicas and their fixed versions.
+- `reference/platform-versions.md`: the platform level carrying the plugin fixes, what the BOM cannot fix.
 - `reference/verification.md`: the runtime checks and how they were run.

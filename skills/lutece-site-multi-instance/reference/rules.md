@@ -16,18 +16,17 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   restart hides it, the running members keeping the session caches already created (verified on minikube). A Lutece cache
   declared by its JCache name (the Lutece name without spaces: `DatastoreCacheService`, `formsCacheService`) is created from
   that declaration, which replaces the Lutece configuration of the cache: lifetime, size and backups are all set there.
-  It is the only way to size a Lutece cache under Hazelcast (verified: `formsCacheService` at 20,000 entries, same throughput
-  and CPU as without it). With a lutece-core whose cache layer is not fixed (`plugin-prerequisites.md`), a cache declared on
-  the member becomes active even when Lutece has it disabled in database.
-- **Lifetimes and sizes under Hazelcast**: with the fixed lutece-core, the Lutece lifetime of a cache is its JCache expiry
+  Without `library-cache-hazelcast` it is the only way to size a Lutece cache under Hazelcast (verified: `formsCacheService` at 20,000 entries, same throughput
+  and CPU as without it).
+- **Lifetimes and sizes under Hazelcast**: the Lutece lifetime of a cache is its JCache expiry
   (`CreatedExpiryPolicy`, 3600 s by default, 86400 s for `formsCacheService`; eternal for the caches Lutece declares
-  eternal). The JCache configuration carries no size: `library-cache-hazelcast` (not released yet, in the `cluster` profile
-  only) sets `maxElementsInMemory` of each cache as its entry count, LRU, on the member:
+  eternal). The JCache configuration carries no size: `library-cache-hazelcast` (managed by the BOM, in the `cluster`
+  profile only) sets `maxElementsInMemory` of each cache as its entry count, LRU, on the member:
   `core.cache.status.<JCache name>.maxElementsInMemory` (properties or datastore), else
   `lutece.cache.default.maxElementsInMemory` (`caches.properties`, 10,000). The size is applied when the cache is created in
   the cluster: a new size needs every replica stopped. Verified on 3 podman replicas: 10,000 by default, 1,000 for
   `LuteceUserCacheService`, 100,000 for the oauth2 version cache, 20,000 for `formsCacheService` set by its key.
-  Without the library every cache holds 10,000 entries LRU; with the core not fixed every cache is also eternal. The near
+  Without the library every cache holds 10,000 entries LRU. The near
   cache is not invalidated by an expiry or an eviction on the member (Hazelcast documentation): its
   `time-to-live-seconds` (600 in `templates/hazelcast-client-config-api-mode.yaml`) stays below the shortest member lifetime.
   Data changed outside Lutece is then stale for at most member lifetime + near-cache lifetime (measured: 40 s with 30 + 20 s).
@@ -54,12 +53,10 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   (sorted lists of the multiview: `ConcurrentModificationException`, "Internal error", seen on minikube with two concurrent
   displays): `formsCacheService` gets its own near cache entry in `BINARY` (a copy per read, +5 % CPU, no exception on 3
   replicas), the other caches stay `OBJECT`. Another cache whose plugin modifies what it reads gets the same entry.
-- **Cache screen of the back office**: with the fixed lutece-core, the state of each cache is saved and every replica
+- **Cache screen of the back office**: the state of each cache is saved and every replica
   reloads it every `lutece.cache.status.refreshSeconds` (30 by default with a shared provider, 0 with Ehcache): a cache
   enabled or disabled on one replica is in the same state on the others within 35 s (verified both ways on 3 replicas), and
-  a value written through a replica where the cache is disabled is still removed from the shared cache. Before the fix,
-  enabling or disabling acts on the replica that receives the request only, the state is not saved and disabling clears the
-  shared cache (verified: a value written through the disabled replica stayed stale on the other one).
+  a value written through a replica where the cache is disabled is still removed from the shared cache.
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
