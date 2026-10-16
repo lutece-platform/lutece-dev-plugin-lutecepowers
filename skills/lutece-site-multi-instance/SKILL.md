@@ -39,6 +39,11 @@ Session affinity is not required. It still limits node switches; its cookie must
 Templates are in `templates/`: replace `<site>`, `<registry>/<site>:<version>`, `<host>`. Keep the comments language of
 the site. A template marked *merge* goes into the existing file; the others are copied.
 
+A complete site configured this way, built, deployed and measured on minikube: the `multi-instance` branch of
+https://github.com/lutece-platform/lutece-guide-kubernetes-lutece (Forms starter, Liberty and Hazelcast files, Kubernetes
+manifests with the Liquibase run and the ingress, README with the measures). Its `mono-instance` branch is the same site
+on one replica, for comparison.
+
 | File | Template | Content |
 |---|---|---|
 | `pom.xml` (merge) | `pom-profiles.xml` | Hazelcast repository, `plugin-quartz-scheduler`, profile `cluster` (default: Hazelcast, Ehcache `provided`), profile `local` (`-Dlocal`: no `cluster.xml`) |
