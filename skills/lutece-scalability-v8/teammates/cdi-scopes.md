@@ -17,7 +17,7 @@ Eliminate mutable static singletons and JVM-local state; make services stateless
 4. `CDI.current()` field init inside a CDI bean → `@Inject`; inside a Home facade → keep (idiom); inside a non-CDI serialised object → `transient` + lazy getter.
 5. Multi-implementation / optional dependency → `@Inject @Any Instance<I>` collected in `@PostConstruct`.
 6. State genuinely shared across nodes (key, secret, global counter) → datastore with **atomic** write `insertDataValueIfAbsent` (never `setDataValue`).
-7. In-memory `static Map` cache → `AbstractCacheableService` (see the serialization teammate for value serializability).
+7. In-memory `static Map` cache → `AbstractCacheableService` (see the serialization teammate for value serializability). An existing `AbstractCacheableService` (`4-cache-contract`): check the contract of `patterns/cache-distributed.md` (copies returned by the Home, typed cache, complete key, invalidation, grouped resets).
 
 ## Constraints
 - Reference-first; file ownership; `verify-file.sh` after each file; **never commit**.

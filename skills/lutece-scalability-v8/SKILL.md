@@ -52,6 +52,7 @@ Read `.scalability/scan.json` and present, per axis, the count + sample files. F
 - `2-session` / `2-nonserial` — non-serializable / heavy session state, `Future`/`Timer` in session.
 - `2-sessionscoped` — stateful `@SessionScoped`/`@ConversationScoped` beans: whole graph `Serializable` + passivation test, **and** the cluster MUST run Liberty `writeContents="GET_AND_SET_ATTRIBUTES"` — the default does not replicate in-place bean mutations, invisible until a node switch (`patterns/serialization-session.md`).
 - `4-cache` — JVM-local cache.
+- `4-cache-contract` — JCache services: cached values modified by their callers, untyped caches, incomplete keys, missing or global resets, iteration of the cache (`patterns/cache-distributed.md`).
 - `5-config` / `6-streams` / `6-threadlocal` — hardcoded config, container streams, thread-locals.
 
 A finding count is a **review pointer**, not an auto-fix list — scalability fixes require judgment.
@@ -70,7 +71,7 @@ Common false positives — classify and discard, recording the reason in the rep
 | `3-singleton` | `getInstance()` calls | Calls to a **core** `getInstance()` that is not deprecated (`SecurityService`, `AdminAuthenticationService`) are standard; a deprecated one is a migration FAIL (DP01), not a cluster defect. Only an **own** `getInstance()` returning an instance that holds **mutable static state** is a defect. |
 | `3-singleton` | `private static X _dao = CDI.current().select(...).get()` | The **Home pattern** — an effectively-immutable reference resolved once at class-load. Not divergent state. |
 | `4-cache` | `new HashMap<>()` / `new ArrayList<>()` | **Method-local** collections are per-request stack variables, GC'd, never shared across nodes. Only a **field**-level or `static` mutable collection is state. |
-| `4-cache` | a service extending `AbstractCacheableService` | Already JCache-backed → **cluster-capable** when Hazelcast is on. The concern is **invalidation completeness + proving distribution** (Phase F), *not* a rewrite. |
+| `4-cache` | a service extending `AbstractCacheableService` | Already JCache-backed → **cluster-capable** when Hazelcast is on. The concern is the **cache contract** (`patterns/cache-distributed.md`: callers never modify a cached value, typed cache, complete key, invalidation on every event, grouped resets) + proving distribution (Phase F), *not* a rewrite. |
 | `2-session` | `List<String>` / other `Serializable` light values in session | Fine. Only **non-`Serializable`** or **heavy/`Future`/`Timer`/`Thread`** session state is a defect. |
 | `1-id` | `SELECT MAX(...)` | A defect **only** when the value becomes a contended business key. A PK filled by `RETURN_GENERATED_KEYS` (DB auto-increment) is fine. |
 
