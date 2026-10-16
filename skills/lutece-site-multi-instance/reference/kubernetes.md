@@ -80,3 +80,10 @@ templates carry them.
   (`proxy-next-upstream: error timeout`, without `non_idempotent`; template). Real crash of one pod (SIGKILL) under 20 k6 users on
   minikube: 5.6 to 6.9 % of the journeys failed without the replay (502 on connection refused), 0 to 0.6 % with it; the remaining
   errors are POSTs that were in flight on the killed pod.
+  The short connect timeout is what bounds the failover: a killed pod no longer answers, and a load balancer that keeps
+  sending to it with a long connect timeout holds every request routed there (measured on podman, 3 replicas, 45 users,
+  `kill -9` of one: nginx with a 60 s connect timeout and no ejection, 4.5 % of journeys failed, p99 36.6 s; with a 2 s
+  connect timeout and the dead node ejected for 10 s, 1.7 %, p99 2.5 s). Lowering the Hazelcast heartbeat
+  (`hazelcast.max.no.heartbeat.seconds` 10, `hazelcast.heartbeat.interval.seconds` 2) changed nothing (3.7 %, p99 37.8 s):
+  keep the Hazelcast defaults. With another load balancer in front of the pods, set the same short connect timeout and a
+  retry on connection errors only.
