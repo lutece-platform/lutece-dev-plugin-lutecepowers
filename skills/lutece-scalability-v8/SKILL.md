@@ -52,7 +52,7 @@ Read `.scalability/scan.json` and present, per axis, the count + sample files. F
 - `2-session` / `2-nonserial` — non-serializable / heavy session state, `Future`/`Timer` in session.
 - `2-sessionscoped` — stateful `@SessionScoped`/`@ConversationScoped` beans: whole graph `Serializable` + passivation test, **and** the cluster MUST run Liberty `writeContents="GET_AND_SET_ATTRIBUTES"` — the default does not replicate in-place bean mutations, invisible until a node switch (`patterns/serialization-session.md`).
 - `4-cache` — JVM-local cache.
-- `4-cache-contract` — JCache services: cached values modified by their callers, untyped caches, incomplete keys, missing or global resets, iteration of the cache (`patterns/cache-distributed.md`).
+- `4-cache-contract` — JCache services: cached values modified by their callers, untyped caches, incomplete keys, missing or global resets, iteration of the cache, removals skipped when the local cache is disabled, a cache enabled at startup over the saved status (`patterns/cache-distributed.md`).
 - `5-config` / `6-streams` / `6-threadlocal` — hardcoded config, container streams, thread-locals.
 
 A finding count is a **review pointer**, not an auto-fix list — scalability fixes require judgment.
