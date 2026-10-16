@@ -50,7 +50,10 @@ Each rule was observed on minikube or podman with two or three replicas behind i
 
   The lifetime costs nothing measurable; `CACHE_ON_UPDATE` gains nothing on a read-mostly site; `SINGLE_MEMBER` loses on
   every run (keep the default `ALL_MEMBERS`). `OBJECT` returns the same instance to every reader of the pod (Ehcache returns a
-  copy): code that modifies an object read from a cache changes it for the concurrent requests of the pod.
+  copy): code that modifies an object read from a cache changes it for the concurrent requests of the pod. Forms does
+  (sorted lists of the multiview: `ConcurrentModificationException`, "Internal error", seen on minikube with two concurrent
+  displays): `formsCacheService` gets its own near cache entry in `BINARY` (a copy per read, +5 % CPU, no exception on 3
+  replicas), the other caches stay `OBJECT`. Another cache whose plugin modifies what it reads gets the same entry.
 - **Cache screen of the back office**: with the fixed lutece-core, the state of each cache is saved and every replica
   reloads it every `lutece.cache.status.refreshSeconds` (30 by default with a shared provider, 0 with Ehcache): a cache
   enabled or disabled on one replica is in the same state on the others within 35 s (verified both ways on 3 replicas), and

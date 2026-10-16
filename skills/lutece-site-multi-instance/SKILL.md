@@ -67,7 +67,7 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
   migrate, and `@SessionScoped` beans modified in place are lost on a node switch.
 - `-Dhazelcast.jcache.provider.type=member` in `jvm.options`; member caches declared by exact name only, never `"*"` (it
   stops the application at the next full restart); JVM shutdown hook off and graceful shutdown on; near cache on the client, its
-  invalidations not batched.
+  invalidations not batched, `BINARY` for `formsCacheService` (Forms modifies the objects it reads from its cache).
 - Quartz: `quartzscheduler.cluster.enable=true` (the plugin ships `false`) and every daemon acting on shared state declared
   exclusive; the core `indexer` and `threadLauncherDaemon` stay local (table in `reference/rules.md`).
 - Liquibase from one replica only: `-Dliquibase.enabled.at.startup=false` on the replicas, `kubernetes-migration.yaml`

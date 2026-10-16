@@ -22,3 +22,15 @@ hazelcast-client:
         eviction-policy: LRU
         max-size-policy: ENTRY_COUNT
         size: 10000
+    # Forms hands out the objects of its cache without copying them: with OBJECT, two requests of a pod share a list
+    # and one sorts it while the other reads it (ConcurrentModificationException on the multiview). BINARY gives each
+    # reader its own copy, as Ehcache does (+5 % CPU); keep it until every plugin of the site copies what it modifies.
+    formsCacheService:
+      in-memory-format: BINARY
+      invalidate-on-change: true
+      time-to-live-seconds: 600
+      max-idle-seconds: 0
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: ENTRY_COUNT
+        size: 10000
