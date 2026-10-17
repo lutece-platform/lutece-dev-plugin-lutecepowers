@@ -23,7 +23,8 @@ Other stores fit OpenLiberty and Lutece: sessions in a database (`sessionDatabas
 (Infinispan, Redis through Redisson, a separate Hazelcast cluster). They are not tested with Lutece; when the user wants
 one, follow `reference/session-options.md` (OpenLiberty documentation links) and keep every other rule below.
 
-Session affinity is recommended, its cookie never named `JSESSIONID`. The session stays shared (a replica lost, its users
+Session affinity is recommended, by a cookie the load balancer sets on the first response, never named `JSESSIONID` and
+never a hash of `JSESSIONID` (the first request has no cookie: the visitor changes replica once). The session stays shared (a replica lost, its users
 continue on the other one), but OpenLiberty writes it at the end of the request, after a redirect is sent: the request that
 follows the redirect can reach the other replica first and read the session before the POST (back office actions and their
 `AdminMessage`: `Invalid security token`). Form steps answer 200 without a redirect and pass without affinity. Measured on 2

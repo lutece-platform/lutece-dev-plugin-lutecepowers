@@ -7,6 +7,12 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   type`, rebalancing aborted, sessions lost on rolling restart.
 - **`writeContents="GET_AND_SET_ATTRIBUTES"`** is mandatory: the default only replicates `setAttribute`; `@SessionScoped` beans
   modified in place (multi-step forms) are lost on a node switch while login keeps working, which hides the problem.
+- **`writeFrequency` left at `END_OF_SERVLET_SERVICE`** (the default): the session is written at the end of every request and
+  the other replica reads a value set on the first one at once (30 out of 30, no delay). With `TIME_BASED_WRITE` (10 s) the
+  other replica saw it 0 times out of 30 at once and 1 out of 30 after 2 s: a write only happens at the end of a request whose
+  last write is older than the period, so a change can stay unreplicated; `MANUAL_UPDATE` never writes (Lutece never calls
+  the manual sync). Both lost the back office login and 47 to 97 % of the form journeys, even with affinity by a hash of
+  `JSESSIONID` (2 Hazelcast members behind nginx; Playwright and k6).
 - **`-Dhazelcast.jcache.provider.type=member`** in `jvm.options` (JVM system property): without it the provider loaded by
   `sessionCache-1.0` starts as a client and there is no member.
 - **`include` location**: a variable used in an `<include location>` must come from `bootstrap.properties`

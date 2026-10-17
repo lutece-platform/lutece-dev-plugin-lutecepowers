@@ -24,6 +24,10 @@ templates carry them.
   same path), the first response carries two `JSESSIONID` cookies, the browser keeps the OpenLiberty one and the ingress no longer
   finds its route: 6 new sessions out of 10 changed pod right after their first request (minikube). Harmless with the session in
   Hazelcast, a lost session without it. With its own cookie (`lutece-route`), 10 out of 10 stayed on their pod.
+  Another load balancer: a cookie it inserts in the first response (HAProxy `cookie … insert`), not a hash of `JSESSIONID`
+  (`hash $cookie_JSESSIONID`): the request without cookie lands anywhere, the next ones hash to another replica. Without
+  affinity the back office confirmations fail whatever `writeContents` (token set in session by the confirmation page, the OK
+  posted to the other replica first; Playwright on 2 Hazelcast members behind nginx).
 - Probes and the database: readiness checks the database, liveness checks the webapp only (plugin-health:
   `application-liveness`, webapp loaded and no deadlock), startup probe about twice the slowest start (template: 3 min).
   Lutece reconnects by itself when the database comes back (verified: 9 s restart and 90 s outage, pages back at once), so
