@@ -40,9 +40,9 @@ templates carry them.
   minikube); the startup probe times out while two replicas start together. No `initialDelaySeconds`: the startup probe holds
   the other probes until the webapp is started.
 - Database connections: the limit of the application user (`max_user_connections`, `maxUserConnections` of mariadb-operator)
-  must cover every replica, rolling update surge and autoscaling maximum included. The executor bounds the pool in practice
-  (2 replicas of 4 threads under a saturating load: 11 connections), but OpenLiberty allows 50 per replica by default: bound it
-  (`<connectionManager maxPoolSize="…"/>` on the data source) or size the limit on replicas x pool.
+  must cover every replica, rolling update surge and autoscaling maximum included. OpenLiberty allows 50 per replica by default:
+  bound it (`<connectionManager maxPoolSize="…"/>` on the data source; 12 held up to saturation with 3 replicas and up to 40
+  threads per replica) or size the limit on replicas x pool.
 - Database memory: the InnoDB buffer pool plus the memory of the concurrent queries (sort buffers, temporary tables), not the
   number of connections. Measured on mariadb-operator (MariaDB 11.4, 256 MB buffer pool): 120 idle connections cost 18 MiB;
   10 heavy queries at once (group by on 400,000 computed rows) got `mariadbd` OOMKilled under a 512 Mi limit, then its liveness
@@ -56,13 +56,14 @@ templates carry them.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
-- Pod sizes (measured on minikube, form journey, 1 replica, database not limiting): 2 CPUs and 4 threads reached about
+- Pod sizes (measured on minikube, form journey without think time, 1 replica, database not limiting, before the load
+  campaign that set the thread pool): 2 CPUs and 4 threads reached about
   25 req/s (CPU throttled), 4 CPUs and 7 threads 58 req/s, 8 CPUs and 13 threads above 80 req/s with under 5 CPUs used: past
   6 CPUs, add replicas rather than CPUs. Start in 30 s at every size; without uploads a pod stayed under 900 Mi. Uploads drive
   the memory: an uploaded file stays in the Hazelcast session (plus its backup copy on another member) until the journey ends
   or the session expires, so abandoned uploads stay 30 min; 20 users uploading 1 to 5 MB files added about 450 Mi per pod
   (3 replicas). Sizes: 1 / 2 CPUs and 1536 Mi, 2 / 4 CPUs and 3 Gi, 3 / 6 CPUs and 4 Gi (request / limit, memory request =
-  limit), threads 4, 7 and 10. OpenJ9 sizes its default heap on the limit (limit - 512 MB up to 2 GB, 75 % above): no `-Xmx`.
+  limit), threads 12 for 2 CPUs (measured), measured under the target load for the larger sizes (start at 6 per CPU). OpenJ9 sizes its default heap on the limit (limit - 512 MB up to 2 GB, 75 % above): no `-Xmx`.
 - One replica against two (measured on minikube, 11-step declaration form, k6 arrival rate with 1 to 3 s of think time per
   step, 10 min per rate, pods of 1 / 2 CPUs): one replica (local Ehcache) held 60 declarations/min (p99 1.4 s) and saturated
   at 90 (p50 3.3 s, 4 % of the declarations failed) and 120 (25 % failed); two replicas behind the ingress, without affinity,

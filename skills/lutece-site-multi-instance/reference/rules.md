@@ -66,15 +66,18 @@ Each rule was observed on minikube or podman with two or three replicas behind i
 - **`hazelcast.shutdownhook.enabled: false`** on the member: the default JVM hook closes the member while OpenLiberty still
   serves the requests in flight (`The cache closed`, 500 errors during a rolling update, measured on minikube: 16 errors on
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
-- **Liberty thread pool bounded to the CPU limit** (`<executor coreThreads="${executor.threads}" maxThreads="${executor.threads}"/>`,
-  `executor.threads` set in `server.xml` by the site for the CPU limit of its deployment: the right count also depends on the
-  site, through its wait / compute ratio. An `EXECUTOR_THREADS` environment variable overrides it: keep it out of the
-  deployment, except to adjust a release whose CPU limit changed before the site is rebuilt). Unbounded, Liberty grows the
-  pool up to 12 threads for 2 CPUs: the extra threads compete for the CPU quota, each request costs twice the CPU and the
-  throughput of one replica falls as the load rises (k6, 40 users: 13.5 req/s bounded to 4, 5 to 8 req/s unbounded; 6 threads
-  already halve it). Size it with threads = CPU x (1 + wait / compute): Forms requests wait 0.4 to 0.6 of their compute time
-  (database 23 %, Hazelcast 6 %, files 4 % of the samples of busy request threads), more with a slow outgoing call (GRU):
-  4 threads for 2 CPUs, 7 for 4, 10 for 6.
+- **Liberty thread pool bounded, sized under the target load** (`<executor coreThreads="${executor.threads}" maxThreads="${executor.threads}"/>`,
+  `executor.threads` set in `server.xml` by the site; an `EXECUTOR_THREADS` environment variable overrides it: keep it out of
+  the deployment, except to adjust a release before the site is rebuilt). 12 threads for a 2 CPU limit, measured with 3
+  replicas on the 11-step declaration form (k6 arrival rate, 1 to 3 s of think time): at 210 declarations/min, p99 6.1 s with
+  4 threads (17 requests unanswered in 60 s), 2.8 s with 8, 2.3 s with 12, 1.8 s unbounded, CPU per request the same (117 to
+  120 ms); below 150/min the four settings are equal. Too few threads queue requests while the CPU is free (Forms requests
+  wait on the database, Hazelcast and files). Unbounded, Liberty used 4 to 12 threads per replica at 210/min and grew to 40
+  at saturation: 12 keeps most of its latency and stops that growth. The count depends on the site (slow outgoing calls,
+  heavy SQL), the pod size and the CPU the node really gives: replay a realistic journey at the expected peak with two or
+  three values and keep the best p99 without errors; p99 rising with the pod CPU under its limit means requests wait for a
+  thread (raise it), the pod CPU at its limit means add replicas. Larger pods: start at 6 threads per CPU of limit and
+  measure.
 - **`persistTimeout` above the load balancer keep-alive** (`<httpOptions persistTimeout="75s"/>` in `server.xml`): Liberty closes
   idle connections after 30 s, ingress-nginx reuses its upstream connections up to 60 s; a POST sent on a connection Liberty has
   just closed gets a 502, nginx does not retry it (seen once in 7,500 k6 journeys).

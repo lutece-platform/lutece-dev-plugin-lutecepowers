@@ -20,14 +20,15 @@
     <remoteIp />
 </httpEndpoint>
 
-<!-- Thread pool bounded to the CPU limit of the deployment (4 for 2 CPUs, 7 for 4, 10 for 6; set here by the site, the
-     EXECUTOR_THREADS environment variable overrides it): unbounded, Liberty grows the pool beyond the CPU quota, each request
-     costs twice the CPU and the throughput falls under load -->
-<variable name="executor.threads" defaultValue="4" />
+<!-- Thread pool bounded: 12 for a 2 CPU limit (measured, 3 replicas, 11-step form at 210 declarations/min: p99 6.1 s with
+     4 threads, 2.8 s with 8, 2.3 s with 12, 1.8 s unbounded, same CPU per request). Unbounded, Liberty grows it to 40
+     threads per replica at saturation. Measure the site under its target load with two or three values and keep the best
+     p99 without errors. Set here by the site; the EXECUTOR_THREADS environment variable overrides it. -->
+<variable name="executor.threads" defaultValue="12" />
 <executor coreThreads="${executor.threads}" maxThreads="${executor.threads}" />
 
-<!-- Connection pool bounded too (OpenLiberty allows 50 per replica): about 3 x executor.threads covers the requests and
-     the daemons (measured: 11 connections for 2 replicas of 4 threads under a saturating load). The database user limit
+<!-- Connection pool bounded too (OpenLiberty allows 50 per replica): 12 held up to saturation (3 replicas, up to 40 threads
+     per replica, no error, no declaration lost), a request holds a connection only during its SQL. The database user limit
      (max_user_connections) must cover (replicas + rolling surge + migration run) x maxPoolSize. Added to the existing
      dataSource of the site: -->
 <variable name="db.pool.max" defaultValue="12" />

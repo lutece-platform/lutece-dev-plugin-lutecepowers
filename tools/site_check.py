@@ -1276,7 +1276,7 @@ def check_cluster(site, war, out):
         out.add("WARN", "SI65", "server.xml: persistTimeout not above the 60 s keep-alive of the load balancer: a POST on a connection Liberty just closed gets a 502")
         n += 1
     for needle, why in (("<remoteIp", "no <remoteIp/> in the httpEndpoint: every user has the address of the ingress (upload DOS guard shared)"),
-                        ("maxThreads=", "no bounded <executor>: the thread pool grows beyond the CPU limit"),
+                        ("maxThreads=", "no bounded <executor>: the thread pool grows without limit when the replica saturates"),
                         ("maxPoolSize=", "no <connectionManager maxPoolSize> on the data source: 50 connections per replica by default")):
         if needle not in server:
             out.add("WARN", "SI65", f"server.xml: {why}")
