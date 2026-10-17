@@ -86,7 +86,8 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
 - Forms index on a ReadWriteMany volume (`indexPath` in `JVM_ARGS`, `fsGroup: 0`) and lock lease
   `forms.index.writer.ms.timeout.lock=120000`.
 - Liberty: `persistTimeout` above the 60 s keep-alive of the load balancer, `<remoteIp/>` behind the ingress, executor
-  bounded (12 threads for a 2 CPU limit, measured; other sizes and sites measured under the target load), `maxPoolSize` 12;
+  bounded (12 threads for a 2 CPU limit on the example Forms site; every figure of the skill is a measure of that site, so
+  tell the user the values depend on their site and are measured under its target load), `maxPoolSize` 12;
   the database user limit covers (replicas + surge + migration run) x `maxPoolSize`.
 - Kubernetes: preStop 10 s and grace period 60 s, startup probe, readiness on the database, liveness on the webapp only,
   probe timeouts 5 s / 10 s, CPU limit above the request, autoscaling on CPU only.

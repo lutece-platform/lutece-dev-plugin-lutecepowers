@@ -56,6 +56,8 @@ templates carry them.
 - Forms Lucene lock lease `forms.index.writer.ms.timeout.lock=120000`: a lock left by a crashed replica blocks the indexing
   of every response until it expires (15 min by default); the lease is renewed every third of its duration while indexing.
 - CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+- Every measure of this file comes from the example Forms site: another site and another infrastructure give other values,
+  measured under their target load.
 - Pod sizes (measured on minikube, form journey without think time, 1 replica, database not limiting, before the load
   campaign that set the thread pool): 2 CPUs and 4 threads reached about
   25 req/s (CPU throttled), 4 CPUs and 7 threads 58 req/s, 8 CPUs and 13 threads above 80 req/s with under 5 CPUs used: past

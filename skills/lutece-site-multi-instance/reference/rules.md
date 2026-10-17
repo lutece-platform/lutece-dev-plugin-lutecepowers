@@ -68,7 +68,9 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   7,300 requests, 0 without the hook). OpenLiberty then closes the member gracefully when it stops `sessionCache-1.0`.
 - **Liberty thread pool bounded, sized under the target load** (`<executor coreThreads="${executor.threads}" maxThreads="${executor.threads}"/>`,
   `executor.threads` set in `server.xml` by the site; an `EXECUTOR_THREADS` environment variable overrides it: keep it out of
-  the deployment, except to adjust a release before the site is rebuilt). 12 threads for a 2 CPU limit, measured with 3
+  the deployment, except to adjust a release before the site is rebuilt). Every figure below is a measure of one
+  configuration, the example Forms site: the values depend on the site (plugins, journeys, outgoing calls, SQL, uploads,
+  data volume) and its infrastructure, they are a starting point, never values to copy. 12 threads for a 2 CPU limit, measured with 3
   replicas on the 11-step declaration form (k6 arrival rate, 1 to 3 s of think time): at 210 declarations/min, p99 6.1 s with
   4 threads (17 requests unanswered in 60 s), 2.8 s with 8, 2.3 s with 12, 1.8 s unbounded, CPU per request the same (117 to
   120 ms); below 150/min the four settings are equal. Too few threads queue requests while the CPU is free (Forms requests

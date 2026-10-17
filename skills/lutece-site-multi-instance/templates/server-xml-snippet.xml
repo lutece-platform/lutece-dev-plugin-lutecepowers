@@ -20,7 +20,7 @@
     <remoteIp />
 </httpEndpoint>
 
-<!-- Thread pool bounded: 12 for a 2 CPU limit (measured, 3 replicas, 11-step form at 210 declarations/min: p99 6.1 s with
+<!-- Thread pool bounded: 12 for a 2 CPU limit on the example Forms site (values depend on the site: measured, 3 replicas, 11-step form at 210 declarations/min: p99 6.1 s with
      4 threads, 2.8 s with 8, 2.3 s with 12, 1.8 s unbounded, same CPU per request). Unbounded, Liberty grows it to 40
      threads per replica at saturation. Measure the site under its target load with two or three values and keep the best
      p99 without errors. Set here by the site; the EXECUTOR_THREADS environment variable overrides it. -->
