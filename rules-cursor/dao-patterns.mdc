@@ -74,6 +74,25 @@ public boolean markAsComplete( int nIdResponse, Plugin plugin )
 
 The service side (claim first, compensate on failure) is in `service-layer.md`.
 
+## Transactions: the caller's transaction wins
+
+- Inside a `@Transactional` method (JTA, pool `Managed`), `DAOUtil` joins the container's transaction by itself
+  (`ITransactionSynchronizationManager.isSynchronizationActive( )`). A Home that also opens
+  `TransactionManager.beginTransaction` there commits, rolls back and changes auto-commit on a connection enlisted in the
+  global transaction: `DSRA9250E ... not allowed during a global transaction`, logged on every call.
+- A Home called both from a `@Transactional` service and on its own detects the caller's transaction and then neither
+  commits nor rolls back, as core `FileHome.isJoiningExistingTransaction( )` does.
+
+## Row created on first use by concurrent requests
+
+Never insert, then catch the duplicate key: `DAOUtil` turns every `SQLException` into an `AppException`, which logs a
+`Critical AppException` even when the caller recovers. Create the row with its parent (when the entity is created), or
+create it in the transaction that uses it, after locking the parent row (genericattributes `EntryNumberingDAO`:
+`SELECT id_entry FROM genatt_entry WHERE id_entry = ? FOR UPDATE`, then read again, then insert).
+
+A list of rows loaded by id from a type the site may not have (portlets of an uninstalled plugin) skips the ids the
+Home cannot load: `PortletHome.findByPrimaryKey( )` returns `null` when the class of the portlet type cannot be loaded.
+
 ## Existing JPA Model
 
 Kept on the `jakarta.persistence` API, provider EclipseLink of the container (`persistence-3.1`, `persistence.xml` in JTA on `jdbc/portal`, `shared-cache-mode NONE`), no `org.hibernate` import, `DAOUtil` and `EntityManager` mixed only under `@Transactional` with `ManagedConnectionService`. Rules: `skills/lutece-update-plugin/patterns/persistence-patterns.md`.
