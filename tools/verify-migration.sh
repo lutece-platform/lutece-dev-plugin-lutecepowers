@@ -17,28 +17,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 cd "$PROJECT_ROOT" || { echo "verify-migration: no such directory: $PROJECT_ROOT" >&2; exit 2; }
 
-# A project below the Lutece 8 level lutecepowers supports is refused before any check: every rule is written for
-# that level, so a report on an older core would judge it against behaviour it does not have.
-if [ -f pom.xml ]; then
-    bash "$SCRIPT_DIR/check-v8-floor.sh" . >/dev/null
-    if [ $? -eq 1 ]; then
-        echo "" >&2
-        echo "verify-migration stopped: the project resolves a lutece-core below the level lutecepowers supports." >&2
-        exit 2
-    fi
-fi
-
-# A verification that could not run must never look like one that passed. The template checks read the macro
-# signatures, the icon font and the dependency templates from the assembled webapp, so the precondition is
-# settled here, before any check, and its failure stops the script with the reason rather than turning green.
+# No finding stops the verification: a core below the floor is PM14, a project that does not assemble leaves TM08 and
+# TM09 NOT EVALUATED, and every other check still runs. LP_ANY_CORE lets the template tools assemble whatever the core.
+FLOOR_RC=0; FLOOR_OUT=""
+[ -f pom.xml ] && { FLOOR_OUT=$(bash "$SCRIPT_DIR/check-v8-floor.sh" . 2>&1 >/dev/null); FLOOR_RC=$?; }
+export LP_ANY_CORE=1
+EXPLODED_RC=0; EXPLODED_OUT=""
 if [ -d "webapp/WEB-INF/templates" ]; then
-    if ! EXPLODED_OUT=$(bash "$SCRIPT_DIR/ensure-exploded.sh" . 2>&1); then
-        echo "$EXPLODED_OUT" >&2
-        echo "" >&2
-        echo "verify-migration stopped: this project does not assemble, so TM08 and TM09 cannot be evaluated and" >&2
-        echo "the rest of the report would read as a clean bill of health it has not earned. Fix the build first." >&2
-        exit 2
-    fi
+    EXPLODED_OUT=$(bash "$SCRIPT_DIR/ensure-exploded.sh" . 2>&1) || EXPLODED_RC=$?
 fi
 
 # The slowest checks are functions started in the background here, each writing its output, errors and status to
@@ -222,7 +208,7 @@ if [ -d "src/java" ]; then
     prefetch i18n08 i18n08_scan
 fi
 [ -d "src/test/" ] && prefetch ts06 ts06_scan
-if [ -d "webapp/WEB-INF/templates/" ]; then
+if [ -d "webapp/WEB-INF/templates/" ] && [ "$EXPLODED_RC" -eq 0 ]; then
     prefetch tm08 tm08_scan
     prefetch tm09 tm09_scan
 fi
@@ -421,6 +407,14 @@ if [ -f "pom.xml" ]; then
 else
     emit "PM06" "PASS" "Parent version check (no pom.xml)" 0
 fi
+
+# PM14: the lutece-core the project resolves is at or above the Lutece 8 level lutecepowers supports (check-v8-floor.sh).
+# Below it, the other checks still run, judged against that level.
+case "$FLOOR_RC" in
+    0) emit "PM14" "PASS" "lutece-core at or above the supported Lutece 8 level" 0 ;;
+    1) emit "PM14" "FAIL" "lutece-core below the Lutece 8 level lutecepowers supports: the other checks judge the project against that level" 1 "$FLOOR_OUT" ;;
+    *) emit "PM14" "WARN" "lutece-core level NOT EVALUATED" 1 "$FLOOR_OUT" ;;
+esac
 
 # PM10: EL implementation is org.glassfish.expressly:expressly, the one the parent manages (org.glassfish:jakarta.el
 #   stopped at 5.0.0-M1 and has no managed version).
@@ -2200,6 +2194,8 @@ else emit "TM13" "WARN" "Infos or warnings kept as the project's own MVCMessage 
 # an empty output would otherwise read as "nothing found".
 if [ ! -d "webapp/WEB-INF/templates/" ]; then
     emit "TM08" "PASS" "Template design rules (no templates in this project)" 0
+elif [ "$EXPLODED_RC" -ne 0 ]; then
+    emit "TM08" "FAIL" "Template design rules NOT EVALUATED: the project does not assemble, fix the build first" 1 "$(echo "$EXPLODED_OUT" | tail -5)"
 elif ! command -v python3 >/dev/null; then
     emit "TM08" "WARN" "Template design rules NOT EVALUATED: no python3 on PATH" 0
 else
@@ -2218,13 +2214,13 @@ fi
 # freemarker jar is around, which must not read as a green either.
 if [ ! -d "webapp/WEB-INF/templates/" ]; then
     emit "TM09" "PASS" "Every template parses with FreeMarker (no templates in this project)" 0
+elif [ "$EXPLODED_RC" -ne 0 ]; then
+    emit "TM09" "FAIL" "Template parse NOT EVALUATED: the project does not assemble, fix the build first" 1
 else
     TM09_OUT=$(fetched tm09 tm09_scan)
     TM09_MATCHES=$(echo "$TM09_OUT" | grep '^PARSE_ERROR')
     if echo "$TM09_OUT" | grep -q "^FMPARSE skipped"; then
-        echo "$TM09_OUT" | grep '^FMPARSE skipped' >&2
-        echo "verify-migration stopped: the templates could not be parsed, so a green report would be a lie." >&2
-        exit 2
+        emit "TM09" "FAIL" "Template parse NOT EVALUATED: the templates could not be parsed" 1 "$(echo "$TM09_OUT" | grep '^FMPARSE skipped')"
     else
         COUNT=0; [ -n "$TM09_MATCHES" ] && COUNT=$(echo "$TM09_MATCHES" | wc -l)
         if [ "$COUNT" -eq 0 ]; then emit "TM09" "PASS" "Every template parses with FreeMarker" 0

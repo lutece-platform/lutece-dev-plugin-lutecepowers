@@ -74,8 +74,8 @@ bash ${LUTECEPOWERS_ROOT}/tools/final-gate.sh . --no-e2e
 ```
 
 One build with the compiler warnings and the unit tests read from surefire (BUILD SUCCESS means nothing: the parent
-sets `testFailureIgnore`), then the checks. `verify-migration.sh` stops with exit 2 when the project does not assemble:
-read the Maven error it printed (a dependency that does not resolve, a half-updated pom). Five build-fix rounds on the
+sets `testFailureIgnore`), then the checks. When the project does not assemble, `verify-migration.sh` reports TM08
+and TM09 NOT EVALUATED: read the Maven error it printed (a dependency that does not resolve, a half-updated pom). Five build-fix rounds on the
 same error, then stop and show the user the full log (`/tmp/final-gate-<project>-build.log`). The frequent causes:
 
 | Symptom | Fix |

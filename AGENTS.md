@@ -40,6 +40,7 @@ bash tests/scripts/test-server-log-oracle.sh
 bash tests/scripts/test-fakes.sh
 bash tests/scripts/test-coverage-keys.sh
 bash tests/scripts/test-v8-floor.sh
+bash tests/scripts/test-verify-no-stop.sh
 bash tests/scripts/test-doctor.sh
 bash tests/scripts/test-i18n-keys.sh
 bash tests/scripts/test-version-tags.sh

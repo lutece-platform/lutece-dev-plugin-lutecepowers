@@ -32,6 +32,7 @@ A check whose Python dies on an exception has not run: it reports FAIL `NOT EVAL
 | PM10 | FAIL | `org.glassfish:jakarta.el` declared: the EL implementation is `org.glassfish.expressly:expressly`, the one the parent manages | (custom check) | pom.xml |
 | PM11 | WARN | Explicit `<version>` on a parent-managed dependency (`library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, `expressly`, `jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`) | (custom check, ignores `<dependencyManagement>`) | pom.xml |
 | PM13 | WARN | web-layer test without the test implementation it needs: a JspBean/XPage test needs `jaxb-runtime` (else AppInit stops before the macros load and the page fails on `@pageContainer`), a `processController` test also needs `hibernate-validator` and `expressly`; business-only tests need none | test sources vs `<artifactId>` in pom.xml | pom.xml, src/test |
+| PM14 | FAIL | lutece-core resolved below the Lutece 8 level lutecepowers supports (`check-v8-floor.sh`); every other check still runs, judged against that level | (custom check) | pom.xml |
 | PM12 | FAIL | Jakarta EE 11 artifact on an EE 10 baseline (`jakarta.annotation-api` 3.x, `weld-junit5` 5.x, `jakarta.el-api` 6.x) | (custom check) | pom.xml |
 
 ## javax Residues (JX)

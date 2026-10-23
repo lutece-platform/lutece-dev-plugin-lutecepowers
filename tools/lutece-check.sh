@@ -30,6 +30,7 @@ ROOT=$(cd "${1:-.}" && pwd)
 OUT="$ROOT/target/checkup"
 mkdir -p "$OUT"
 cd "$ROOT" || { echo "checkup: no such directory: $ROOT" >&2; exit 2; }
+export LP_ANY_CORE=1
 strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 blocking=0
 

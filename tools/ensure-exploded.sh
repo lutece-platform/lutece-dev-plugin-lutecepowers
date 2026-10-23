@@ -13,6 +13,7 @@
 # It also catches the trap that makes an analysis lie: a core artifact installed locally can shadow the
 # remote one and carry a different admin theme, in which case every back-office macro signature read from
 # the clone is wrong. The check below says so instead of letting the analysis run on the wrong theme.
+# A project below the Lutece 8 floor is refused, unless LP_ANY_CORE is set by a verification that reports it (PM14).
 set -uo pipefail
 
 ROOT="."
@@ -61,9 +62,11 @@ if [ ! -f "$ROOT/pom.xml" ]; then
     exit 3
 fi
 
-FLOOR_ARGS=("$ROOT"); [[ " ${MVN_FLAGS[*]} " == *" -o "* ]] && FLOOR_ARGS+=(--offline)
-bash "$(dirname "$0")/check-v8-floor.sh" "${FLOOR_ARGS[@]}" >/dev/null
-[ $? -eq 1 ] && { say "EXPLODED refused: the project is below the Lutece 8 level lutecepowers supports (see above)"; exit 6; }
+if [ -z "${LP_ANY_CORE:-}" ]; then
+    FLOOR_ARGS=("$ROOT"); [[ " ${MVN_FLAGS[*]} " == *" -o "* ]] && FLOOR_ARGS+=(--offline)
+    bash "$(dirname "$0")/check-v8-floor.sh" "${FLOOR_ARGS[@]}" >/dev/null
+    [ $? -eq 1 ] && { say "EXPLODED refused: the project is below the Lutece 8 level lutecepowers supports (see above)"; exit 6; }
+fi
 
 if [ "$FORCE" -eq 0 ] && fresh; then
     TEMPLATES="$(locate)"
