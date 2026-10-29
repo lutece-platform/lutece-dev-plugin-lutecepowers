@@ -72,6 +72,7 @@ import sql_paths  # noqa: E402
 ROOT_FILES = ("config", "db", "lutece", "search", "daemons", "caches", "editors")
 REPOSITORIES = ("https://dev.lutece.paris.fr/maven_repository", "https://dev.lutece.paris.fr/snapshot_repository")
 CLASS_VALUE = re.compile(r"(?:[a-z_][a-z0-9_]*\.){2,}[A-Z][A-Za-z0-9_$]*")
+JDK_PACKAGES = ("com.sun.", "org.w3c.", "org.xml.", "org.ietf.")
 class SecretKey:
     """Tells whether a key names a secret: its last segment ends with a secret word, or names a password or a secret."""
 
@@ -609,19 +610,54 @@ def bom_versions(pom_path):
     return out
 
 
+def m2_pom(m2, g, a, v):
+    """Path of an artefact's pom in a local Maven repository."""
+    return pathlib.Path(m2) / g.replace(".", "/") / a / v / f"{a}-{v}.pom"
+
+
+def pom_managed(pom, m2, props):
+    """artifactIds a pom manages, the BOMs it imports followed through the local Maven repository with the properties
+    given; None when an imported BOM is not there."""
+    managed = set()
+    for d in pom.findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS):
+        get = lambda t: (d.find(f"m:{t}", POM_NS).text or "").strip() if d.find(f"m:{t}", POM_NS) is not None else ""
+        if get("scope") != "import":
+            managed.add(get("artifactId"))
+            continue
+        g, a, v = get("groupId"), get("artifactId"), re.sub(r"\$\{([^}]+)\}", lambda m: props.get(m.group(1), m.group(0)), get("version"))
+        f = m2_pom(m2, g, a, v)
+        if not f.is_file():
+            return None
+        bom = ET.parse(f).getroot()
+        node = bom.find("m:properties", POM_NS)
+        inner = pom_managed(bom, m2, {c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {})
+        if inner is None:
+            return None
+        managed |= inner
+    return managed
+
+
 def parent_managed(pom_path, m2):
-    """artifactIds the parent chain of a pom manages, read from the local Maven repository; None when a parent of the
-    chain is not there."""
-    managed, pom = set(), ET.parse(pom_path).getroot()
+    """artifactIds the parent chain of a pom manages, with the BOMs it imports, read from the local Maven repository;
+    None when a parent of the chain or a BOM it imports is not there."""
+    managed, pom, chain = set(), ET.parse(pom_path).getroot(), []
     while (parent := pom.find("m:parent", POM_NS)) is not None:
         get = lambda t: (parent.find(f"m:{t}", POM_NS).text or "").strip() if parent.find(f"m:{t}", POM_NS) is not None else ""
         g, a, v = get("groupId"), get("artifactId"), get("version")
-        f = pathlib.Path(m2) / g.replace(".", "/") / a / v / f"{a}-{v}.pom"
+        f = m2_pom(m2, g, a, v)
         if not f.is_file():
             return None
         pom = ET.parse(f).getroot()
-        managed.update((d.find("m:artifactId", POM_NS).text or "").strip()
-                       for d in pom.findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS))
+        chain.append(pom)
+    props = {}
+    for pom in reversed(chain):
+        node = pom.find("m:properties", POM_NS)
+        props.update({c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {})
+    for pom in chain:
+        inner = pom_managed(pom, m2, props)
+        if inner is None:
+            return None
+        managed |= inner
     return managed
 
 
@@ -1074,7 +1110,8 @@ def check_class_values(war, out):
     for profile in [""] + war.profiles():
         for k, (v, origin) in sorted(war.effective(profile).items()):
             for token in re.split(r"[\s,;]+", v or ""):
-                if CLASS_VALUE.fullmatch(token) and token.split(".")[0] in ("fr", "org", "com", "net", "io") and token not in classes:
+                if CLASS_VALUE.fullmatch(token) and token.split(".")[0] in ("fr", "org", "com", "net", "io") and token not in classes \
+                        and not token.startswith(JDK_PACKAGES):
                     missing.setdefault((k, token, origin), []).append(profile or "no profile")
     for (k, token, origin), where in sorted(missing.items()):
         own = "override" in origin or "!" in origin
@@ -1640,6 +1677,8 @@ def gate(war_dir, bom, offline, site_dir=None, m2=None, extra=()):
         for jar in war.jars():
             try:
                 with zipfile.ZipFile(jar) as z:
+                    if not any(n.startswith("META-INF/maven/fr.paris.lutece") for n in z.namelist()):
+                        continue
                     names = [n for n in z.namelist() if n.endswith(".class") and not n.endswith("module-info.class") and not n.startswith("META-INF/")]
                     heads = [z.read(n)[:8] for n in names[:20]]
                     major = max((struct.unpack(">H", h[6:8])[0] for h in heads if len(h) == 8 and h[:4] == b"\xca\xfe\xba\xbe"), default=0)

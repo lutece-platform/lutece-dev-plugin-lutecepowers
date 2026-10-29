@@ -406,7 +406,7 @@ each difference (`- key|plugin|file|profile <id>: <reason>`). Rules and evidence
 | SI03 | WARN | `lutece-core` declared by the site | (custom check) | pom.xml |
 | SI04 | WARN | Version written for an artefact the BOM manages | (custom check, needs the BOM pom) | pom.xml |
 | SI05 | FAIL | Artefact declared with a `<type>` other than the BOM's: no managed version is found | (custom check) | pom.xml |
-| SI06 | FAIL / WARN | Artefact without version that neither the BOM nor the parent poms manage, in the dependencies or a profile, whatever the scope: the pom does not load (WARN for a provided or test one when the parent poms are not in the local repository) | (custom check, parents read in --m2) | pom.xml |
+| SI06 | FAIL / WARN | Artefact without version that neither the BOM nor the parent poms (with the BOMs they import) manage, in the dependencies or a profile, whatever the scope: the pom does not load (WARN for a provided or test one when the parent poms are not in the local repository) | (custom check, parents read in --m2) | pom.xml |
 | SI07 | WARN | Version range on a dependency | `[`, `(` | pom.xml |
 | SI08 | WARN | `lutece.*.version` property: it does not change the version the imported BOM manages | (custom check) | pom.xml |
 | SI09 | FAIL | `src/conf/<env>/` or a profile with `defaultConfDirectory`: not copied by `lutece-site-pom` | (custom check) | src/conf, pom.xml |
@@ -423,7 +423,7 @@ each difference (`- key|plugin|file|profile <id>: <reason>`). Rules and evidence
 | SI25 | FAIL | `server.xml` fileset matching no jar of the war (the JDBC driver) | (custom check, needs --war) | server.xml |
 | SI26 | WARN | Same key, different values, in two files of the override source: in v8 the last file loaded wins (override/plugins after override/, then alphabetical) | (custom check) | conf/override |
 | SI27 | FAIL / WARN | Override key no default declares and no class of the war names: read by nothing (WARN); FAIL when the war reads a key ending with it whose default differs from the site's value: a renamed key, the site's value lost | class-file constants, defaults | conf/override |
-| SI28 | FAIL / WARN | Configuration value naming a class the war does not ship (FAIL when the site or a library ConfigSource sets it) | (custom check, needs --war) | effective configuration |
+| SI28 | FAIL / WARN | Configuration value naming a class the war does not ship, outside the JDK (FAIL when the site or a library ConfigSource sets it) | (custom check, needs --war) | effective configuration |
 | SI29 | WARN / INFO | Profile name used without `%`; ConfigSource of unknown ordinal; profiles the site names (INFO) | (custom check) | conf/override |
 | SI30 | WARN | Secret written in the overlay (properties or bean property) | key name | webapp/WEB-INF/conf |
 | SI31 | WARN | Liberty `<variable>` named like a key of the site configuration: it wins at ordinal 500 | (custom check) | server.xml |

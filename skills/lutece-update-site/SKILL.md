@@ -76,7 +76,7 @@ Each Lutece artefact the before war ships, and each lutece-site dependency of th
 | `LOCAL` | a Lutece 8 version found only in the isolated repository (a private artefact rebuilt from its tag) | the site pins it; the release needs it published where the build looks |
 | `SNAPSHOT` | a Lutece 8 snapshot only, or the snapshot the target BOM manages | tell the user: a site released on it changes under its feet; pin the last release when there is one |
 | `NO-V8` | no published version with a Lutece 8 parent | blocker |
-| `DRIFT` | a jar of the v7 before war built for Java 17 | the before state is polluted: pin and assemble it again (phase A) |
+| `DRIFT` | a Lutece jar of the v7 before war built for Java 17 | the before state is polluted: pin and assemble it again (phase A) |
 
 For each `NO-V8`, in this order: its successor, which the gate prints from `tools/site-successors.tsv` (public
 artefacts) and from the organisation's own file (`$LUTECEPOWERS_SITE_SUCCESSORS`, else

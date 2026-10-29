@@ -129,7 +129,7 @@ s = site("s1", files={"webapp/WEB-INF/conf/override/profiles-config.properties":
                       "src/sql/site/init.sql": "insert into x values (1);\n",
                       "src/sql/plugins/s1/plugin/init_db_s1.sql": "insert into x values (1);\n",
                       "webapp/WEB-INF/templates/skin/site/page.html": "<#assign x = 'a'?new()>"})
-w1 = war("w1", extra={"WEB-INF/conf/override/profiles-config.properties": "mylutece.authentication.class=fr.paris.lutece.plugins.x.Missing\nrec.a.base=1\n"})
+w1 = war("w1", extra={"WEB-INF/conf/override/profiles-config.properties": "mylutece.authentication.class=fr.paris.lutece.plugins.x.Missing\nrec.a.base=1\nldap.initialContextProvider=com.sun.jndi.ldap.LdapCtxFactory\n"})
 rc, out = run("check", s, "--war", w1, "--bom", BOM, "--m2", ROOT / "m2")
 for code, what in (("FAIL [SI28]", "a class the war does not ship"), ("FAIL [SI20]", "a Spring context with a bean"),
                    ("FAIL [SI22]", "a C3p0 pool"), ("WARN [SI24]", "a password in db.properties"),
@@ -140,6 +140,7 @@ for code, what in (("FAIL [SI28]", "a class the war does not ship"), ("FAIL [SI2
                    ("WARN [SI30]", "a secret in the overlay"), ("FAIL [SI44]", "a war without plugins.dat")):
     expect(f"check reports {what} ({code})", code in out, out)
 expect("check exits 1 on a FAIL", rc == 1, out)
+expect("SI28 leaves a class of the JDK", "LdapCtxFactory" not in out, out)
 
 s2 = site("s2", files={"webapp/WEB-INF/conf/override/profiles-config.properties": "a.base=site\n",
                        "webapp/WEB-INF/plugins/plugins.dat": "forms.installed=1\nforms.pool=portal\n"})
@@ -205,8 +206,15 @@ jar(gw / "WEB-INF/lib/plugin-forms-3.0.0.jar", {"META-INF/maven/fr.paris.lutece.
     "groupId=fr.paris.lutece.plugins\nartifactId=plugin-forms\nversion=3.0.0\n"})
 jar(gw / "WEB-INF/lib/plugin-old-1.0.0.jar", {"META-INF/maven/fr.paris.lutece.plugins/plugin-old/pom.properties":
     "groupId=fr.paris.lutece.plugins\nartifactId=plugin-old\nversion=1.0.0\n"})
+java17 = b"\xca\xfe\xba\xbe\x00\x00\x00\x3d"
+jar(gw / "WEB-INF/lib/plugin-next-2.0.0.jar", {"META-INF/maven/fr.paris.lutece.plugins/plugin-next/pom.properties":
+    "groupId=fr.paris.lutece.plugins\nartifactId=plugin-next\nversion=2.0.0\n", "fr/paris/lutece/plugins/next/A.class": java17})
+jar(gw / "WEB-INF/lib/thirdparty-1.0.0.jar", {"META-INF/maven/org.example/thirdparty/pom.properties":
+    "groupId=org.example\nartifactId=thirdparty\nversion=1.0.0\n", "org/example/A.class": java17})
 rc, out = run("gate", gw, "--bom", BOM, "--offline")
 expect("gate: a BOM-managed artefact is fine, another one blocks (exit 1)", rc == 1 and "BOM        plugin-forms" in out and "NO-V8      plugin-old" in out, out)
+expect("gate: a Lutece jar built for Java 17 in a v7 war is a drift", "DRIFT      plugin-next-2.0.0.jar" in out, out)
+expect("gate: a third-party jar built for Java 17 is no drift", "thirdparty" not in out, out)
 write(ROOT / "bom-snapshot.pom", """<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencyManagement><dependencies><dependency>
 <groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-forms</artifactId><version>4.0.1-SNAPSHOT</version><type>lutece-plugin</type>
 </dependency></dependencies></dependencyManagement></project>""")
@@ -363,6 +371,15 @@ rc, out = run("check", profiled, "--bom", BOM, "--m2", pm)
 expect("SI06 fails a profile dependency without a version nobody manages, whatever its scope",
        "FAIL [SI06] pom.xml (profile local): local-only has no version" in out, out)
 expect("SI06 leaves a neutralised dependency the parent poms manage", "log4j-core" not in out, out)
+write(pm / "fr/paris/lutece/tools/lutece-global-pom/8.0.2/lutece-global-pom-8.0.2.pom", """<project xmlns="http://maven.apache.org/POM/4.0.0">
+<properties><log4j-bom.version>2.26.1</log4j-bom.version></properties>
+<dependencyManagement><dependencies><dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-bom</artifactId>
+<version>${log4j-bom.version}</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement></project>""")
+write(pm / "org/apache/logging/log4j/log4j-bom/2.26.1/log4j-bom-2.26.1.pom", """<project xmlns="http://maven.apache.org/POM/4.0.0">
+<dependencyManagement><dependencies><dependency><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-core</artifactId>
+<version>2.26.1</version></dependency></dependencies></dependencyManagement></project>""")
+rc, out = run("check", profiled, "--bom", BOM, "--m2", pm)
+expect("SI06 leaves a dependency a BOM imported by the parent poms manages", "log4j-core" not in out, out)
 rc, out = run("check", profiled, "--bom", BOM, "--m2", ROOT / "no-m2")
 expect("SI06 only warns on a provided dependency when the parent poms cannot be read",
        "WARN [SI06] pom.xml (profile local): local-only" in out and "FAIL [SI06]" not in out, out)
