@@ -125,6 +125,11 @@ done
 cp "$T/sq-seen/src/sql/plugins/myplugin/plugin/update_db_myplugin-1.0.0-2.0.0.sql" "$T/sq-seen/target/lutece/WEB-INF/classes/sql/plugins/myplugin/plugin/"
 expect sq-seen SQ06 PASS
 expect sq-unseen SQ06 FAIL
+for k in parsed misnamed; do mkdir -p "$T/sq-$k/src/sql/plugins/myplugin/upgrade"; done
+printf -- '-- liquibase formatted sql\n-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0.sql\nSELECT 1;\n' > "$T/sq-parsed/src/sql/plugins/myplugin/upgrade/update_db_myplugin-1.0.0-2.0.0.sql"
+printf -- '-- liquibase formatted sql\n-- changeset myplugin:upgrade_myplugin-2.0.0-feature.sql\nSELECT 1;\n' > "$T/sq-misnamed/src/sql/plugins/myplugin/upgrade/upgrade_myplugin-2.0.0-feature.sql"
+expect sq-parsed SQ06 PASS
+expect sq-misnamed SQ06 FAIL
 
 for k in on unset; do
     mkdir -p "$T/mv-$k/src/java"
@@ -219,5 +224,5 @@ printf 'class TaskTest { void t( ) { new Task( ); } }\n' > "$T/ts10-real/src/tes
 expect ts10-empty TS10 WARN
 expect ts10-real TS10 PASS
 
-[ "$fails" -eq 0 ] && { echo "PASS: TS06 reads the annotation block, ST01 needs CDI beans, WB07 ignores an empty feature-icon-url, ST03 skips abstract DAO bases, JS04 ignores @Controller in comments, reads jsp:useBean and flags a @Controller called outside processController, WB12 reads admin_url, WB13 compares the install SQL with the descriptor (an appended update of one right counts, a bulk update does not), TD08 accepts an icon an appended update fixes, both skip a commented-out INSERT, WB14 knows the Tabler icons, I18N01 accepts a sub-namespace named like the plugin and leaves a dead key to I18N08, SQ06 finds SQL Liquibase never sees, MV03 flags a @Controller without securityTokenEnabled and names a token riding a GET action link or a script, not a view link, WB04 accepts min-core-version 8.0.0, SQ08 finds an untagged install script in the war, SQ09 a SQL directory no plugin owns, SQ10 an empty changeset, SQ11 a changeset id twice in a file, SQ12 a committed or released changeset with another body but not a new changeset, a precondition or spacing, in an ISO-8859-1 script too, a crashed check fails, DL02 an opencsv 2 import nothing declares, TS10 tests naming no class of the project (a comment does not count), JP04 JPA only, TS09 names a broken test database, CD09 the dead jcaptcha test, grep checks skip comments and declarations"; exit 0; }
+[ "$fails" -eq 0 ] && { echo "PASS: TS06 reads the annotation block, ST01 needs CDI beans, WB07 ignores an empty feature-icon-url, ST03 skips abstract DAO bases, JS04 ignores @Controller in comments, reads jsp:useBean and flags a @Controller called outside processController, WB12 reads admin_url, WB13 compares the install SQL with the descriptor (an appended update of one right counts, a bulk update does not), TD08 accepts an icon an appended update fixes, both skip a commented-out INSERT, WB14 knows the Tabler icons, I18N01 accepts a sub-namespace named like the plugin and leaves a dead key to I18N08, SQ06 finds SQL Liquibase never sees, by its name when nothing is assembled, MV03 flags a @Controller without securityTokenEnabled and names a token riding a GET action link or a script, not a view link, WB04 accepts min-core-version 8.0.0, SQ08 finds an untagged install script in the war, SQ09 a SQL directory no plugin owns, SQ10 an empty changeset, SQ11 a changeset id twice in a file, SQ12 a committed or released changeset with another body but not a new changeset, a precondition or spacing, in an ISO-8859-1 script too, a crashed check fails, DL02 an opencsv 2 import nothing declares, TS10 tests naming no class of the project (a comment does not count), JP04 JPA only, TS09 names a broken test database, CD09 the dead jcaptcha test, grep checks skip comments and declarations"; exit 0; }
 exit 1
