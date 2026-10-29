@@ -6,6 +6,7 @@
 # Always from a clean target (a stale target/<finalName> makes lutece:site-assembly skip the core and the plugins),
 # from a disposable git worktree when --ref is given (the working tree is never touched), with the Maven profile ENV
 # of a v7 site (-P<env> copies src/conf/<env>), into a local repository given with --repo so nothing lands in ~/.m2.
+# The developer's ~/lutece/conf/<artifactId> is left out: the environments build without it.
 # --pin (with --ref) fixes the version of an artefact in the worktree pom only: a v7 pom whose ranges resolve today to a
 # Lutece 8 artefact (a Java 17 jar) does not rebuild what the environments run; pin it to the v7 version they run.
 # --update checks every snapshot against the remote repositories (-U), so the latest published builds are assembled.
@@ -50,7 +51,7 @@ PYPIN
         echo "site-assemble: pinned $pin in the worktree pom" >&2
     done
 fi
-MVN=(mvn -B -q -Daether.enhancedLocalRepository.trackingFilename=_qa_none)
+MVN=(mvn -B -q -Daether.enhancedLocalRepository.trackingFilename=_qa_none -DlocalConfDirectory="$WORK/.no-local-conf")
 [ -n "$REPO" ] && MVN+=(-Dmaven.repo.local="$REPO")
 [ -n "$SETTINGS" ] && MVN+=(-s "$SETTINGS")
 [ -n "$PROFILE" ] && MVN+=(-P"$PROFILE")
