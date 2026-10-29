@@ -1343,10 +1343,10 @@ else emit "SQ01" "FAIL" "SQL files Liquibase will ignore (rules/sql-liquibase.md
 SQ02_MATCHES=""
 if [ -d "src/sql" ] && git rev-parse -q --verify HEAD >/dev/null 2>&1; then
     columns() { awk 'BEGIN{IGNORECASE=1} /CREATE TABLE/{t=$0; sub(/.*CREATE TABLE[[:space:]]+(IF NOT EXISTS[[:space:]]+)?/,"",t); sub(/[[:space:]]*\(.*/,"",t); gsub(/`/,"",t); in_t=1; next}
-        in_t && /^[[:space:]]*\)/{in_t=0} in_t && /^[[:space:]]*--/{next} in_t{c=$1; gsub(/[`,]/,"",c); if (c!="" && c !~ /^(PRIMARY|KEY|CONSTRAINT|UNIQUE|INDEX|FOREIGN|\)|\()$/) print tolower(t)"."tolower(c)}' "$@" 2>/dev/null | sort -u; }
+        in_t && /^[[:space:]]*\)/{in_t=0} in_t && /^[[:space:]]*--/{next} in_t{c=$1; gsub(/[`,]/,"",c); if (c!="" && c !~ /^(PRIMARY|KEY|CONSTRAINT|UNIQUE|INDEX|FOREIGN|\)|\()$/) print tolower(t)"."tolower(c)}' "$@" 2>/dev/null | LC_ALL=C sort -u; }
     SQ02_MATCHES=$(find src/sql -path '*/plugin/*' -name 'create_db_*.sql' | sort | while read -r f; do
         git cat-file -e "HEAD:$f" 2>/dev/null || continue
-        comm -13 <(columns <(git show "HEAD:$f")) <(columns "$f") | while IFS=. read -r table col; do
+        LC_ALL=C comm -13 <(columns <(git show "HEAD:$f")) <(columns "$f") | while IFS=. read -r table col; do
             # Covered when an upgrade script adds the column, or (re)creates the table WITH it — an older
             # upgrade that created the table without the column proves nothing.
             if python3 -c 'import glob, re, sys; t, c = sys.argv[1:3]; sys.exit(0 if any(re.search(r"ALTER\s+TABLE\s+`?%s`?\s(?:[^;]*?,)?\s*ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?`?%s`?\b" % (re.escape(t), re.escape(c)), re.sub(r"--[^\n]*", "", open(f, encoding="utf-8", errors="replace").read()), re.I) for f in glob.glob("src/sql/**/update_db_*.sql", recursive=True)) else 1)' "$table" "$col"; then continue; fi

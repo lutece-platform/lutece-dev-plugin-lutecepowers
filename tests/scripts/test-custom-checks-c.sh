@@ -185,6 +185,30 @@ expect sq02-alter SQ02 PASS
 expect sq02-recreate SQ02 PASS
 expect sq02-reformat SQ02 PASS
 expect sq02-nogit SQ02 PASS
+ITEM_OLD='-- liquibase formatted sql
+-- changeset myplugin:create_db_myplugin.sql
+CREATE TABLE myplugin_entry (
+code varchar(255),
+date_creation timestamp,
+id_item int,
+PRIMARY KEY (id_item)
+);'
+put sq02-locale $C "$ITEM_OLD"
+commit sq02-locale
+put sq02-locale $C "$ITEM_OLD
+-- changeset myplugin:create_db_myplugin-rev1.sql
+CREATE TABLE myplugin_entry_attribute (
+id int,
+PRIMARY KEY (id)
+);"
+put sq02-locale $U '-- liquibase formatted sql
+-- changeset myplugin:update_db_myplugin-1.0.0-2.0.0.sql
+CREATE TABLE IF NOT EXISTS myplugin_entry_attribute (
+id int,
+PRIMARY KEY (id)
+);'
+( export LC_ALL=fr_FR.UTF-8; status sq02-locale SQ02 > /dev/null 2>&1 )
+expect sq02-locale SQ02 PASS
 
 I=src/sql/plugins/myplugin/plugin/init_db_myplugin.sql
 ALTER_AI='ALTER TABLE myplugin_item MODIFY COLUMN id_item int AUTO_INCREMENT;'
