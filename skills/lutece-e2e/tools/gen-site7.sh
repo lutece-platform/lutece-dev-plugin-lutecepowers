@@ -222,10 +222,11 @@ if [ -f "$FINAL/WEB-INF/conf/plugins/search-solr.properties" ] && [ ! -f "$FINAL
     "${E2E_SOLR_CORE:-lutece}" > "$FINAL/WEB-INF/conf/override/plugins/search-solr.properties"
   echo ">> solr address overridden on the v7 site: http://solr:8983/solr/${E2E_SOLR_CORE:-lutece}"
 fi
-# The v7 image runs Java 11 (class files up to version 55). A version range of the v7 artefact can resolve to a v8
-# release built for Java 17: the site then fails to start on UnsupportedClassVersionError, far from the cause. Named
-# here with the pin to add (E2E_V7_DEP_PINS), before any container starts.
-NEWER=$(python3 - "$FINAL/WEB-INF/lib" <<'PYJVM'
+# The v7 image runs the Java of E2E_V7_JAVA (11 by default). A version range of the v7 artefact can resolve to a v8
+# release built for a newer Java: the site then fails to start on UnsupportedClassVersionError, far from the cause.
+# Named here with the pin to add (E2E_V7_DEP_PINS), or the Java the environments run (E2E_V7_JAVA), before any container starts.
+V7_JAVA="${E2E_V7_JAVA:-11}"
+NEWER=$(python3 - "$FINAL/WEB-INF/lib" "$V7_JAVA" <<'PYJVM'
 import glob, os, struct, sys, zipfile
 for jar in sorted(glob.glob(os.path.join(sys.argv[1], "*.jar"))):
     try:
@@ -235,14 +236,15 @@ for jar in sorted(glob.glob(os.path.join(sys.argv[1], "*.jar"))):
             major = max((struct.unpack(">H", h[6:8])[0] for h in heads if len(h) == 8 and h[:4] == b"\xca\xfe\xba\xbe"), default=0)
     except (zipfile.BadZipFile, OSError):
         continue
-    if major > 55:
+    if major > 44 + int(sys.argv[2]):
         print("%s (class version %d, Java %d)" % (os.path.basename(jar), major, major - 44))
 PYJVM
 )
 if [ -n "$NEWER" ]; then
-  echo "gen-site7.sh: the v7 site carries artefacts built for a newer Java than its Java 11 image, it cannot start:" >&2
+  echo "gen-site7.sh: the v7 site carries artefacts built for a newer Java than its Java $V7_JAVA image, it cannot start:" >&2
   echo "$NEWER" | sed 's/^/  /' >&2
-  echo "  pin their v7 versions in e2e.conf, E2E_V7_DEP_PINS=groupId:artifactId:version,... (the versions the v7 site of the parent plugin runs)" >&2
+  echo "  pin their v7 versions in e2e.conf, E2E_V7_DEP_PINS=groupId:artifactId:version,... (the versions the v7 site of the parent plugin runs)," >&2
+  echo "  or set E2E_V7_JAVA=17 when the environments run the v7 site on Java 17" >&2
   exit 1
 fi
 echo ">> v7 site: $FINAL"

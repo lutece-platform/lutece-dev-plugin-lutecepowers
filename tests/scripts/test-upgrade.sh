@@ -51,4 +51,7 @@ L="$T/home/benches/b/output/defaultServer/logs/lutece"; mkdir -p "$L" "$T/e2e/ha
 printf 'Caused by: java.lang.IllegalStateException: an earlier start\n' > "$L/error.log"; echo old > "$L/liquibase.log"; echo kept > "$L/application-1.log.gz"
 PY='(lambda s: (setattr(s, "sh", lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()), s.app_start(s.Bench(), "'$T'/site"), sorted(p.name for p in __import__("pathlib").Path("'$L'").iterdir()))[2])(__import__("server"))'
 check "a start leaves no Lutece log of an earlier start to judge it on" "$(py E2E_DIR="$T/e2e" E2E_NAME=b)" "['application-1.log.gz']"
+mkdir -p "$T/ds/WEB-INF/plugins"; echo "<plug-in><name>My Plugin Name</name></plug-in>" > "$T/ds/WEB-INF/plugins/p.xml"
+PY='sorted(upgrade.descriptors(__import__("pathlib").Path("'$T'/ds")))'
+check "a plugin name holding spaces is read whole" "$(py)" "['My Plugin Name']"
 if [ $fail = 0 ]; then echo "PASS: lpe2e upgrade picks its previous version, checks its takeover scripts and reports a failure"; else exit 1; fi

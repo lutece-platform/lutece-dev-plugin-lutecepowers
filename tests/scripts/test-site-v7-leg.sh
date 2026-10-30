@@ -23,6 +23,13 @@ check() { if eval "$2"; then echo "PASS: $1"; else echo "FAIL: $1"; fail=1; fi; 
 check "gen-site7.sh accepts a site target with E2E_V7_WAR" "[ $RC -eq 0 ]"
 check "the bench database settings replace the site's" "grep -q 'jdbc:mysql://db:3306/lutece' '$S/target/e2e-site7-site/WEB-INF/conf/db.properties' && ! grep -q production-host '$S/target/e2e-site7-site/WEB-INF/conf/db.properties'"
 check "versions.properties names the core and the plugins of the v7 war" "grep -qx 'core=7.1.5' '$S/target/versions.properties' && grep -qx 'forms=3.1.3' '$S/target/versions.properties'"
+( cd "$T" && mkdir -p j17/y && printf '\xca\xfe\xba\xbe\x00\x00\x00\x3d' > j17/y/B.class && cd j17 && jar -cf "$T/v7/WEB-INF/lib/lib17-1.0.jar" y/B.class )
+OUT5=$(E2E_DIR="$E" E2E_SITE7_BUILD="$S" bash "$B/tools/gen-site7.sh" 2>&1); RC5=$?
+check "a Java 17 jar stops the Java 11 v7 site and names E2E_V7_JAVA" "[ $RC5 -ne 0 ] && echo \"\$OUT5\" | grep -q 'lib17-1.0.jar (class version 61' && echo \"\$OUT5\" | grep -q E2E_V7_JAVA=17"
+echo "E2E_V7_JAVA=17" >> "$E/e2e.conf"
+OUT6=$(E2E_DIR="$E" E2E_SITE7_BUILD="$S" bash "$B/tools/gen-site7.sh" 2>&1); RC6=$?
+check "E2E_V7_JAVA=17 accepts it" "[ $RC6 -eq 0 ]"
+rm "$T/v7/WEB-INF/lib/lib17-1.0.jar"
 printf 'E2E_TARGET=site\nE2E_SRC=..\n' > "$E/e2e.conf"
 OUT2=$(E2E_DIR="$E" E2E_SITE7_BUILD="$S" bash "$B/tools/gen-site7.sh" 2>&1); RC2=$?
 check "a site target without E2E_V7_WAR is refused with the reason" "[ $RC2 -eq 2 ] && echo \"\$OUT2\" | grep -q E2E_V7_WAR"

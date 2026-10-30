@@ -1,8 +1,9 @@
-# Tomcat 9 on Java 11: the runtime a Lutece 7 site actually runs on, for the database upgrade (lpe2e upgrade).
+# Tomcat 9 on the Java a Lutece 7 site runs on (JDK, 11 by default, E2E_V7_JAVA), for the database upgrade (lpe2e upgrade).
 # Generic: the v7 site (tools/gen-site7.sh) is mounted exploded at /usr/local/tomcat/webapps/<context> when the
 # container starts, its schema created the v7 way by the Ant build under WEB-INF/sql (tomcat/entrypoint.sh). Port 8081:
 # the container joins the bench runner's network namespace, where 8080 belongs to the OpenID Connect stand-in.
-FROM tomcat:9.0-jdk11-temurin
+ARG JDK=11
+FROM tomcat:9.0-jdk${JDK}-temurin
 RUN apt-get update && apt-get install -y --no-install-recommends ant unzip && rm -rf /var/lib/apt/lists/* \
  && rm -rf /usr/local/tomcat/webapps/* && mkdir -p /logs && chmod -R a+rwX /usr/local/tomcat /logs \
  && sed -i 's/port="8080"/port="8081"/' /usr/local/tomcat/conf/server.xml

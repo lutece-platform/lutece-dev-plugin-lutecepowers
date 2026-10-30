@@ -62,10 +62,12 @@ def db(bench, query):
 
 
 def db_load(bench, path):
-    """Play a SQL file (gzipped or not) on the bench's database; the return code of the client."""
+    """Play a SQL file (gzipped or not) on the bench's database, a row up to 1 GB (a file stored in the database); the
+    return code of the client."""
     path = pathlib.Path(path)
     data = subprocess.run(["gzip", "-dc", str(path)], capture_output=True).stdout if path.suffix == ".gz" else path.read_bytes()
-    r = subprocess.run(["docker", "exec", "-i", DB, "mariadb", "-ulutece", "-plutece", bench.db], input=data, capture_output=True)
+    sql("SET GLOBAL max_allowed_packet = 1073741824")
+    r = subprocess.run(["docker", "exec", "-i", DB, "mariadb", "-ulutece", "-plutece", "--max-allowed-packet=1G", bench.db], input=data, capture_output=True)
     if r.returncode:
         log("  " + r.stderr.decode(errors="replace").strip()[:400])
     return r.returncode
@@ -227,11 +229,13 @@ def bench_site7(bench, base):
 
 
 def tomcat_image():
-    """The generic Tomcat 9 / Java 11 image of the v7 site, built once per Dockerfile and entrypoint."""
+    """The generic Tomcat 9 image of the v7 site on the Java of E2E_V7_JAVA (11 by default), built once per Java,
+    Dockerfile and entrypoint."""
     harness = BENCH / "harness"
-    tag = "lpe2e-tomcat:" + hashlib.sha1((harness / "Dockerfile.tomcat").read_bytes() + (harness / "tomcat/entrypoint.sh").read_bytes()).hexdigest()[:12]
+    jdk = os.environ.get("E2E_V7_JAVA") or "11"
+    tag = "lpe2e-tomcat:" + hashlib.sha1(jdk.encode() + (harness / "Dockerfile.tomcat").read_bytes() + (harness / "tomcat/entrypoint.sh").read_bytes()).hexdigest()[:12]
     if sh("docker", "image", "inspect", tag).returncode:
-        r = sh("docker", "build", "-q", "--network", "host", "-t", tag, "-f", harness / "Dockerfile.tomcat", harness)
+        r = sh("docker", "build", "-q", "--network", "host", "--build-arg", "JDK=" + jdk, "-t", tag, "-f", harness / "Dockerfile.tomcat", harness)
         if r.returncode:
             raise SystemExit("upgrade: the Tomcat image did not build: " + r.stderr[-500:])
     return tag
@@ -352,7 +356,7 @@ def descriptors(site):
     """Plugin names declared by the descriptors of a site."""
     names = set()
     for x in (site / "WEB-INF/plugins").glob("*.xml"):
-        m = re.search(r"<name>\s*([^<\s]+)", re.sub(r"<!--.*?-->", "", x.read_text(errors="replace"), flags=re.S))
+        m = re.search(r"<name>\s*([^<]+?)\s*</name>", re.sub(r"<!--.*?-->", "", x.read_text(errors="replace"), flags=re.S))
         if m:
             names.add(m.group(1))
     return names

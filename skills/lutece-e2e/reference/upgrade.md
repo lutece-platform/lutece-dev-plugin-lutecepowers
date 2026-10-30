@@ -36,7 +36,7 @@ lpe2e upgrade
      password on that copy.
    - **the previous Lutece 8 version** (`E2E_BEFORE_WAR`, a war or an exploded site built the way the bench site is):
      started by the bench's Liberty on a fresh database, where its own Liquibase creates the schema, then seeded.
-2. **One v7 start with plugin-liquibase** (v7 and dump without `DATABASECHANGELOG`): the v7 site in Tomcat 9 / Java 11
+2. **One v7 start with plugin-liquibase** (v7 and dump without `DATABASECHANGELOG`): the v7 site in Tomcat 9 on Java 11 (`E2E_V7_JAVA=17` for a v7 site its environments run on Java 17)
    (`lpe2e-<name>-app7`, port 8081 in the runner's network namespace), `liquibase.enabled.at.startup=true`. On a
    database Liquibase never followed it runs nothing: it creates `DATABASECHANGELOG` and records the version of every
    component whose SQL it sees. Stopped once Tomcat started. This is the documented way to bring a v7 site under
@@ -85,7 +85,7 @@ run found it: up when it ran before (a `KEEP=1 lpe2e`) or with `KEEP=1`, down ot
 In `e2e.conf`: `E2E_V7_REF`, `E2E_V7_SITE_POM`, `E2E_V7_CORE`, `E2E_V7_PLUGINS`, `E2E_V7_DEP_PINS` (a v7 range whose
 top no longer compiles, pinned in the worktree), `E2E_V7_WAR` (a site's v7 war, `tools/site-assemble.sh` without
 `--profile`: no value of a real environment enters the bench; it must carry plugin-liquibase of the v7 line, as the
-environments will), `E2E_V7_DUMP`, `E2E_BEFORE_WAR`, `E2E_TAKEOVER` (a site), `E2E_V7_SAFE_RUN` (below). The bench's
+environments will), `E2E_V7_DUMP`, `E2E_BEFORE_WAR`, `E2E_TAKEOVER` (a site), `E2E_V7_JAVA` (11 or 17), `E2E_V7_SAFE_RUN` (below). The bench's
 property overrides (`harness/site/webapp/WEB-INF/conf/override`) and probe pages (`harness/site/webapp/jsp/e2e`) are
 copied to the v7 site; `harness/src7-overlay/` is laid over the v7 worktree before its build, `harness/v7-overlay/`
 over the assembled v7 site.
