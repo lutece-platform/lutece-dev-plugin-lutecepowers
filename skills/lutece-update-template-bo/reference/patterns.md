@@ -102,7 +102,7 @@ template are in SKILL.md.
 
 ### Actions dropdown in lists (manageFeature, adminDashboardWidget)
 - In a `<@manageFeature>` or a `<@adminDashboardWidget>`, when a list item has **more than 2 action buttons**, group the actions in a dropdown menu
-- Two containers work: `<@button dropdownMenu=true>` is the native Bootstrap 5 form (`data-bs-toggle`, items wrapped in `<ul class="dropdown-menu">`, so each item is a `<@li>` holding a `<@link>`; forms `manage_forms.html`); `<@aButton dropdownMenu=true>` emits Bootstrap 4 `data-toggle="dropdown"` that `webapp/themes/admin/tabler/js/admin.js` shims (core `admin/user/manage_users.html`). The pattern below uses `@aButton`; with `@button`, wrap each `@link` in `<@li>`
+- Use `<@button dropdownMenu=true>`: native Bootstrap 5, the menu gets the id `<id>-content`. Wrap each `@link` in `<@li>`: core 8.0.2-beta-04 always writes a `<ul>`, later cores pick `<ul>` or `<div>` from the items. Not `<@aButton dropdownMenu=true>`: it writes the same `id` on the link and on the menu, and Bootstrap 4 `data-toggle` that only `webapp/themes/admin/tabler/js/admin.js` shims
 - Convert each action `<@aButton>` into a `<@link>` with `class='dropdown-item'`
 - A selection checkbox in a row: `<@checkBox orientation='switch' value='${item.id}' labelKey=<entity label> labelClass='visually-hidden' />`; `checkBox.ftl` copies `params` on both the `<label>` and the `<input>`, so `params='aria-label="..."'` would be emitted twice
 - A hierarchy of entities (parents and children in one list): one flat `<@manageFeature>`, each item showing its depth with an indent class on the first `<@manageFeatureItemColumn>` (`class='ps-3'`, `'ps-5'`...), never a `<@table>` or a `<@manageFeature>` nested in an item
@@ -114,12 +114,12 @@ template are in SKILL.md.
 - Pattern (inside `@manageFeature`):
   ```freemarker
   <@manageFeatureItemColumn align='end'>
-      <@aButton class='dropdown-toggle' id='item-actions-${item.id}' dropdownMenu=true href='#' title='#i18n{portal.util.labelActions}' color='' hideTitle=['all'] buttonIcon='dots-vertical'>
-          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&id=${item.id}' label='#i18n{portal.util.labelModify}' />
-          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=composeItem&id=${item.id}' label='#i18n{...labelCompose}' />
-          <@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmCopyItem&id=${item.id}' label='#i18n{...labelCopy}' />
-          <@link class='dropdown-item text-danger' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&id=${item.id}' label='#i18n{portal.util.labelDelete}' />
-      </@aButton>
+      <@button id='item-actions-${item.id}' dropdownMenu=true title='#i18n{portal.util.labelActions}' hideTitle=['all'] buttonIcon='dots-vertical'>
+          <@li><@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=modifyItem&amp;id=${item.id}' label='#i18n{portal.util.labelModify}' /></@li>
+          <@li><@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=composeItem&amp;id=${item.id}' label='#i18n{...labelCompose}' /></@li>
+          <@li><@link class='dropdown-item' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmCopyItem&amp;id=${item.id}' label='#i18n{...labelCopy}' /></@li>
+          <@li><@link class='dropdown-item text-danger' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' label='#i18n{portal.util.labelDelete}' /></@li>
+      </@button>
   </@manageFeatureItemColumn>
   ```
 
@@ -348,6 +348,7 @@ Put it in `<@boxFooter>`, not in the body.
 ## Models to copy
 
 For the `@manageFeature` item layout: forms `admin/plugins/forms/manage_forms.html`, core `admin/rbac/manage_roles.html`,
-`admin/role/manage_roles.html` and `admin/user/manage_users.html` (actions dropdown). The core pages still open
+`admin/role/manage_roles.html`, `admin/user/manage_users.html` and, after 8.0.2-beta-04, `admin/system/manage_plugins.html`
+(detail as a page, `@card` > `@empty`, list filter `luteceSearchList.js`). The core pages still open
 their create and modify screens in an `@offcanvas` and wrap `@empty` in `@box`: those two parts are not copied, the
 rules above win.

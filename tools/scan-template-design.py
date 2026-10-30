@@ -1118,7 +1118,7 @@ def check_sql(text, findings, know):
         for icon in re.finditer(r"'(images/[^']*)'", match.group(0)):
             if right_of(match.group(0), icon.start()) in later:
                 continue
-            add(findings, "TD08", "WARN", line_of(text, match.start() + icon.start()), "core_admin_right icon_url '%s' is an image path: adminHeader.ftl renders it as a CSS class, use 'ti ti-<name>'" % icon.group(1))
+            add(findings, "TD08", "WARN", line_of(text, match.start() + icon.start()), "core_admin_right icon_url '%s' is an image path: core 8.0.2-beta-04 renders it as a CSS class (empty glyph), later cores as an <img> that the v8 webapp no longer carries for v7 'images/' paths; use 'ti ti-<name>'" % icon.group(1))
         for row in re.finditer(r"\(([^()]*)\)", match.group(0)):
             cols = [c.strip() for c in row.group(1).split(",")]
             if len(cols) >= 9 and cols[8].upper() in ("NULL", "''") and cols[0].strip("'") not in later:

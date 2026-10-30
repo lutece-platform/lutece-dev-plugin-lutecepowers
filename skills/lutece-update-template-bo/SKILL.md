@@ -77,6 +77,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 
 ### @manageFeature - Entity lists
 - Each item is a card with flexible columns
+- Core after 8.0.2-beta-04: `<@manageFeature layout='list'>` renders the items as rows of one box (plugin-workflow `manage_workflow.html`); on 8.0.2-beta-04 the parameter is dropped (TD16)
 - Main column (name/title): `<@manageFeatureItemColumn auto=true flex=false>` (with `flex=false` for multi-line content)
 - Secondary columns with label: `<@manageFeatureItemColumn auto=true flex=false valign='top'>` with a `<@p class='fw-bold fs-3'>` as column title
 - Actions column: `<@manageFeatureItemColumn align='end'>` (right-aligned)
