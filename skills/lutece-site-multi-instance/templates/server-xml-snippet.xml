@@ -1,0 +1,40 @@
+<!-- Merged into the site server.xml, not pasted: an element with the id of an existing one (defaultHttpEndpoint, jdbcLib)
+     completes it. In server.xml, instead of the sessionCache feature and the Hazelcast elements:
+     multi-instance configuration in cluster.xml. The local profile of the pom (mvn liberty:run -Dlocal) writes
+     cluster.config=none.xml in bootstrap.properties: the optional include is skipped and Lutece uses Ehcache.
+     The value must come from bootstrap.properties: a configDropins variable is not read for an include. -->
+<variable name="cluster.config" defaultValue="cluster.xml" />
+<include location="${server.config.dir}/${cluster.config}" optional="true" />
+
+<!-- JDBC driver only, not every jar of the war -->
+<library id="jdbcLib">
+    <fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="mariadb-java-client-*.jar"/>
+</library>
+
+<!-- Persistent connections kept longer than the load balancer ones (ingress-nginx: 60 s; Liberty default: 30 s): otherwise the
+     load balancer reuses a connection Liberty has just closed and a POST (not retried) gets a 502 -->
+<httpEndpoint host="*" httpPort="${http.port}" httpsPort="${https.port}" id="defaultHttpEndpoint">
+    <httpOptions persistTimeout="75s" />
+    <!-- Client address read from X-Forwarded-For when the connection comes from a proxy (private addresses by default):
+         otherwise every user has the ingress address and the upload DOS Guard of the core throttles them together -->
+    <remoteIp />
+</httpEndpoint>
+
+<!-- Thread pool bounded: 12 for a 2 CPU limit on the example Forms site (values depend on the site: measured, 3 replicas, 11-step form at 210 declarations/min: p99 6.1 s with
+     4 threads, 2.8 s with 8, 2.3 s with 12, 1.8 s unbounded, same CPU per request). Unbounded, Liberty grows it to 40
+     threads per replica at saturation. Measure the site under its target load with two or three values and keep the best
+     p99 without errors. Set here by the site; the EXECUTOR_THREADS environment variable overrides it. -->
+<variable name="executor.threads" defaultValue="12" />
+<executor coreThreads="${executor.threads}" maxThreads="${executor.threads}" />
+
+<!-- Connection pool bounded too (OpenLiberty allows 50 per replica): 12 held up to saturation (3 replicas, up to 40 threads
+     per replica, no error, no declaration lost), a request holds a connection only during its SQL. The database user limit
+     (max_user_connections) must cover (replicas + rolling surge + migration run) x maxPoolSize. Added to the existing
+     dataSource of the site: -->
+<variable name="db.pool.max" defaultValue="12" />
+<!--
+<dataSource jndiName="jdbc/portal">
+    <connectionManager maxPoolSize="${db.pool.max}" />
+    ...
+</dataSource>
+-->

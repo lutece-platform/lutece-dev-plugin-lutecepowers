@@ -64,6 +64,7 @@ version the site recorded. An update is proven on an e2e bench: the artefact bef
 | `lutece-patterns` | The Lutece 8 code patterns, read before writing code. |
 | `lutece-rbac` | Add or review the permissions of a plugin. |
 | `lutece-scalability-v8` | Make a plugin run on a cluster, and prove it. |
+| `lutece-site-multi-instance` | Configure a site to run as several replicas, and check it. |
 | `lutece-solr-indexer` | Write or change a Solr search module. |
 | `lutece-update-plugin` | Update a plugin, module or library to Lutece 8, from any version. |
 | `lutece-update-site` | Update a site, pack or theme to Lutece 8, from any version. |

@@ -2,7 +2,7 @@
 """site_check.py — the checks of a Lutece site (packaging lutece-site, a site or a pack) that no other tool makes.
 
 Usage:
-  site_check.py check  <site_dir> [--war DIR] [--before DIR --before-ref REF] [--decisions FILE] [--m2 DIR] [--bom POM]
+  site_check.py check  <site_dir> [--war DIR] [--k8s DIR] [--before DIR --before-ref REF] [--decisions FILE] [--m2 DIR] [--bom POM]
   site_check.py gate   <war_dir> [--site DIR] [--bom POM] [--m2 DIR] [--repo-url URL]... [--offline]
   site_check.py config <war_dir> [--profile NAME] [--against DUMP]
   site_check.py envconf <site_dir> [--out FILE]
@@ -17,7 +17,9 @@ check   checks the site sources and, with --war, the site assembled from them (t
         what the site ships (an effective configuration value, a plugin, a file of the site overlay, the profiles
         it names) is a finding until the decisions file (default: <site_dir>/.migration/site-decisions.md) answers
         it with a line `- key|plugin|file|profile <id>: <reason>`. Prints `  PASS|INFO|WARN|FAIL [SIxx] ...`, one
-        line per finding, and exits 1 when a FAIL is reported.
+        line per finding, and exits 1 when a FAIL is reported. A site set up for several replicas (cluster.xml,
+        sessionCache-1.0, sessionDatabase-1.0 or a Hazelcast dependency) is also checked on its multi-instance
+        configuration (SI60-SI68), and with --k8s on its Kubernetes manifests or chart templates (SI70-SI72).
 gate    the Lutece 8 status of every Lutece artefact an assembled site ships (read from the pom.properties of its
         jars): managed by the target lutece-bom, published with a Lutece 8 parent, or without any Lutece 8 version.
         Exits 1 when one artefact has no Lutece 8 version: it has to be updated first (lutece-update-plugin).
@@ -1206,6 +1208,201 @@ def check_plugins(site, war, out):
         out.passed("SI40", f"plugins.dat matches the {len(desc)} plugin descriptors")
 
 
+def read_text(path):
+    """The text of a file, or an empty string when it is missing; any encoding is read."""
+    return path.read_text(encoding="latin-1") if path.is_file() else ""
+
+
+def override_text(site):
+    """Every properties file of the site under WEB-INF/conf/override, concatenated, comments removed."""
+    base = site.webapp / "WEB-INF/conf/override"
+    files = sorted(base.rglob("*.properties")) if base.exists() else []
+    return "\n".join(l for f in files for l in read_text(f).splitlines() if not l.lstrip().startswith("#"))
+
+
+def war_daemons(war):
+    """The daemon ids of the core and of every plugin descriptor of the war."""
+    ids = set()
+    for f in [war.conf / "core.xml"] + sorted((war.path / "WEB-INF/plugins").glob("*.xml")):
+        text = re.sub(r"<!--.*?-->", "", read_text(f), flags=re.S)
+        ids.update(re.findall(r"<daemon-id>\s*([^<\s]+)\s*</daemon-id>", text))
+    return ids
+
+
+def member_cache_names(member):
+    """Returns the names declared under the cache section of a Hazelcast member YAML, quotes removed."""
+    names, inside = [], False
+    for line in member.splitlines():
+        if re.match(r"^  cache:\s*$", line):
+            inside = True
+        elif inside and re.match(r"^ {0,2}\S", line):
+            inside = False
+        elif inside:
+            m = re.match(r"^    (['\"]?)([^'\":#][^'\"]*?)\1\s*:", line)
+            if m:
+                names.append(m.group(2))
+    return names
+
+
+def check_cluster(site, war, out):
+    """SI60-SI68: the configuration of a site set up for several replicas (sessionCache-1.0 or sessionDatabase-1.0,
+    a cluster.xml or a Hazelcast dependency): HTTP session, Lutece cache, Hazelcast member and client, JVM options,
+    Liberty endpoint and pools, clustered daemons, packaging, Forms index lock. Nothing is reported for a single-instance
+    site."""
+    cfg = site.path / "src/main/liberty/config"
+    server, cluster = read_text(cfg / "server.xml"), read_text(cfg / "cluster.xml")
+    liberty = server + cluster
+    deps = [d["artifactId"] for d in site.dependencies()] + [d["artifactId"] for _, d in site.profile_dependencies()]
+    if not (cluster or "sessionCache-1.0" in server or "sessionDatabase-1.0" in server or "hazelcast" in deps):
+        return
+    jars = [j.name for j in war.jars()] if war else []
+    override = override_text(site)
+    member, client = read_text(cfg / "hazelcast-config-api-mode.yaml"), read_text(cfg / "hazelcast-client-config-api-mode.yaml")
+    jvm = read_text(cfg / "jvm.options")
+    n = 0
+    if "sessionDatabase-1.0" in liberty and "sessionCache-1.0" not in liberty:
+        out.add("INFO", "SI60", "HTTP session in a database (sessionDatabase-1.0): the Hazelcast checks SI61, SI63, SI64 do not apply")
+        hazelcast = False
+    elif "sessionCache-1.0" not in liberty:
+        out.add("FAIL", "SI60", "src/main/liberty/config: no sessionCache-1.0 nor sessionDatabase-1.0 feature: each replica keeps its own HTTP sessions")
+        hazelcast, n = False, n + 1
+    else:
+        hazelcast = "hazelcast" in liberty.lower() or "hazelcast" in deps
+        if hazelcast and "hazelcast" not in deps and not any(j.startswith("hazelcast-") for j in jars):
+            out.add("FAIL", "SI60", "pom.xml: sessionCache-1.0 configured for Hazelcast and no hazelcast dependency: the provider is not found")
+            n += 1
+    if hazelcast:
+        lib = re.search(r'<httpSessionCache[^>]*libraryRef="([^"]+)"', liberty)
+        libdef = re.search(rf'<library[^>]*id="{lib.group(1)}"[^>]*>(.*?)</library>', liberty, re.S) if lib else None
+        if not libdef or 'includes="*.jar"' not in libdef.group(1):
+            out.add("FAIL", "SI61", "httpSessionCache: the session library is not every jar of the war (includes=\"*.jar\"): the members cannot migrate the partitions of the Lutece caches")
+            n += 1
+        if 'writeContents="GET_AND_SET_ATTRIBUTES"' not in liberty:
+            out.add("FAIL", "SI61", "httpSessionCache: writeContents is not GET_AND_SET_ATTRIBUTES: a @SessionScoped bean modified in place is lost on a node switch")
+            n += 1
+    if "lutece.cache.jcache.cachingprovider" not in liberty and "lutece.cache.jcache.cachingprovider" not in override:
+        out.add("FAIL", "SI62", "no lutece.cache.jcache.cachingprovider: the Lutece caches stay local to each replica (stale data on the others)")
+        n += 1
+    if hazelcast:
+        caches = member_cache_names(member)
+        generic = [c for c in caches if "*" in c and not c.startswith("com.ibm.ws.session.")]
+        if generic:
+            out.add("FAIL", "SI63", f"hazelcast-config-api-mode.yaml: member cache entry {', '.join(generic)}: it also matches the OpenLiberty session caches (SESN0307E, the application does not start on a cluster started from zero)")
+            n += 1
+        named = [c for c in caches if "*" not in c]
+        if named:
+            out.add("INFO", "SI63", f"member caches declared by name ({', '.join(named)}): this configuration replaces the Lutece one for them (lifetime, size, backups)")
+        mn, cn = (re.search(r"cluster-name:\s*(\S+)", t) for t in (member, client))
+        if member and client and (not mn or not cn or mn.group(1) != cn.group(1)):
+            out.add("FAIL", "SI63", "Hazelcast member and client cluster-name differ: the client of the Lutece cache never connects")
+            n += 1
+        for text, needle, why in ((member, "hazelcast.shutdownhook.policy: GRACEFUL", "member: graceful shutdown (partitions migrated before the pod stops)"),
+                                  (member, "hazelcast.shutdownhook.enabled: false", "member: JVM shutdown hook disabled (OpenLiberty closes the member after the application)"),
+                                  (member, "hazelcast.cache.invalidation.batch.enabled: false", "member: immediate near-cache invalidations"),
+                                  (member, "auto-increment: false", "member: fixed port"),
+                                  (member, "kubernetes:", "member: Kubernetes discovery"),
+                                  (client, "near-cache:", "client: near cache"),
+                                  (client, "127.0.0.1:5701", "client: member of its own pod")):
+            if needle not in text:
+                out.add("WARN", "SI63", f"{why} missing ({needle})")
+                n += 1
+        if "hazelcast.jcache.provider.type=member" not in jvm:
+            out.add("FAIL", "SI64", "jvm.options: no -Dhazelcast.jcache.provider.type=member: the provider of sessionCache-1.0 starts as a client and no member exists")
+            n += 1
+        for needle, why in (("hz.service-name", "Kubernetes service of the Hazelcast port"), ("add-opens=java.base/java.lang", "Hazelcast --add-opens")):
+            if needle not in jvm:
+                out.add("WARN", "SI64", f"jvm.options: {why} missing ({needle})")
+                n += 1
+    timeout = re.search(r'persistTimeout="(\d+)s"', server)
+    if not timeout or int(timeout.group(1)) <= 60:
+        out.add("WARN", "SI65", "server.xml: persistTimeout not above the 60 s keep-alive of the load balancer: a POST on a connection Liberty just closed gets a 502")
+        n += 1
+    for needle, why in (("<remoteIp", "no <remoteIp/> in the httpEndpoint: every user has the address of the ingress (upload DOS guard shared)"),
+                        ("maxThreads=", "no bounded <executor>: the thread pool grows without limit when the replica saturates"),
+                        ("maxPoolSize=", "no <connectionManager maxPoolSize> on the data source: 50 connections per replica by default")):
+        if needle not in server:
+            out.add("WARN", "SI65", f"server.xml: {why}")
+            n += 1
+    if "plugin-quartz-scheduler" not in deps and not any(j.startswith("plugin-quartz-scheduler-") for j in jars):
+        out.add("FAIL", "SI66", "pom.xml: no plugin-quartz-scheduler: every daemon runs on every replica")
+        n += 1
+    elif not re.search(r"^\s*quartzscheduler\.cluster\.enable\s*=\s*true", override, re.M):
+        out.add("FAIL", "SI66", "conf/override: no quartzscheduler.cluster.enable=true: the plugin ships false, the exclusive daemons run on every replica")
+        n += 1
+    exclusive = set(re.findall(r"^\s*quartzscheduler\.daemon\.([^.\s]+)\.disallowedClusterConcurrentExecution\s*=\s*true", override, re.M))
+    if "plugin-quartz-scheduler" in deps and not exclusive:
+        out.add("WARN", "SI66", "conf/override: no daemon declared exclusive (quartzscheduler.daemon.<id>.disallowedClusterConcurrentExecution=true)")
+        n += 1
+    if war and exclusive:
+        known = war_daemons(war)
+        for d in sorted(exclusive - known):
+            out.add("WARN", "SI66", f"conf/override: daemon {d} declared exclusive and declared by no descriptor of the war: the line does nothing")
+            n += 1
+        rest = sorted(known - exclusive - {"indexer", "threadLauncherDaemon"})
+        if rest:
+            out.add("INFO", "SI66", "daemons of the war running on every replica: " + ", ".join(rest))
+    if any(j.startswith("ehcache-") for j in jars) and hazelcast:
+        out.add("WARN", "SI67", "the war ships Ehcache: neutralise it (scope provided in the cluster profile)")
+        n += 1
+    if cluster and "${cluster.config}" not in server:
+        out.add("WARN", "SI67", "server.xml: cluster.xml is not included through the cluster.config variable: the local profile cannot skip it")
+        n += 1
+    if cluster and "sessionCache-1.0" in server:
+        out.add("WARN", "SI67", "server.xml: sessionCache-1.0 declared outside cluster.xml: the local profile still starts Hazelcast")
+        n += 1
+    if read_text(site.path / "Dockerfile") and "configure.sh" not in read_text(site.path / "Dockerfile"):
+        out.add("WARN", "SI67", "Dockerfile: no configure.sh: the war is not expanded and the session library finds no jar")
+        n += 1
+    forms = "forms-starter" in deps or "plugin-forms" in deps or any(j.startswith("plugin-forms-") for j in jars)
+    if forms and not re.search(r"^\s*forms\.index\.writer\.ms\.timeout\.lock\s*=", override, re.M):
+        out.add("WARN", "SI68", "conf/override: no forms.index.writer.ms.timeout.lock: a lock left by a stopped replica blocks the Forms indexing 15 min")
+        n += 1
+    if not n:
+        out.passed("SI60", "multi-instance configuration of the site")
+
+
+def check_kubernetes(site, k8s, out):
+    """SI70-SI72: the Kubernetes manifests (or chart templates) of a multi-instance site, read as text: pod lifecycle,
+    probes, Liquibase and the shared Forms index; Hazelcast discovery; ingress replay and affinity cookie."""
+    files = sorted(p for p in pathlib.Path(k8s).rglob("*") if p.suffix in (".yaml", ".yml", ".tpl"))
+    text = "\n".join(read_text(f) for f in files)
+    if not text:
+        out.add("WARN", "SI70", f"{k8s}: no manifest read")
+        return
+    deps = [d["artifactId"] for d in site.dependencies()]
+    n = 0
+    grace = re.search(r"terminationGracePeriodSeconds:\s*(\d+)", text)
+    for cond, why in ((not grace or int(grace.group(1)) < 55, "terminationGracePeriodSeconds below preStop + the 45 s graceful shutdown of Hazelcast"),
+                      ("preStop" not in text, "no preStop: the pod still receives requests while it stops (502)"),
+                      ("startupProbe" not in text, "no startupProbe"),
+                      (re.search(r"livenessProbe:(?:(?!readinessProbe|startupProbe).)*?/health/ready", text, re.S) is not None,
+                       "liveness on /health/ready: a database outage restarts every replica"),
+                      ("liquibase.enabled.at.startup=false" not in text, "Liquibase not disabled on the replicas (-Dliquibase.enabled.at.startup=false)"),
+                      (("forms-starter" in deps or "plugin-forms" in deps) and "forms.internalIndexer.lucene.indexPath" not in text,
+                       "no forms.internalIndexer.lucene.indexPath: the Forms index stays local to each pod"),
+                      (("forms-starter" in deps or "plugin-forms" in deps) and "ReadWriteMany" not in text, "no ReadWriteMany volume for the Forms index")):
+        if cond:
+            out.add("WARN", "SI70", why)
+            n += 1
+    if ("hazelcast" in text.lower() or "5701" in text) and not (re.search(r"kind:\s*Role\b", text) and "endpoints" in text):
+        out.add("WARN", "SI71", "no Role granting get/list on endpoints, pods, services: the Kubernetes discovery of Hazelcast fails")
+        n += 1
+    if "5701" not in text:
+        out.add("WARN", "SI71", "no Service on port 5701 for the Hazelcast discovery")
+        n += 1
+    if re.search(r"session-cookie-name:\s*\"?JSESSIONID", text):
+        out.add("FAIL", "SI72", "ingress affinity cookie named JSESSIONID: it collides with the OpenLiberty cookie, the route is lost after the first request")
+        n += 1
+    if re.search(r"proxy-next-upstream:\s*\"?[^\n]*non_idempotent", text):
+        out.add("FAIL", "SI72", "proxy-next-upstream replays non-idempotent requests: a POST already sent is replayed on another pod")
+        n += 1
+    if "kind: Ingress" in text and "proxy-next-upstream" not in text:
+        out.add("WARN", "SI72", "ingress without proxy-next-upstream \"error timeout\": a request to a killed pod is not retried on another")
+        n += 1
+    if not n:
+        out.passed("SI70", f"Kubernetes manifests of {k8s}")
+
+
 def check_webapp(site, war, m2, out):
     """SI50-SI58: the files of the site overlay: templates, JSP, web.xml, and files the site or its dependencies both ship."""
     for f in site.files("WEB-INF/templates"):
@@ -1742,6 +1939,7 @@ def main():
     c.add_argument("--decisions")
     c.add_argument("--m2", default=os.path.expanduser("~/.m2/repository"))
     c.add_argument("--bom")
+    c.add_argument("--k8s", help="the Kubernetes manifests or chart templates of the site (multi-instance checks SI70-SI72)")
     g = sub.add_parser("gate")
     g.add_argument("war")
     g.add_argument("--bom")
@@ -1824,6 +2022,9 @@ def main():
     check_conf(site, war, out)
     if war:
         check_plugins(site, war, out)
+    check_cluster(site, war, out)
+    if a.k8s:
+        check_kubernetes(site, a.k8s, out)
     check_webapp(site, war, a.m2, out)
     if a.before:
         if not war:

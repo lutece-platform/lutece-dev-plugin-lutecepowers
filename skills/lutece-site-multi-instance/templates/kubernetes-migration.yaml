@@ -1,0 +1,61 @@
+# One-replica run of the Liquibase migrations, on a fresh database and before each new war reaches the replicas (which
+# run with Liquibase off). Same image, service account and volume as kubernetes-deployment.yaml; its own label, so no
+# Service sends it traffic, and its own Hazelcast service name, so it joins no member of the running replicas.
+#   kubectl apply -f kubernetes-migration.yaml
+#   kubectl rollout status deployment/<site>-liquibase --timeout=10m   # ready = migrations done
+#   kubectl delete -f kubernetes-migration.yaml
+#   kubectl apply -f kubernetes-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <site>-liquibase
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <site>-liquibase
+  template:
+    metadata:
+      labels:
+        app: <site>-liquibase
+    spec:
+      serviceAccountName: <site>
+      securityContext:
+        fsGroup: 0
+      containers:
+        - name: lutece
+          image: <registry>/<site>:<version>
+          env:
+            - name: JVM_ARGS
+              value: "-Dliquibase.enabled.at.startup=true -Dhz.service-name=<site>-liquibase -Dforms.internalIndexer.lucene.indexPath=/opt/data/lucene/plugins/forms/index"
+          ports:
+            - name: http
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1536Mi
+            limits:
+              cpu: "2"
+              memory: 1536Mi
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: http
+            periodSeconds: 5
+            # Migrations of a large upgrade can be long: 10 min
+            failureThreshold: 120
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: lucene
+              mountPath: /opt/data/lucene
+      volumes:
+        - name: lucene
+          persistentVolumeClaim:
+            claimName: <site>-lucene
