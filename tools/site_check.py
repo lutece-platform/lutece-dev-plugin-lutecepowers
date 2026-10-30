@@ -552,8 +552,7 @@ class Site:
 
     def text(self, el, tag):
         """Text of a child element of the pom, or an empty string."""
-        child = el.find(f"m:{tag}", POM_NS)
-        return (child.text or "").strip() if child is not None else ""
+        return child_text(el, tag)
 
     def dependencies(self):
         """The direct dependencies: dicts of groupId, artifactId, version, type, scope."""
@@ -578,13 +577,24 @@ class Site:
 
     def properties(self):
         """The properties of the pom."""
-        p = self.pom.find("m:properties", POM_NS)
-        return {c.tag.split("}")[1]: (c.text or "").strip() for c in p} if p is not None else {}
+        return pom_properties(self.pom)
 
     def files(self, sub=""):
         """Every file of the webapp overlay (or of one of its sub-directories), relative to webapp/."""
         base = self.webapp / sub if sub else self.webapp
         return sorted(str(p.relative_to(self.webapp)) for p in base.rglob("*") if p.is_file()) if base.exists() else []
+
+
+def child_text(el, tag):
+    """Text of a child element of a pom node, or an empty string."""
+    child = el.find(f"m:{tag}", POM_NS)
+    return (child.text or "").strip() if child is not None else ""
+
+
+def pom_properties(root):
+    """The properties of a pom node."""
+    node = root.find("m:properties", POM_NS)
+    return {c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {}
 
 
 def version_key(v):
@@ -599,14 +609,12 @@ def version_key(v):
 def bom_versions(pom_path):
     """artifactId -> (version, type) managed by a lutece-bom pom, properties resolved."""
     root = ET.parse(pom_path).getroot()
-    node = root.find("m:properties", POM_NS)
-    props = {c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {}
+    props = pom_properties(root)
     out = {}
     for d in root.findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS):
-        get = lambda t: ((d.find(f"m:{t}", POM_NS).text or "").strip() if d.find(f"m:{t}", POM_NS) is not None else "")
-        v = get("version")
+        v = child_text(d, "version")
         v = props.get(v[2:-1], v) if v.startswith("${") else v
-        out[get("artifactId")] = (v, get("type") or "jar")
+        out[child_text(d, "artifactId")] = (v, child_text(d, "type") or "jar")
     return out
 
 
@@ -620,17 +628,16 @@ def pom_managed(pom, m2, props):
     given; None when an imported BOM is not there."""
     managed = set()
     for d in pom.findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS):
-        get = lambda t: (d.find(f"m:{t}", POM_NS).text or "").strip() if d.find(f"m:{t}", POM_NS) is not None else ""
-        if get("scope") != "import":
-            managed.add(get("artifactId"))
+        if child_text(d, "scope") != "import":
+            managed.add(child_text(d, "artifactId"))
             continue
-        g, a, v = get("groupId"), get("artifactId"), re.sub(r"\$\{([^}]+)\}", lambda m: props.get(m.group(1), m.group(0)), get("version"))
+        g, a = child_text(d, "groupId"), child_text(d, "artifactId")
+        v = re.sub(r"\$\{([^}]+)\}", lambda m: props.get(m.group(1), m.group(0)), child_text(d, "version"))
         f = m2_pom(m2, g, a, v)
         if not f.is_file():
             return None
         bom = ET.parse(f).getroot()
-        node = bom.find("m:properties", POM_NS)
-        inner = pom_managed(bom, m2, {c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {})
+        inner = pom_managed(bom, m2, pom_properties(bom))
         if inner is None:
             return None
         managed |= inner
@@ -642,8 +649,7 @@ def parent_managed(pom_path, m2):
     None when a parent of the chain or a BOM it imports is not there."""
     managed, pom, chain = set(), ET.parse(pom_path).getroot(), []
     while (parent := pom.find("m:parent", POM_NS)) is not None:
-        get = lambda t: (parent.find(f"m:{t}", POM_NS).text or "").strip() if parent.find(f"m:{t}", POM_NS) is not None else ""
-        g, a, v = get("groupId"), get("artifactId"), get("version")
+        g, a, v = (child_text(parent, t) for t in ("groupId", "artifactId", "version"))
         f = m2_pom(m2, g, a, v)
         if not f.is_file():
             return None
@@ -651,8 +657,7 @@ def parent_managed(pom_path, m2):
         chain.append(pom)
     props = {}
     for pom in reversed(chain):
-        node = pom.find("m:properties", POM_NS)
-        props.update({c.tag.split("}")[1]: (c.text or "").strip() for c in node} if node is not None else {})
+        props.update(pom_properties(pom))
     for pom in chain:
         inner = pom_managed(pom, m2, props)
         if inner is None:
