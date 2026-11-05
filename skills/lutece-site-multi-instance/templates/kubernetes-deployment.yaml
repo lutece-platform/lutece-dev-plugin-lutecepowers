@@ -1,0 +1,97 @@
+# Deployment of the site replicas, tested on minikube (rolling restart and forced pod deletion under load: no error).
+# Use with kubernetes-rbac.yaml (service account, Hazelcast Service, Role/RoleBinding) and kubernetes-service.yaml
+# (Service, shared volume).
+#
+# Liquibase is off on the replicas (a system property in JVM_ARGS wins over conf/override). On a fresh database and
+# before each new war, run the migrations once with kubernetes-migration.yaml, then apply this Deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <site>
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: <site>
+  template:
+    metadata:
+      labels:
+        app: <site>
+    spec:
+      serviceAccountName: <site>
+      # Above preStop (10 s) + hazelcast.graceful.shutdown.max.wait (45 s)
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # OpenLiberty runs as 1001, group 0: group 0 writes on the shared volume
+        fsGroup: 0
+      containers:
+        - name: lutece
+          image: <registry>/<site>:<version>
+          env:
+            # Optional: MicroProfile Config profile of the environment (%<profile>.key in conf/override)
+            # - name: MP_CONFIG_PROFILE
+            #   value: <profile>
+            # Liquibase from one replica only (see above); Forms Lucene index on the shared volume: the plugin default
+            # (java.io.tmpdir/plugins/forms/index) is local to the pod
+            - name: JVM_ARGS
+              value: "-Dliquibase.enabled.at.startup=false -Dforms.internalIndexer.lucene.indexPath=/opt/data/lucene/plugins/forms/index"
+          ports:
+            - name: http
+              containerPort: 9090
+            - name: hazelcast
+              containerPort: 5701
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1536Mi
+            # CPU limit above the request: OpenJ9 JIT uses about a third of 2 CPUs during the first minutes under load.
+            # Measured sizes (request / limit, memory): 1 / 2 CPU 1536Mi, 2 / 4 CPU 3Gi, 3 / 6 CPU 4Gi
+            limits:
+              cpu: "2"
+              memory: 1536Mi
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: http
+            periodSeconds: 5
+            # 3 min, about twice the slowest measured start (26 to 100 s): a pod started while the database is down fails
+            # to load the webapp and is restarted after 3 min instead of 5; measure the start of the target cluster first
+            failureThreshold: 36
+            # The 1 s default times out while two replicas start together
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            # A loaded pod answers slowly (the health check waits in the bounded thread pool): leave it the time to
+            # answer; readiness takes it out of the Service, it does not kill it
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+            # Liveness detects a frozen pod, not a slow one: with the 1 s default, the pod left alone with the whole load
+            # after the loss of the other one was killed in turn (cascade)
+            timeoutSeconds: 10
+          lifecycle:
+            # Leave the Service before OpenLiberty stops
+            preStop:
+              exec:
+                command: ["sleep", "10"]
+          volumeMounts:
+            # Parent directory of the Forms Lucene index (indexPath in JVM_ARGS)
+            - name: lucene
+              mountPath: /opt/data/lucene
+      volumes:
+        # Shared by every replica: the back office authorization on a response searches this index
+        - name: lucene
+          persistentVolumeClaim:
+            claimName: <site>-lucene   # ReadWriteMany

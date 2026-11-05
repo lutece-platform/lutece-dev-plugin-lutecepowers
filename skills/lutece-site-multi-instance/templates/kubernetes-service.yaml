@@ -1,0 +1,24 @@
+# Service of the site (target of the Ingress) and shared volume of the Forms Lucene index.
+apiVersion: v1
+kind: Service
+metadata:
+  name: <site>
+spec:
+  selector:
+    app: <site>
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: <site>-lucene
+spec:
+  # Mounted by every replica at once
+  accessModes: ["ReadWriteMany"]
+  # storageClassName: <a ReadWriteMany class of the cluster (NFS, CephFS...)>
+  resources:
+    requests:
+      storage: 1Gi
