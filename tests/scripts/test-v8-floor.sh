@@ -56,12 +56,12 @@ if [ -n "$SNAP" ] && ls "$M2/8.0.1/"*.jar "$M2/$V8_FLOOR_CORE/"*.jar "$M2/$SNAP/
     V8_SNAPSHOT_CORE="$SNAP" V8_SNAPSHOT_CORE_BUILD=2000-01-01 expect dep-snap 0
     grep -q "lutecepowers supports" "$T/dep-801.err" || { echo "FAIL: the refusal does not name the floor"; fails=$((fails + 1)); }
     grep -q "Pin lutece-core at $V8_FLOOR_CORE" "$T/dep-801.err" || { echo "FAIL: the refusal of a plugin does not say to pin or open the range"; fails=$((fails + 1)); }
-    if ls "$HOME/.m2/repository/fr/paris/lutece/tools/lutece-site-pom/$V8_FLOOR_SITE_PARENT/"*.pom >/dev/null 2>&1; then
-        site_pom site-801 8.0.1;             expect site-801 1
-        grep -q "lutece-bom" "$T/site-801.err" && ! grep -q "open range" "$T/site-801.err" \
-            || { echo "FAIL: the refusal of a site does not point at lutece-bom, or asks for an open range"; fails=$((fails + 1)); }
-    else
-        echo "SKIP: ~/.m2 lacks lutece-site-pom $V8_FLOOR_SITE_PARENT, the site case is not run"
+    site_pom site-801 8.0.1
+    bash "$C" "$T/site-801" --offline 2> "$T/site-801.err"; rc=$?
+    if [ "$rc" = 2 ]; then
+        echo "SKIP: Maven cannot load a site on lutece-site-pom $V8_FLOOR_SITE_PARENT offline (its parents and the lutece-site extension are not in ~/.m2), the site case is not run"
+    elif [ "$rc" != 1 ] || ! grep -q "lutece-bom" "$T/site-801.err" || grep -q "open range" "$T/site-801.err"; then
+        echo "FAIL: a site below the floor is not refused with a message pointing at lutece-bom (rc=$rc): $(cat "$T/site-801.err")"; fails=$((fails + 1))
     fi
 else
     echo "SKIP: ~/.m2 lacks the lutece-core 8.0.1, $V8_FLOOR_CORE or $SNAP jars or its version list, the offline Maven cases are not run (mvn dependency:get fetches them, RELEASE the list)"

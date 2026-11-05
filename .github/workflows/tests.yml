@@ -51,10 +51,12 @@ jobs:
           REPOS=lutece::::https://dev.lutece.paris.fr/maven_repository,luteceSnapshot::::https://dev.lutece.paris.fr/snapshot_repository
           FM=$(curl -fsS https://repo1.maven.org/maven2/org/freemarker/freemarker/maven-metadata.xml | grep -oE '<version>2\.3\.[0-9]+</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1)
           SNAP=$(python3 tools/latest-lutece.py snapshot fr.paris.lutece:lutece-core | cut -d: -f3)
-          for a in fr.paris.lutece:lutece-core:RELEASE fr.paris.lutece:lutece-core:8.0.1 "fr.paris.lutece:lutece-core:$V8_FLOOR_CORE" "fr.paris.lutece:lutece-core:$SNAP" \
-                   "fr.paris.lutece.tools:lutece-site-pom:$V8_FLOOR_SITE_PARENT:pom" "org.freemarker:freemarker:$FM"; do
+          for a in fr.paris.lutece:lutece-core:RELEASE fr.paris.lutece:lutece-core:8.0.1 "fr.paris.lutece:lutece-core:$V8_FLOOR_CORE" "fr.paris.lutece:lutece-core:$SNAP" "org.freemarker:freemarker:$FM"; do
             mvn -B -q dependency:get -Dartifact="$a" -Dtransitive=false -DremoteRepositories="$REPOS"
           done
+          W=$(mktemp -d)
+          printf '<project><modelVersion>4.0.0</modelVersion><parent><groupId>fr.paris.lutece.tools</groupId><artifactId>lutece-site-pom</artifactId><version>%s</version></parent><groupId>x</groupId><artifactId>site-warm</artifactId><version>1.0.0</version><packaging>lutece-site</packaging><repositories><repository><id>lutece</id><url>https://dev.lutece.paris.fr/maven_repository</url></repository></repositories><pluginRepositories><pluginRepository><id>lutece</id><url>https://dev.lutece.paris.fr/maven_repository</url></pluginRepository></pluginRepositories></project>\n' "$V8_FLOOR_SITE_PARENT" > "$W/pom.xml"
+          mvn -B -q -f "$W/pom.xml" dependency:list
       - name: Tests
         run: bash scripts/ci-tests.sh ${{ matrix.shard }} 4
       - name: Plugin manifests
