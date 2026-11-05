@@ -44,7 +44,9 @@ fi
 ARTIFACT=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<artifactId>' | sed 's/.*<artifactId>\(.*\)<\/artifactId>.*/\1/' | tr -d ' \r')
 VERSION=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
 PARENT_VERSION=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
-LATEST_PARENT=$(curl -sf -m 10 "https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml" 2>/dev/null | grep -o '<version>8\.[0-9.]*</version>' | sed 's/<[^>]*>//g' | lp_version_sort | tail -1 || true)
+# Prints the version latest-lutece.py reads: latest <release|snapshot> <groupId:artifactId>.
+latest() { python3 "$TOOLS_DIR/latest-lutece.py" "$@" 2>/dev/null | cut -d: -f3 || true; }
+LATEST_PARENT=$(latest release fr.paris.lutece.tools:lutece-global-pom)
 
 # ─── Lutece Dependencies ────────────────────────────────
 
@@ -79,17 +81,16 @@ while IFS= read -r dep_line; do
         V8_BRANCH=$(cd "$REF_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
         V8_VERSION=$(awk '/<\/parent>/{f=1} f && /<version>/{print; exit}' "$REF_DIR/pom.xml" 2>/dev/null | awk -F'<version>' 'NF>1 { split($2, a, "<"); print a[1] }' | head -1 | tr -d '\r' || true)
     fi
-    # Published versions, release and snapshot, from the Lutece repositories: what the config-migrator will
-    # actually write in the pom. A dependency with none of the three is the blocker of phase A.4.
-    GPATH=$(echo "${DEP_GID:-fr.paris.lutece.plugins}" | tr . /)
-    V8_REL=$(curl -sf -m 8 "https://dev.lutece.paris.fr/maven_repository/$GPATH/$DEP_AID/maven-metadata.xml" 2>/dev/null | awk -F'<version>' 'NF>1 { split($2, a, "<"); print a[1] }' | tail -1 || true)
-    V8_SNAP=$(curl -sf -m 8 "https://dev.lutece.paris.fr/snapshot_repository/$GPATH/$DEP_AID/maven-metadata.xml" 2>/dev/null | awk -F'<version>' 'NF>1 { split($2, a, "<"); print a[1] }' | tail -1 || true)
+    # The latest Lutece 8 release and snapshot published in the Lutece repositories (latest-lutece.py: a version whose
+    # pom is a Lutece 8 one). A dependency with neither, and no reference clone, is the blocker of phase A.4.
+    V8_REL=$(latest release "${DEP_GID:-fr.paris.lutece.plugins}:$DEP_AID")
+    V8_SNAP=$(latest snapshot "${DEP_GID:-fr.paris.lutece.plugins}:$DEP_AID")
     [ "$V8_STATUS" = "to-resolve" ] && [ -n "$V8_REL$V8_SNAP" ] && V8_STATUS="published"
 
     DEPS_JSON="$DEPS_JSON{\"artifactId\":\"$DEP_AID\",\"version\":\"${DEP_VER:-unspecified}\",\"type\":\"${DEP_TYPE:-jar}\",\"v8Status\":\"$V8_STATUS\",\"latestRelease\":\"$V8_REL\",\"latestSnapshot\":\"$V8_SNAP\",\"v8Branch\":\"$V8_BRANCH\",\"v8Version\":\"$V8_VERSION\"}"
 done < <(
     # Extract dependency blocks for fr.paris.lutece
-    awk '/<dependency>/{block=""} /<dependency>/,/<\/dependency>/{block=block $0 "\n"} /<\/dependency>/{if(block ~ /fr\.paris\.lutece/) print block}' pom.xml
+    awk '/<dependency>/{block=""} /<dependency>/,/<\/dependency>/{block=block $0 " "} /<\/dependency>/{if(block ~ /fr\.paris\.lutece/) print block}' pom.xml
 )
 DEPS_JSON="$DEPS_JSON]"
 

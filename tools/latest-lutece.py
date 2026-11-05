@@ -3,16 +3,18 @@
 by hand anywhere.
 
 Usage:
-  latest-lutece.py snapshot [--line N] <groupId:artifactId> ...   the highest -SNAPSHOT whose pom has lutece-global-pom
-                                                                  N.x as parent (lutece-core: major N), with its last build
-  latest-lutece.py release [--line N] <groupId:artifactId> ...    the highest release of the N.x line
+  latest-lutece.py snapshot [--line N] <groupId:artifactId> ...   the highest -SNAPSHOT of the line N, with its last build
+  latest-lutece.py release [--line N] <groupId:artifactId> ...    the highest release of the line N
+
+A version is of the line N when its pom has lutece-global-pom N.x as parent; lutece-core, and an artefact whose
+parent is not lutece-global-pom (a parent pom, a BOM), by their own major N.
 
 N is the Lutece line, 8 by default (7 for an artefact a Lutece 7 site runs).
 
 Prints one line per artefact: groupId:artifactId:version[:build], the build being the timestamp-number of the last
 snapshot deployed (e.g. 20261002.102953-285). The repository's own <latest> is the last version deployed, not the
 highest: a v7 maintenance snapshot deployed after the v8 one would win, hence the check of each candidate's parent.
-The answers are cached an hour in ~/.cache/lutecepowers/latest-lutece.json. When the repository cannot be reached,
+The answers are cached an hour in ~/.cache/lutecepowers/latest-lutece-2.json. When the repository cannot be reached,
 the local Maven repository answers instead, with a warning on stderr. Exit 1 when an artefact has no version of the line.
 """
 import json
@@ -26,7 +28,7 @@ import urllib.request
 SNAPSHOTS = os.environ.get("LUTECE_SNAPSHOT_REPO", "https://dev.lutece.paris.fr/snapshot_repository")
 RELEASES = os.environ.get("LUTECE_RELEASE_REPO", "https://dev.lutece.paris.fr/maven_repository")
 M2 = pathlib.Path(os.environ.get("M2_REPO", pathlib.Path.home() / ".m2" / "repository"))
-CACHE = pathlib.Path(os.environ.get("LUTECE_LATEST_CACHE", pathlib.Path.home() / ".cache" / "lutecepowers" / "latest-lutece.json"))
+CACHE = pathlib.Path(os.environ.get("LUTECE_LATEST_CACHE", pathlib.Path.home() / ".cache" / "lutecepowers" / "latest-lutece-2.json"))
 TTL = 3600
 LINE = "8"
 
@@ -69,11 +71,11 @@ def parent_major(pom):
     return None
 
 
-def in_line(ga, version, pom):
-    """True when this version belongs to the Lutece line asked: lutece-core by its major, anything else by its parent."""
-    if ga.endswith(":lutece-core"):
-        return version.split(".")[0] == LINE
-    return parent_major(pom) == LINE
+def in_line(ga, version, read_pom):
+    """True when this version belongs to the Lutece line asked: by the lutece-global-pom parent of its pom (read_pom()
+    returns it), lutece-core and an artefact without that parent by their own major."""
+    major = None if ga.endswith(":lutece-core") else parent_major(read_pom())
+    return (major or version.split(".")[0]) == LINE
 
 
 def remote_snapshot(ga):
@@ -86,8 +88,7 @@ def remote_snapshot(ga):
         vmeta = fetch("%s/%s/%s/maven-metadata.xml" % (SNAPSHOTS, path(ga), v)) or ""
         ts = re.search(r"<timestamp>([^<]+)</timestamp>\s*<buildNumber>([^<]+)</buildNumber>", vmeta)
         build = "%s-%s" % ts.groups() if ts else ""
-        pom = fetch("%s/%s/%s/%s-%s.pom" % (SNAPSHOTS, path(ga), v, a, v.replace("SNAPSHOT", build))) if build else None
-        if in_line(ga, v, pom):
+        if in_line(ga, v, lambda: fetch("%s/%s/%s/%s-%s.pom" % (SNAPSHOTS, path(ga), v, a, v.replace("SNAPSHOT", build))) if build else None):
             return v, build
     return "", ""
 
@@ -97,8 +98,11 @@ def remote_release(ga):
     meta = fetch("%s/%s/maven-metadata.xml" % (RELEASES, path(ga)))
     if meta is None:
         return None
-    vs = [v for v in re.findall(r"<version>([^<]+)</version>", meta) if v.startswith(LINE + ".") and "SNAPSHOT" not in v]
-    return (max(vs, key=vkey), "") if vs else ("", "")
+    a = ga.split(":")[1]
+    for v in sorted({v for v in re.findall(r"<version>([^<]+)</version>", meta) if "SNAPSHOT" not in v}, key=vkey, reverse=True)[:12]:
+        if in_line(ga, v, lambda: fetch("%s/%s/%s/%s-%s.pom" % (RELEASES, path(ga), v, a, v))):
+            return v, ""
+    return "", ""
 
 
 def local(ga, kind):
@@ -109,8 +113,7 @@ def local(ga, kind):
         if (kind == "snapshot") != v.endswith("-SNAPSHOT"):
             continue
         poms = sorted((d / v).glob(a + "-*.pom"))
-        pom = poms[-1].read_text(errors="replace") if poms else ""
-        if (kind == "release" and v.startswith(LINE + ".")) or (kind == "snapshot" and in_line(ga, v, pom)):
+        if in_line(ga, v, lambda: poms[-1].read_text(errors="replace") if poms else ""):
             return v, ""
     return "", ""
 

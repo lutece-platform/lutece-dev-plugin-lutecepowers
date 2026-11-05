@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Checks tools/latest-lutece.py on fake repositories (file://): the latest Lutece 8 snapshot is the highest version whose
 # pom has lutece-global-pom 8.x as parent, not the repository's <latest> (a v7 maintenance snapshot deployed after it),
-# with its build; --line 7 asks for the Lutece 7 line; lutece-core is judged by its major; the release asked is the highest 8.x; an unreachable repository
-# falls back on the local Maven repository.
+# with its build; --line 7 asks for the Lutece 7 line; lutece-core is judged by its major, a plugin release by its
+# parent; an unreachable repository falls back on the local Maven repository.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOOL="$HERE/../../tools/latest-lutece.py"
@@ -37,7 +37,48 @@ check "a published beta is a release, beta-10 above beta-04" "$(run release fr.p
 printf '<metadata><versioning><versions><version>8.0.2</version><version>8.0.1</version><version>8.0.2-beta-10</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/lutece-core/maven-metadata.xml"
 rm -f "$T/cache.json"
 check "a release above its betas" "$(run release fr.paris.lutece:lutece-core)" "fr.paris.lutece:lutece-core:8.0.2"
+rel() {
+  local a=$1 v=$2 parent=$3 d="$R/fr/paris/lutece/plugins/$1"
+  mkdir -p "$d/$v"
+  printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>%s</version></parent><artifactId>%s</artifactId></project>\n' "$parent" "$a" > "$d/$v/$a-$v.pom"
+  printf '<metadata><versioning><versions>%s</versions></versioning></metadata>\n' "$(ls "$d" | grep -v xml | sed 's|.*|<version>&</version>|' | tr -d '\n')" > "$d/maven-metadata.xml"
+}
+rel plugin-demo 5.0.1 8.0.2; rel plugin-demo 6.0.0 7.0.2
+check "a plugin's release is of the line by its parent, not by its number" "$(run release fr.paris.lutece.plugins:plugin-demo)" "fr.paris.lutece.plugins:plugin-demo:5.0.1"
+rel plugin-v7only 4.0.14 7.0.2
+check "a plugin with Lutece 7 releases only has no Lutece 8 release" "$(run release fr.paris.lutece.plugins:plugin-v7only)" ""
 mkdir -p "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT"
 printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>8.0.2</version></parent></project>\n' > "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT/plugin-other-3.0.0-SNAPSHOT.pom"
 check "an unreachable repository falls back on the local Maven repository" "$(LUTECE_SNAPSHOT_REPO=file:///nowhere run snapshot fr.paris.lutece.plugins:plugin-other)" "fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT"
+P="$T/project"; mkdir -p "$P/src/java"
+cat > "$P/pom.xml" <<'POM'
+<project>
+    <parent>
+        <artifactId>lutece-global-pom</artifactId>
+        <groupId>fr.paris.lutece.tools</groupId>
+        <version>7.0.2</version>
+    </parent>
+    <artifactId>plugin-scanned</artifactId>
+    <packaging>lutece-plugin</packaging>
+    <version>1.0.0</version>
+    <dependencies>
+        <dependency>
+            <groupId>fr.paris.lutece.plugins</groupId>
+            <artifactId>plugin-demo</artifactId>
+            <version>[4.0.0,)</version>
+            <type>lutece-plugin</type>
+        </dependency>
+        <dependency>
+            <groupId>fr.paris.lutece.plugins</groupId>
+            <artifactId>plugin-v7only</artifactId>
+            <version>4.0.14</version>
+            <type>lutece-plugin</type>
+        </dependency>
+    </dependencies>
+</project>
+POM
+scan=$(cd "$P" && LUTECE_SNAPSHOT_REPO="file://$S" LUTECE_RELEASE_REPO="file://$R" LUTECE_LATEST_CACHE="$T/cache.json" M2_REPO="$T/m2" bash "$HERE/../../tools/scan-project.sh" . 2>/dev/null)
+dep() { echo "$scan" | python3 -c "import json, sys; d = [x for x in json.load(sys.stdin)['dependencies'] if x['artifactId'] == sys.argv[1]][0]; print(d['version'], d['type'], d['v8Status'], d['latestRelease'])" "$1"; }
+check "scan-project reads the version and the type of a dependency block, and a Lutece 8 release" "$(dep plugin-demo)" "[4.0.0,) lutece-plugin published 5.0.1"
+check "scan-project leaves to resolve a dependency with Lutece 7 releases only" "$(dep plugin-v7only)" "4.0.14 lutece-plugin to-resolve "
 [ $fail -eq 0 ] || exit 1

@@ -121,7 +121,7 @@ JAR="$(echo "$LINE" | sed -E 's/^ *([^:]*:){5}//; s/ -- .*$//; s/ *$//')"
 case "$JAR" in *.jar) ;; *) JAR="" ;; esac
 
 if [ "$SELF_PACKAGING" = "lutece-site" ]; then
-    RAISE="Import the latest published lutece-bom, which manages that core, or pin lutece-core at $V8_FLOOR_CORE or later; raise the parent to $V8_FLOOR_SITE_PARENT."
+    RAISE="Import a published lutece-bom that manages lutece-core $V8_FLOOR_CORE or later, or pin lutece-core at $V8_FLOOR_CORE or later; raise the parent to $V8_FLOOR_SITE_PARENT."
 else
     RAISE="Pin lutece-core at $V8_FLOOR_CORE or later, or keep the open range [${V8_DECLARED_CORE},) and refresh with mvn -U; raise the parent to $V8_FLOOR_PARENT."
 fi
