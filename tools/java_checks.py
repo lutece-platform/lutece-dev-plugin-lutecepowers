@@ -36,7 +36,8 @@ dp05  an import of a lutece-core type the v7 core had (develop7.x of the referen
       neither in its sources nor in the libraries it depends on that the references clone: where it moved when a v8
       type of the same simple name exists, else removed. SpringContextService is left to SP01.
 dp06  a lutece-core type, method or core_* table the project uses that the core's develop has and its last published
-      tag does not: a site on the published core fails (missing class, NoSuchMethodError, missing table).
+      tag (the highest lutece-core-<version> tag of the reference clone) does not: a site on the published core fails
+      (missing class, NoSuchMethodError, missing table). One NOT EVALUATED line when the clone has no readable tag.
 cd08  a CDI.current( ) lookup inside an instance method of a CDI bean: the bean injects what it looks up (@Inject;
       @Inject @Any Instance<X> for an extension point, an optional bean or a name known at run time).
 mv08  an @Pager whose defaultItemsPerPage names a property key that no properties file under webapp/WEB-INF/conf
@@ -534,6 +535,13 @@ def da03(root):
 CORE_SOURCES = os.path.join(os.environ.get("LUTECE_REFERENCES", os.path.expanduser("~/.lutece-references")), "lutece-core", "src", "java")
 
 
+@functools.lru_cache(maxsize=None)
+def vkey():
+    """The Maven version sort key of latest-lutece.py, next to this script."""
+    import runpy
+    return runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "latest-lutece.py"))["vkey"]
+
+
 def core_types_for_removal():
     """The lutece-core types deprecated for removal, with the replacement their @deprecated javadoc gives."""
     out = {}
@@ -615,9 +623,10 @@ def dp06(root):
     does not: the project needs a core nobody can install yet."""
     core = os.path.dirname(os.path.dirname(CORE_SOURCES))
     git = lambda *a: subprocess.run(["git", "-C", core, *a], capture_output=True, encoding="utf-8", errors="replace")
-    tag = git("describe", "--tags", "--abbrev=0").stdout.strip()
-    if not tag:
-        return []
+    tags = [t for t in git("tag", "--list", "lutece-core-[0-9]*").stdout.split() if "SNAPSHOT" not in t]
+    tag = max(tags, key=lambda t: vkey()(t.removeprefix("lutece-core-")), default="")
+    if not tag or git("cat-file", "-e", tag + "^{commit}").returncode:
+        return ["NOT EVALUATED: no readable lutece-core-<version> tag in %s (hooks/sync-references fetches them)" % core]
     methods = lambda text: set(re.findall(r"(?:public|protected)\s+(?:static\s+|final\s+|abstract\s+|synchronized\s+|<[^>]+>\s+)*[\w<>\[\],.? ]+?\s+(\w+)\s*\(", text or ""))
     tables = lambda text: set(re.findall(r"CREATE TABLE(?: IF NOT EXISTS)?\s+(core_\w+)", text or "", re.I))
     out, cache = [], {}

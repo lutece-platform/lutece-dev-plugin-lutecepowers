@@ -13,6 +13,7 @@ trap 'rm -rf "$T"' EXIT
 python3 - "$HERE/../../tools/site_check.py" "$T" <<'PY'
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import zipfile
@@ -148,6 +149,27 @@ w2 = war("w2", extra={"WEB-INF/conf/override/profiles-config.properties": "a.bas
                       "WEB-INF/plugins/plugins.dat": "forms.installed=1\nforms.pool=portal\n"})
 rc, out = run("check", s2, "--war", w2, "--bom", BOM, "--m2", ROOT / "m2")
 expect("a clean v8 site passes (exit 0, no FAIL, no WARN)", rc == 0 and "FAIL [" not in out and "WARN [" not in out, out)
+s3 = site("s3", pom_extra="""<dependency><groupId>fr.paris.lutece</groupId><artifactId>lutece-core</artifactId><version>[8.0.2-beta-04]</version><type>lutece-core</type></dependency>
+<dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-x</artifactId><version>[2.0.0]</version><type>lutece-plugin</type></dependency>
+<dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-y</artifactId><version>[2.0.0,)</version><type>lutece-plugin</type></dependency>""")
+rc, out = run("check", s3, "--war", w2, "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI03 warns on a lutece-core the imported BOM manages", "WARN [SI03]" in out, out)
+expect("SI07 warns on an open range", "WARN [SI07] pom.xml: plugin-y [2.0.0,)" in out, out)
+expect("SI07 leaves a hard pin [x]", "plugin-x" not in out and "lutece-core [8.0.2-beta-04]: a range" not in out, out)
+nobom = s3 / "pom.xml"
+nobom.write_text(re.sub(r"<dependencyManagement>.*?</dependencyManagement>", "", nobom.read_text(encoding="latin-1"), flags=re.S)
+                 .replace("</project>", "<properties><lutece.plugin-x.version>2.0.0</lutece.plugin-x.version></properties></project>"), encoding="latin-1")
+rc, out = run("check", s3, "--war", w2, "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI02 warns, not fails, on a site with no lutece-bom import", "WARN [SI02] pom.xml: no lutece-bom import" in out and "FAIL [SI02]" not in out, out)
+expect("SI03 leaves the lutece-core a site with no BOM pins", "[SI03]" not in out, out)
+expect("SI08 leaves a lutece.*.version property of a site with no BOM", "[SI08]" not in out, out)
+twice = nobom.read_text(encoding="latin-1").replace("<dependencies>", """<dependencyManagement><dependencies>
+<dependency><groupId>fr.paris.lutece.starters</groupId><artifactId>lutece-bom</artifactId><version>8.0.0</version><type>pom</type><scope>import</scope></dependency>
+<dependency><groupId>fr.paris.lutece.starters</groupId><artifactId>lutece-bom</artifactId><version>8.0.1</version><type>pom</type><scope>import</scope></dependency>
+</dependencies></dependencyManagement><dependencies>""", 1)
+nobom.write_text(twice, encoding="latin-1")
+rc, out = run("check", s3, "--war", w2, "--bom", BOM, "--m2", ROOT / "m2")
+expect("SI02 fails on two lutece-bom imports", "FAIL [SI02] pom.xml: 2 lutece-bom imports" in out, out)
 w3 = war("w3", extra={"WEB-INF/plugins/plugins.dat": "old.installed=1\n"})
 rc, out = run("check", s2, "--war", w3, "--bom", BOM, "--m2", ROOT / "m2")
 expect("a descriptor without its plugins.dat line is reported (SI40)", "WARN [SI40] plugins.dat: forms" in out, out)

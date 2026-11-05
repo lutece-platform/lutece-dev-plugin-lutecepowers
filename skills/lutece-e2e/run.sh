@@ -108,9 +108,9 @@ cmd_build() {
   if [ "$E2E_TARGET" = site ]; then
     mkdir -p artifacts
     bash "$BENCH/tools/check-v8-floor.sh" "$E2E_SRC" > artifacts/site-drift.txt 2>&1 && rm -f artifacts/site-drift.txt \
-      || { echo ">> the site ships an older Lutece than the bench tests: $(head -c 300 artifacts/site-drift.txt)"; }
+      || { echo ">> lutece-core of the site: $(head -c 300 artifacts/site-drift.txt)"; }
   else
-    bash "$BENCH/tools/check-v8-floor.sh" "$E2E_SRC" || [ $? -eq 2 ] || { echo "build: refused, the artefact is below the Lutece 8 level lutecepowers supports"; exit 10; }
+    bash "$BENCH/tools/check-v8-floor.sh" "$E2E_SRC" || [ $? -ne 1 ] || { echo "build: refused, the artefact is below the Lutece 8 level lutecepowers supports"; exit 10; }
   fi
   "${SERVER[@]}" build
   mkdir -p "$BENCH_STATE"

@@ -23,13 +23,15 @@ site (packaging lutece-site)
 
 1. Parent `lutece-site-pom` at the level of `tools/v8-floor.conf` or later (SI01).
 2. One `lutece-bom` import, scope import, type pom, at the version of the starter (SI02): a transitive version comes
-   from the BOM, not from the starter.
+   from the BOM, not from the starter. Without it, each transitive version comes from a plugin's range: the site
+   pins what those ranges would pull, `lutece-core` included.
 3. A managed artefact has no version and the `<type>` the BOM gives: without the type, Maven looks for the jar
    coordinates, finds no managed version and fails (`'dependencies.dependency.version' … is missing`) (SI05).
 4. A property `lutece.<artifact>.version` in the site pom does not change the imported BOM's version (SI08). To
    override one version: a `dependencyManagement` entry placed before the import, or a version on the dependency.
-5. An artefact outside the BOM carries a fixed version, not a range: `[x,)` resolves past the BOM (SI06, SI07).
-6. No `lutece-core` dependency (SI03): the starter or the pack brings the core the BOM manages.
+5. An artefact outside the BOM carries a fixed version (`x` or the hard pin `[x]`), not a range: `[x,)` resolves past
+   the BOM (SI06, SI07).
+6. With a BOM, no `lutece-core` dependency (SI03): the starter or the pack brings the core the BOM manages.
 7. A pack or a theme is declared with `<type>lutece-site</type>`; its webapp zip is unpacked after the plugins and
    before the site's own `webapp/`.
 

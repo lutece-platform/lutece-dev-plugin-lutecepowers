@@ -31,9 +31,18 @@ TTL = 3600
 LINE = "8"
 
 
+QUALIFIERS = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "milestone": 2, "m": 2, "rc": 3, "cr": 3, "snapshot": 4}
+
+
 def vkey(v):
-    """Sort key of a Maven version: numbers compared as numbers, qualifiers after."""
-    return [int(p) if p.isdigit() else -1 for p in re.split(r"[.-]", v.replace("-SNAPSHOT", ""))]
+    """Sort key of a Maven version: numbers compared as numbers; a qualified version (alpha, beta, milestone, rc,
+    SNAPSHOT, in that order) sorts before its release, two qualified ones by the numbers of their qualifier."""
+    base, _, qual = v.partition("-")
+    nums = [int(x) for x in re.findall(r"\d+", base)]
+    nums += [0] * (3 - len(nums))
+    q = qual.lower()
+    rank = QUALIFIERS.get(re.match(r"[a-z]*", q).group(0), 4) if q else 5
+    return nums, rank, [int(x) for x in re.findall(r"\d+", q)]
 
 
 def fetch(url):

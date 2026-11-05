@@ -50,7 +50,9 @@ jobs:
           . tools/v8-floor.conf
           REPOS=lutece::::https://dev.lutece.paris.fr/maven_repository,luteceSnapshot::::https://dev.lutece.paris.fr/snapshot_repository
           FM=$(curl -fsS https://repo1.maven.org/maven2/org/freemarker/freemarker/maven-metadata.xml | grep -oE '<version>2\.3\.[0-9]+</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1)
-          for a in fr.paris.lutece:lutece-core:RELEASE fr.paris.lutece:lutece-core:8.0.1 "fr.paris.lutece:lutece-core:$V8_FLOOR_CORE" "org.freemarker:freemarker:$FM"; do
+          SNAP=$(python3 tools/latest-lutece.py snapshot fr.paris.lutece:lutece-core | cut -d: -f3)
+          for a in fr.paris.lutece:lutece-core:RELEASE fr.paris.lutece:lutece-core:8.0.1 "fr.paris.lutece:lutece-core:$V8_FLOOR_CORE" "fr.paris.lutece:lutece-core:$SNAP" \
+                   "fr.paris.lutece.tools:lutece-site-pom:$V8_FLOOR_SITE_PARENT:pom" "org.freemarker:freemarker:$FM"; do
             mvn -B -q dependency:get -Dartifact="$a" -Dtransitive=false -DremoteRepositories="$REPOS"
           done
       - name: Tests

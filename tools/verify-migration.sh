@@ -413,6 +413,7 @@ fi
 case "$FLOOR_RC" in
     0) emit "PM14" "PASS" "lutece-core at or above the supported Lutece 8 level" 0 ;;
     1) emit "PM14" "FAIL" "lutece-core below the Lutece 8 level lutecepowers supports: the other checks judge the project against that level" 1 "$FLOOR_OUT" ;;
+    3) emit "PM14" "WARN" "lutece-core snapshot older than the latest build deployed: refresh it with mvn -U" 1 "$FLOOR_OUT" ;;
     *) emit "PM14" "WARN" "lutece-core level NOT EVALUATED" 1 "$FLOOR_OUT" ;;
 esac
 
@@ -619,7 +620,8 @@ else emit "DP05" "FAIL" "lutece-core type gone in v8 (moved, or removed with not
 DP06_MATCHES=$(jc dp06)
 COUNT=0; [ -n "$DP06_MATCHES" ] && COUNT=$(echo "$DP06_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "DP06" "PASS" "No core API or table of an unpublished core" 0
-else emit "DP06" "WARN" "Needs a core not published yet: say it in the hand-over, raise the lutece-core lower bound to the first release that carries it once there is one" "$COUNT" "$DP06_MATCHES"; fi
+elif [[ "$DP06_MATCHES" == "NOT EVALUATED"* ]]; then emit "DP06" "WARN" "Core API of an unpublished core NOT EVALUATED" 1 "$DP06_MATCHES"
+else emit "DP06" "WARN" "Needs a core not published yet: say it in the hand-over, raise lutece-core (its pinned version or its range lower bound) to the first release that carries it once there is one" "$COUNT" "$DP06_MATCHES"; fi
 # PI01: a plugin init( ) that initialises a service; in v8 the service observes the startup itself (java_checks.py pi01).
 PI01_MATCHES=$(jc pi01)
 COUNT=0; [ -n "$PI01_MATCHES" ] && COUNT=$(echo "$PI01_MATCHES" | wc -l)

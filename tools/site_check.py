@@ -692,8 +692,11 @@ def check_pom(site, bom, out, m2=None):
     else:
         out.passed("SI01", f"parent lutece-site-pom {ver}")
     boms = [i for i in site.managed_imports() if i["artifactId"] == "lutece-bom"]
-    if len(boms) != 1:
-        out.add("FAIL", "SI02", f"pom.xml: {len(boms)} lutece-bom import(s); a v8 site imports lutece-bom once (scope import, type pom)")
+    if not boms:
+        out.add("WARN", "SI02", "pom.xml: no lutece-bom import; the transitive Lutece versions come from the ranges of each plugin, "
+                "not from the BOM: import the latest published lutece-bom (scope import, type pom), or pin what those ranges pull")
+    elif len(boms) > 1:
+        out.add("FAIL", "SI02", f"pom.xml: {len(boms)} lutece-bom imports; a v8 site imports lutece-bom once (scope import, type pom)")
     else:
         starters = [d for d in site.dependencies() if d["artifactId"].endswith("-starter")]
         other = [d for d in starters if d["version"] != boms[0]["version"]]
@@ -702,16 +705,16 @@ def check_pom(site, bom, out, m2=None):
                     + ": the BOM wins over the starter's own versions, keep both on the same version")
         else:
             out.passed("SI02", f"lutece-bom {boms[0]['version']} imported once")
-    managed = bom_versions(bom) if bom else {}
+    managed = bom_versions(bom) if bom and boms else {}
     for d in site.dependencies():
         a, v, t = d["artifactId"], d["version"], d["type"] or "jar"
-        if a == "lutece-core":
+        if a == "lutece-core" and boms:
             out.add("WARN", "SI03", "pom.xml: lutece-core declared; the starter brings the core the BOM manages")
         if a in managed and v:
             out.add("WARN", "SI04", f"pom.xml: {a} {v} while lutece-bom manages it ({managed[a][0]}): drop the version")
         if a in managed and t != managed[a][1]:
             out.add("FAIL", "SI05", f"pom.xml: {a} declared as type {t}, lutece-bom manages it as {managed[a][1]}: the version is not found")
-        if v and v[0] in "[(":
+        if v and v[0] in "[(" and "," in v:
             out.add("WARN", "SI07", f"pom.xml: {a} {v}: a range; a v8 site pins what the BOM does not manage")
     inherited = parent_managed(site.path / "pom.xml", m2) if m2 else None
     for where, d in [("", d) for d in site.dependencies()] + [(f" (profile {i})", d) for i, d in site.profile_dependencies()]:
@@ -723,7 +726,7 @@ def check_pom(site, bom, out, m2=None):
         else:
             out.add("WARN", "SI06", f"pom.xml{where}: {a} has no version and lutece-bom does not manage it; the parent poms are not in the local repository to tell")
     dead = [k for k in site.properties() if re.fullmatch(r"lutece\.[\w.\-]+\.version", k)]
-    if dead:
+    if boms and dead:
         out.add("WARN", "SI08", "pom.xml: " + ", ".join(dead) + ": a lutece.*.version property of the site does not change the version the imported BOM manages")
     profiles = [p for p in site.find("m:profiles/m:profile") if p.find(".//m:defaultConfDirectory", POM_NS) is not None]
     confs = [d.name for d in (site.path / "src/conf").iterdir() if d.is_dir() and d.name != "default"] if (site.path / "src/conf").is_dir() else []

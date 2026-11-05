@@ -62,8 +62,8 @@ ENABLED_LINES=$(echo "$ENABLE" | tr ',' '\n' | sed 's/[[:space:]]//g; s/$/.insta
 awk -v repl="$ENABLED_LINES" '{gsub(/@@PUT_PLUGINS_ENABLED@@/, repl)}1' \
     "$HARNESS/webapp/WEB-INF/plugins/plugins.dat.tpl" > "$OUT/webapp/WEB-INF/plugins/plugins.dat"
 
-# --- Refuse a plugin below the supported Lutece 8 level (exit 2 = undecidable, let the build decide) ---
-bash "$FLOOR" "$OUT" || [ $? -eq 2 ] || { echo "ERROR: the site resolves a lutece-core below the Lutece 8 level lutecepowers supports" >&2; exit 1; }
+# --- Refuse a plugin below the supported Lutece 8 level (exit 2 = undecidable, 3 = stale snapshot: let the build go) ---
+bash "$FLOOR" "$OUT" || [ $? -ne 1 ] || { echo "ERROR: the site resolves a lutece-core below the Lutece 8 level lutecepowers supports" >&2; exit 1; }
 
 # --- Hazelcast jar (server-level, for Liberty sessionCache) ---
 echo ">> fetch hazelcast $HZ_VERSION"

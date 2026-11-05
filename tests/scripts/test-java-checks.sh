@@ -398,4 +398,16 @@ dp06=$(LUTECE_REFERENCES="$R6" python3 "$S/java_checks.py" dp06 "$T/dp6")
 check "DP06 names a core method of develop only" 'echo "$dp06" | grep -q "A.java:2: PortletHtmlContent.renderTemplate on the core.s develop, in no published core (last: lutece-core-8.0.2-beta-03)"'
 check "DP06 names a core table of develop only" 'echo "$dp06" | grep -q "init_core_x.sql: table core_portlet_template created by the core.s develop only"'
 check "DP06 leaves a core method the published core has" '[ -z "$(LUTECE_REFERENCES="$R6" python3 "$S/java_checks.py" dp06 "$T/dp6old")" ]'
+R7="$T/refs7"; C7="$R7/lutece-core"
+mkdir -p "$C7/$P6" "$C7/src/sql"
+( cd "$C7" && git init -q && printf 'public abstract class PortletHtmlContent {\n    public String getHtmlContent( ) { return null; }\n}\n' > "$P6/PortletHtmlContent.java" \
+  && printf 'CREATE TABLE core_portlet (id int);\n' > src/sql/create_db_lutece_core.sql && git add -A && git -c user.name=t -c user.email=t@t commit -qm r1 \
+  && git tag lutece-core-8.0.2-beta-10 && git tag lutece-core-8.0.1 && git tag lutece-core-8.0.2-beta-04 \
+  && git checkout -q --orphan dev && printf 'public abstract class PortletHtmlContent {\n    public String getHtmlContent( ) { return null; }\n    protected String renderTemplate( String s ) { return s; }\n}\n' > "$P6/PortletHtmlContent.java" \
+  && git add -A && git -c user.name=t -c user.email=t@t commit -qm dev )
+dp06=$(LUTECE_REFERENCES="$R7" python3 "$S/java_checks.py" dp06 "$T/dp6")
+check "DP06 reads the highest published tag when it is no ancestor of the clone's head" 'echo "$dp06" | grep -q "renderTemplate on the core.s develop, in no published core (last: lutece-core-8.0.2-beta-10)"'
+( cd "$C7" && git tag -d lutece-core-8.0.2-beta-10 lutece-core-8.0.1 lutece-core-8.0.2-beta-04 >/dev/null )
+dp06=$(LUTECE_REFERENCES="$R7" python3 "$S/java_checks.py" dp06 "$T/dp6")
+check "DP06 says NOT EVALUATED on a clone with no published tag" '[ "$(echo "$dp06" | cut -c1-13)" = "NOT EVALUATED" ] && [ "$(echo "$dp06" | wc -l)" = 1 ]'
 if [ $fail = 0 ]; then echo "PASS: ST04, MV01, SP03, HM01, HM02, CS03, WB10, WB11, DA03, DP04, PI01, RL01, PD02, GI01, CD08, MV08, WG01, PD03, DP01, DP05 and DP06 fire on their defect and stay silent on sound code"; else echo "$st04"; echo "$mv01"; echo "$hm"; exit 1; fi

@@ -9,7 +9,8 @@ Jakarta namespace of `web.xml` (WB01).
 
 ## pom.xml
 
-- Parent: the latest released `lutece-global-pom` 8.x (PM06); `lutece-core` range `[8.0.0,)`; version: the next major
+- Parent: the latest released `lutece-global-pom` 8.x (PM06); `lutece-core`: the range `[8.0.0,)`, or for a plugin
+  only one site ships, the version that site runs, at the latest published core or later (PM14); version: the next major
   from a pre-v8 start (PV02), the same in the descriptor (PV01), `min-core-version` 8.0.0 (WB04). What each parent
   manages: `rules/dependency-convergence.md`.
 - Lutece dependencies: the `v8Version` of each dependency in `.migration/scan.json`, else the version of

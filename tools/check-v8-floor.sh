@@ -2,11 +2,13 @@
 # check-v8-floor.sh — refuses a project whose lutece-core is below the Lutece 8 level lutecepowers supports.
 # Usage: check-v8-floor.sh [project_root] [--offline]
 #
-# The floor is v8-floor.conf, next to this script. The core is the one Maven resolves (`dependency:list`), so a
-# range, a property or a parent-managed version all end on the artifact the build really uses; a snapshot is dated
-# by its jar. The project that is lutece-core itself is judged on its own version. The verdict is cached in target/
-# until pom.xml or the resolved jar changes.
-# Exit 0 = at or above the floor, 1 = below (diagnosis on stderr), 2 = undecidable (no pom, Maven failure).
+# The floor is v8-floor.conf, next to this script: the latest published lutece-core. The core is the one Maven
+# resolves (`dependency:list`), so a range, a pinned version, a BOM or a parent-managed version all end on the
+# artifact the build really uses. A resolved snapshot of the latest snapshot version is dated by its jar against the
+# latest build deployed. The project that is lutece-core itself is judged on its own version. The verdict is cached in
+# target/ until pom.xml, the resolved jar, the floor or the latest snapshot build changes.
+# Exit 0 = at or above the floor, 1 = below (diagnosis on stderr), 2 = undecidable (no pom, Maven failure),
+# 3 = at or above the floor on a snapshot older than the latest build deployed (diagnosis on stderr).
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/python.sh"
 
@@ -15,7 +17,7 @@ MVN_FLAGS=(-B -q)
 for arg in "$@"; do
     case "$arg" in
         --offline) MVN_FLAGS+=(-o) ;;
-        -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
         *) ROOT="$arg" ;;
     esac
 done
@@ -23,16 +25,23 @@ ROOT="$(cd "$ROOT" && pwd)"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "$HERE/v8-floor.conf"
+if [ -z "${V8_SNAPSHOT_CORE+set}" ] || [ -z "${V8_SNAPSHOT_CORE_BUILD+set}" ]; then
+    IFS=: read -r _ _ _snap _build <<< "$(python3 "$HERE/latest-lutece.py" snapshot fr.paris.lutece:lutece-core 2>/dev/null)"
+    V8_SNAPSHOT_CORE=${V8_SNAPSHOT_CORE-$_snap}
+    V8_SNAPSHOT_CORE_BUILD=${V8_SNAPSHOT_CORE_BUILD-${_build:+${_build:0:4}-${_build:4:2}-${_build:6:2}}}
+fi
 CACHE="$ROOT/target/.v8-floor"
-FLOOR="lutece-core $V8_FLOOR_CORE built on $V8_FLOOR_CORE_BUILD or later"
+FLOOR="lutece-core $V8_FLOOR_CORE or later"
+KEY="$FLOOR; snapshot $V8_SNAPSHOT_CORE $V8_SNAPSHOT_CORE_BUILD"
 
 # Prints a message on stderr.
 say() { echo "$*" >&2; }
 
-# Prints what a verdict depends on beside the pom: the floor and the jar as a file (inode, size, modification time).
-# Maven refreshing a snapshot writes a new file but may keep the old modification time, so a date alone is not enough.
+# Prints what a verdict depends on beside the pom: the floor, the latest snapshot build and the jar as a file (inode,
+# size, modification time). Maven refreshing a snapshot writes a new file but may keep the old modification time, so
+# a date alone is not enough.
 stamp() {
-    python3 - "${1:-}" "$FLOOR" <<'PY'
+    python3 - "${1:-}" "$KEY" <<'PY'
 import os, sys
 try:
     s = os.stat(sys.argv[1]) if sys.argv[1] else None
@@ -51,15 +60,13 @@ verdict() {
     exit "$1"
 }
 
-# Compares two Maven versions and prints -1, 0 or 1; a qualified version (-SNAPSHOT, -beta-NN) sorts before its release.
+# Compares two Maven versions in the order of latest-lutece.py and prints -1, 0 or 1: a qualified version (-beta-NN,
+# -SNAPSHOT) sorts before its release.
 vcmp() {
-    python3 - "$1" "$2" <<'PY'
-import re, sys
-def key(v):
-    base, _, qual = v.partition("-")
-    nums = ([int(x) for x in re.findall(r"\d+", base)] + [0, 0, 0])[:3]
-    return nums, (1 if not qual else 0), qual.lower()
-a, b = key(sys.argv[1]), key(sys.argv[2])
+    python3 - "$HERE/latest-lutece.py" "$1" "$2" <<'PY'
+import runpy, sys
+vkey = runpy.run_path(sys.argv[1])["vkey"]
+a, b = vkey(sys.argv[2]), vkey(sys.argv[3])
 print((a > b) - (a < b))
 PY
 }
@@ -87,10 +94,11 @@ import re, sys
 own = re.sub(r"<parent>.*?</parent>", "", open(sys.argv[1], encoding="utf-8", errors="replace").read(), flags=re.S)
 a = re.search(r"<artifactId>\s*([^<\s]+)", own)
 v = re.search(r"<version>\s*([^<\s]+)", own)
-print((a.group(1) if a else "-") + " " + (v.group(1) if v else "-"))
+p = re.search(r"<packaging>\s*([^<\s]+)", own)
+print(" ".join(m.group(1) if m else "-" for m in (a, v, p)))
 PY
 )"
-read -r SELF_ID SELF_V <<< "$SELF"
+read -r SELF_ID SELF_V SELF_PACKAGING <<< "$SELF"
 
 if [ "$SELF_ID" = "lutece-core" ]; then
     [ "$(vcmp "$SELF_V" "$V8_FLOOR_CORE")" -ge 0 ] || verdict 1 "V8FLOOR refused: this is lutece-core $SELF_V; lutecepowers supports $FLOOR."
@@ -112,13 +120,18 @@ CORE_V="$(echo "$LINE" | awk -F: '{print $4}')"
 JAR="$(echo "$LINE" | sed -E 's/^ *([^:]*:){5}//; s/ -- .*$//; s/ *$//')"
 case "$JAR" in *.jar) ;; *) JAR="" ;; esac
 
+if [ "$SELF_PACKAGING" = "lutece-site" ]; then
+    RAISE="Import the latest published lutece-bom, which manages that core, or pin lutece-core at $V8_FLOOR_CORE or later; raise the parent to $V8_FLOOR_SITE_PARENT."
+else
+    RAISE="Pin lutece-core at $V8_FLOOR_CORE or later, or keep the open range [${V8_DECLARED_CORE},) and refresh with mvn -U; raise the parent to $V8_FLOOR_PARENT."
+fi
 [ "$(vcmp "$CORE_V" "$V8_FLOOR_CORE")" -ge 0 ] \
-    || verdict 1 "V8FLOOR refused: the project resolves lutece-core $CORE_V; lutecepowers supports $FLOOR. Keep lutece-core on the open range [${V8_DECLARED_CORE},) so it resolves the latest core, refresh with mvn -U, and raise the parent to $V8_FLOOR_PARENT." "$JAR"
+    || verdict 1 "V8FLOOR refused: the project resolves lutece-core $CORE_V; lutecepowers supports $FLOOR, the latest published. $RAISE" "$JAR"
 
-if [ "$CORE_V" = "$V8_FLOOR_CORE" ] && [ -f "$JAR" ]; then
+if [ "$CORE_V" = "$V8_SNAPSHOT_CORE" ] && [ -n "$V8_SNAPSHOT_CORE_BUILD" ] && [ -f "$JAR" ]; then
     BUILT="$(built_on "$JAR")"
-    [[ "$BUILT" < "$V8_FLOOR_CORE_BUILD" ]] \
-        && verdict 1 "V8FLOOR refused: lutece-core $CORE_V resolves to a build of $BUILT ($JAR); lutecepowers supports $FLOOR. Refresh it with mvn -U, or move aside a locally installed core." "$JAR"
+    [[ "$BUILT" < "$V8_SNAPSHOT_CORE_BUILD" ]] \
+        && verdict 3 "V8FLOOR stale: lutece-core $CORE_V resolves to a build of $BUILT ($JAR), older than the one deployed on $V8_SNAPSHOT_CORE_BUILD. Refresh it with mvn -U, or move aside a locally installed core." "$JAR"
     verdict 0 "V8FLOOR ok: lutece-core $CORE_V built on $BUILT" "$JAR"
 fi
 verdict 0 "V8FLOOR ok: lutece-core $CORE_V" "$JAR"

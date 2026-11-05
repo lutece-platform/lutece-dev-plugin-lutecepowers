@@ -7,7 +7,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 V="$HERE/../../tools/verify-migration.sh"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-export V8_FLOOR_CORE=8.0.2 V8_FLOOR_CORE_BUILD=2026-01-01 V8_FLOOR_PARENT=8.0.2 V8_FLOOR_SITE_PARENT=8.0.4
+export V8_FLOOR_CORE=8.0.2 V8_SNAPSHOT_CORE="" V8_SNAPSHOT_CORE_BUILD="" V8_FLOOR_PARENT=8.0.2 V8_FLOOR_SITE_PARENT=8.0.4
 fails=0
 
 mkdir -p "$T/bin" "$T/p/target" "$T/p/webapp/WEB-INF/templates/admin/plugins/myplugin"
@@ -24,7 +24,7 @@ cat > "$T/p/pom.xml" <<'POM'
 </project>
 POM
 printf '<@pageContainer></@pageContainer>\n' > "$T/p/webapp/WEB-INF/templates/admin/plugins/myplugin/manage.html"
-printf '1\t\t-|lutece-core 8.0.2 built on 2026-01-01 or later\tV8FLOOR refused: lutece-core 8.0.1\n' > "$T/p/target/.v8-floor"
+printf '1\t\t-|lutece-core 8.0.2 or later; snapshot  \tV8FLOOR refused: lutece-core 8.0.1\n' > "$T/p/target/.v8-floor"
 touch -d '2099-01-01' "$T/p/target/.v8-floor"
 
 ( cd "$T/p" && PATH="$T/bin:$PATH" bash "$V" . ) 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$T/out"
@@ -43,6 +43,12 @@ expect '(PASS|FAIL|WARN) \[TS09\]'
 expect '^RESULT: MIGRATION INCOMPLETE'
 grep -q "verify-migration stopped" "$T/out" && { echo "FAIL: the verification stopped"; fails=$((fails + 1)); }
 
-[ "$fails" -eq 0 ] && { echo "PASS: a core below the floor and a project that does not assemble are findings, the verification runs to its end"; exit 0; }
+printf '3\t\t-|lutece-core 8.0.2 or later; snapshot  \tV8FLOOR stale: lutece-core 8.0.3-SNAPSHOT\n' > "$T/p/target/.v8-floor"
+touch -d '2099-01-01' "$T/p/target/.v8-floor"
+( cd "$T/p" && PATH="$T/bin:$PATH" bash "$V" . ) 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$T/out"
+expect 'WARN \[PM14\] lutece-core snapshot older than the latest build deployed'
+expect 'V8FLOOR stale: lutece-core 8.0.3-SNAPSHOT'
+
+[ "$fails" -eq 0 ] && { echo "PASS: a core below the floor and a project that does not assemble are findings, a stale snapshot a warning, the verification runs to its end"; exit 0; }
 cat "$T/out" | head -40
 exit 1
