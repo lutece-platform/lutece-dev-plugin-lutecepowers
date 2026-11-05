@@ -14,6 +14,7 @@ python3 - "$HERE/../../tools/site_check.py" "$T" <<'PY'
 import os
 import pathlib
 import re
+import runpy
 import subprocess
 import sys
 import zipfile
@@ -415,6 +416,30 @@ rc, out = run("check", site("fresh-ds-site"), "--war", ds)
 expect("SI89 fails a theme install inserting a datastore key the core install inserts, without DELETE",
        "FAIL [SI89] WEB-INF/classes/sql/themes/t/init_db_theme_t.sql: inserts portal.a that" in out, out)
 expect("SI89 leaves a key deleted first, an upsert and a key of the theme's own", "portal.b" not in out and "portal.c" not in out and "theme.t.own" not in out, out)
+
+
+tool = runpy.run_path(TOOL)
+site_parent, bom_version = tool["latest_release"]("fr.paris.lutece.tools:lutece-site-pom"), tool["latest_release"]("fr.paris.lutece.starters:lutece-bom")
+maven = ROOT / "maven-site"
+write(maven / "pom.xml", f"""<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+<parent><groupId>fr.paris.lutece.tools</groupId><artifactId>lutece-site-pom</artifactId><version>{site_parent}</version></parent>
+<artifactId>maven-site</artifactId><packaging>lutece-site</packaging><version>1.0.0</version>
+<repositories><repository><id>lutece</id><url>https://dev.lutece.paris.fr/maven_repository</url></repository></repositories>
+<dependencyManagement><dependencies><dependency><groupId>fr.paris.lutece.starters</groupId><artifactId>lutece-bom</artifactId>
+<version>{bom_version}</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement>
+<dependencies><dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-mylutece</artifactId><version>0.0.1</version><type>lutece-plugin</type></dependency></dependencies></project>""")
+rc, out = run("check", maven)
+bom_pom = pathlib.Path.home() / f".m2/repository/fr/paris/lutece/starters/lutece-bom/{bom_version}/lutece-bom-{bom_version}.pom"
+if "NOT EVALUATED" in out or not bom_pom.is_file():
+    print(f"SKIP: Maven cannot build the effective pom of a site on lutece-site-pom {site_parent} and lutece-bom {bom_version}, the Maven cases are not run")
+else:
+    managed = tool["bom_versions"](bom_pom)["plugin-mylutece"][0]
+    expect("SI04 cites the version the imported BOM manages, as Maven computes it",
+           f"WARN [SI04] pom.xml: plugin-mylutece 0.0.1 while the imported BOM or the parent poms manage it ({managed})" in out, out)
+    (maven / "pom.xml").write_text((maven / "pom.xml").read_text().replace(
+        "</dependencies></project>", "<dependency><groupId>x</groupId><artifactId>nobody-manages</artifactId></dependency></dependencies></project>"))
+    rc, out = run("check", maven)
+    expect("SI06 fails on the dependency Maven finds without a version", "FAIL [SI06] pom.xml: nobody-manages has no version" in out, out)
 
 sys.exit(1 if failures else 0)
 PY

@@ -55,13 +55,16 @@ empty value masks the key: the property is absent, the caller's default applies.
 seven root files, then plugins/, themes/, override/, override/plugins/, each directory in file system order.
 """
 import argparse
+import functools
 import json
 import os
 import pathlib
 import re
+import runpy
 import struct
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
@@ -598,12 +601,15 @@ def pom_properties(root):
 
 
 def version_key(v):
-    """A sortable key for a Maven version: numeric parts, then a qualifier rank below the release."""
-    m = re.match(r"(\d+(?:\.\d+)*)(.*)", v)
-    nums = tuple(int(x) for x in m.group(1).split(".")) if m else (0,)
-    rest = (m.group(2) if m else v).lower()
-    rank = 0 if not rest else (-1 if "snapshot" in rest else -2)
-    return nums + (0,) * (4 - len(nums)), rank, rest
+    """The Maven sort key of a version, numbers first, as latest-lutece.py orders them (a release above its alpha, beta,
+    rc and SNAPSHOT, beta-10 above beta-9)."""
+    return latest_lutece_vkey()(v)
+
+
+@functools.lru_cache(maxsize=None)
+def latest_lutece_vkey():
+    """The vkey function of latest-lutece.py, next to this script."""
+    return runpy.run_path(str(pathlib.Path(__file__).with_name("latest-lutece.py")))["vkey"]
 
 
 def bom_versions(pom_path):
@@ -666,11 +672,38 @@ def parent_managed(pom_path, m2):
     return managed
 
 
-def latest_local_bom(m2):
-    """The newest lutece-bom 8 pom found in a local Maven repository, or None."""
-    base = pathlib.Path(m2) / "fr/paris/lutece/starters/lutece-bom"
-    poms = [p for p in base.glob("8.*/lutece-bom-8*.pom") if not re.search(r"-\d{8}\.\d{6}-\d+\.pom$", p.name)]
-    return max(poms, key=lambda p: version_key(p.parent.name)) if poms else None
+def effective_managed(site_dir, m2=None):
+    """artifactId -> (version, type) of the dependencyManagement Maven computes for a site (mvn help:effective-pom: the
+    parents, the BOMs imported, the site's own entries), resolved through the user's Maven settings, in the local
+    repository m2 when given; (None, Maven's error lines) when Maven cannot build the model."""
+    with tempfile.TemporaryDirectory() as tmp:
+        target = os.path.join(tmp, "effective-pom.xml")
+        cmd = ["mvn", "-B", "-q", "-f", str(pathlib.Path(site_dir) / "pom.xml"), "help:effective-pom", "-Doutput=" + target]
+        if m2:
+            cmd.append("-Dmaven.repo.local=" + str(m2))
+        try:
+            r = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=900)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return None, [str(e)]
+        if r.returncode or not os.path.isfile(target):
+            lines = [l.strip() for l in (r.stdout + r.stderr).splitlines() if "[ERROR]" in l or "[FATAL]" in l]
+            return None, lines or ["mvn help:effective-pom exits %d" % r.returncode]
+        deps = ET.parse(target).getroot().findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS)
+        return {child_text(d, "artifactId"): (child_text(d, "version"), child_text(d, "type") or "jar") for d in deps}, []
+
+
+def pom_management(site, bom, boms, m2):
+    """What the site's dependencies are judged against: (artifactId -> (version, type) for SI04 and SI05, empty without
+    a lutece-bom import; the artifactIds managed at all, None when unknown; Maven's errors when the model fails). With
+    --bom, that file and the parent poms of m2; otherwise what Maven computes (effective_managed)."""
+    if bom:
+        return (bom_versions(bom) if boms else {}), (parent_managed(site.path / "pom.xml", m2) if m2 else None), []
+    eff, errors = effective_managed(site.path, m2)
+    if eff is None:
+        return {}, None, errors
+    own = {child_text(d, "artifactId") for d in site.find("m:dependencyManagement/m:dependencies/m:dependency")
+           if child_text(d, "scope") != "import"}
+    return ({a: x for a, x in eff.items() if a not in own} if boms else {}), set(eff), []
 
 
 def floor_parent():
@@ -678,9 +711,14 @@ def floor_parent():
     lutece-site-pom 8.x (latest-lutece.py, as tools/v8-floor.conf reads it)."""
     if os.environ.get("V8_FLOOR_SITE_PARENT"):
         return os.environ["V8_FLOOR_SITE_PARENT"]
-    r = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("latest-lutece.py")), "release",
-                        "fr.paris.lutece.tools:lutece-site-pom"], capture_output=True, encoding="utf-8", errors="replace")
-    return r.stdout.strip().split(":")[2] if r.stdout.count(":") >= 2 else "8.0.0"
+    return latest_release("fr.paris.lutece.tools:lutece-site-pom") or "8.0.0"
+
+
+def latest_release(ga):
+    """The latest Lutece 8 release latest-lutece.py reads for groupId:artifactId, or None."""
+    r = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("latest-lutece.py")), "release", ga],
+                       capture_output=True, encoding="utf-8", errors="replace")
+    return r.stdout.strip().split(":")[2] if r.stdout.count(":") >= 2 else None
 
 
 def check_pom(site, bom, out, m2=None):
@@ -705,21 +743,26 @@ def check_pom(site, bom, out, m2=None):
                     + ": the BOM wins over the starter's own versions, keep both on the same version")
         else:
             out.passed("SI02", f"lutece-bom {boms[0]['version']} imported once")
-    managed = bom_versions(bom) if bom and boms else {}
+    managed, inherited, broken = pom_management(site, bom, boms, m2)
     for d in site.dependencies():
         a, v, t = d["artifactId"], d["version"], d["type"] or "jar"
         if a == "lutece-core" and boms:
             out.add("WARN", "SI03", "pom.xml: lutece-core declared; the starter brings the core the BOM manages")
         if a in managed and v:
-            out.add("WARN", "SI04", f"pom.xml: {a} {v} while lutece-bom manages it ({managed[a][0]}): drop the version")
+            out.add("WARN", "SI04", f"pom.xml: {a} {v} while the imported BOM or the parent poms manage it ({managed[a][0]}): drop the version")
         if a in managed and t != managed[a][1]:
-            out.add("FAIL", "SI05", f"pom.xml: {a} declared as type {t}, lutece-bom manages it as {managed[a][1]}: the version is not found")
+            out.add("FAIL", "SI05", f"pom.xml: {a} declared as type {t}, the imported BOM or the parent poms manage it as {managed[a][1]}: the version is not found")
         if v and v[0] in "[(" and "," in v:
             out.add("WARN", "SI07", f"pom.xml: {a} {v}: a range; a v8 site pins what the BOM does not manage")
-    inherited = parent_managed(site.path / "pom.xml", m2) if m2 else None
+    missing = sorted(set(re.findall(r"'dependencies\.dependency\.version' for [^:\s]+:([^:\s]+):\S+ is missing", "\n".join(broken))))
+    for a in missing:
+        out.add("FAIL", "SI06", f"pom.xml: {a} has no version and neither lutece-bom nor the parent poms manage it: the pom does not load (Maven)")
+    if broken:
+        out.add("WARN", "SI04", "pom.xml: the managed versions are NOT EVALUATED (SI04, SI05): "
+                + ("the pom does not load (SI06)" if missing else f"mvn help:effective-pom fails: {broken[0]}"))
     for where, d in [("", d) for d in site.dependencies()] + [(f" (profile {i})", d) for i, d in site.profile_dependencies()]:
         a = d["artifactId"]
-        if not managed or d["version"] or a in managed or (inherited is not None and a in inherited):
+        if broken or not (managed or inherited) or d["version"] or a in managed or (inherited is not None and a in inherited):
             continue
         if inherited is not None or d["scope"] not in ("provided", "test"):
             out.add("FAIL", "SI06", f"pom.xml{where}: {a} has no version and neither lutece-bom nor the parent poms manage it: the pom does not load")
@@ -1743,8 +1786,8 @@ def main():
     c.add_argument("--before")
     c.add_argument("--before-ref")
     c.add_argument("--decisions")
-    c.add_argument("--m2", default=os.path.expanduser("~/.m2/repository"))
-    c.add_argument("--bom")
+    c.add_argument("--m2", help="the local Maven repository Maven resolves the site in (default: the one of the user's settings)")
+    c.add_argument("--bom", help="judge the site against this lutece-bom pom (and the parent poms of --m2) instead of asking Maven")
     g = sub.add_parser("gate")
     g.add_argument("war")
     g.add_argument("--bom")
@@ -1819,15 +1862,14 @@ def main():
         return 0
     site = Site(a.site)
     war = War(a.war) if a.war else None
-    bom = a.bom or latest_local_bom(a.m2)
     out = Findings()
-    check_pom(site, bom, out, a.m2)
+    check_pom(site, a.bom, out, a.m2)
     check_build(site, out)
     check_secrets(site, out)
     check_conf(site, war, out)
     if war:
         check_plugins(site, war, out)
-    check_webapp(site, war, a.m2, out)
+    check_webapp(site, war, a.m2 or os.path.expanduser("~/.m2/repository"), out)
     if a.before:
         if not war:
             out.add("FAIL", "SI80", "--before needs --war: the two assembled sites are compared")

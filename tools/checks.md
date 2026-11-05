@@ -404,9 +404,9 @@ each difference (`- key|plugin|file|profile <id>: <reason>`). Rules and evidence
 | SI01 | FAIL | Parent other than `lutece-site-pom` at `V8_FLOOR_SITE_PARENT` or later | (custom check) | pom.xml |
 | SI02 | FAIL / WARN | More than one `lutece-bom` import (FAIL); no `lutece-bom` import: the transitive versions come from the plugins' ranges (WARN); BOM and starter on different versions (WARN) | (custom check) | pom.xml |
 | SI03 | WARN | `lutece-core` declared by a site that imports `lutece-bom` | (custom check) | pom.xml |
-| SI04 | WARN | Version written for an artefact the BOM manages | (custom check, needs the BOM pom) | pom.xml |
-| SI05 | FAIL | Artefact declared with a `<type>` other than the BOM's: no managed version is found | (custom check) | pom.xml |
-| SI06 | FAIL / WARN | Artefact without version that neither the BOM nor the parent poms (with the BOMs they import) manage, in the dependencies or a profile, whatever the scope: the pom does not load (WARN for a provided or test one when the parent poms are not in the local repository) | (custom check, parents read in --m2) | pom.xml |
+| SI04 | WARN | Version written for an artefact the imported BOM or the parent poms manage, as Maven computes them (`mvn help:effective-pom`; with `--bom`, that file); NOT EVALUATED when Maven cannot build the model | (custom check, Maven) | pom.xml |
+| SI05 | FAIL | Artefact declared with a `<type>` other than the managed one: no managed version is found | (custom check, Maven) | pom.xml |
+| SI06 | FAIL / WARN | Artefact without version that nothing manages, in the dependencies (Maven's own error) or a profile, whatever the scope: the pom does not load (with `--bom`: WARN for a provided or test one when the parent poms are not in --m2) | (custom check, Maven) | pom.xml |
 | SI07 | WARN | Version range on a dependency (`[x,)`, `[x,y)`); a hard pin `[x]` is a fixed version | `[` or `(` with a comma | pom.xml |
 | SI08 | WARN | `lutece.*.version` property: it does not change the version the imported BOM manages | (custom check) | pom.xml |
 | SI09 | FAIL | `src/conf/<env>/` or a profile with `defaultConfDirectory`: not copied by `lutece-site-pom` | (custom check) | src/conf, pom.xml |
