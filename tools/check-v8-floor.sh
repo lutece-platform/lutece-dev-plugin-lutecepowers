@@ -120,13 +120,15 @@ CORE_V="$(echo "$LINE" | awk -F: '{print $4}')"
 JAR="$(echo "$LINE" | sed -E 's/^ *([^:]*:){5}//; s/ -- .*$//; s/ *$//')"
 case "$JAR" in *.jar) ;; *) JAR="" ;; esac
 
-if [ "$SELF_PACKAGING" = "lutece-site" ]; then
-    RAISE="Import a published lutece-bom that manages lutece-core $V8_FLOOR_CORE or later, or pin lutece-core at $V8_FLOOR_CORE or later; raise the parent to $V8_FLOOR_SITE_PARENT."
-else
-    RAISE="Pin lutece-core at $V8_FLOOR_CORE or later, or keep the open range [${V8_DECLARED_CORE},) and refresh with mvn -U; raise the parent to $V8_FLOOR_PARENT."
+if [ "$(vcmp "$CORE_V" "$V8_FLOOR_CORE")" -lt 0 ]; then
+    if [ "$SELF_PACKAGING" = "lutece-site" ]; then
+        BOM=$(python3 "$HERE/latest-lutece.py" bom fr.paris.lutece.starters:lutece-bom 2>/dev/null | cut -d: -f3)
+        RAISE="Import lutece-bom ${BOM:-<the published one that manages the highest lutece-core>}, or pin lutece-core at $V8_FLOOR_CORE or later; raise the parent to $V8_FLOOR_SITE_PARENT."
+    else
+        RAISE="Pin lutece-core at $V8_FLOOR_CORE or later, or keep the open range [${V8_DECLARED_CORE},) and refresh with mvn -U; raise the parent to $V8_FLOOR_PARENT."
+    fi
+    verdict 1 "V8FLOOR refused: the project resolves lutece-core $CORE_V; lutecepowers supports $FLOOR, the latest published. $RAISE" "$JAR"
 fi
-[ "$(vcmp "$CORE_V" "$V8_FLOOR_CORE")" -ge 0 ] \
-    || verdict 1 "V8FLOOR refused: the project resolves lutece-core $CORE_V; lutecepowers supports $FLOOR, the latest published. $RAISE" "$JAR"
 
 if [ "$CORE_V" = "$V8_SNAPSHOT_CORE" ] && [ -n "$V8_SNAPSHOT_CORE_BUILD" ] && [ -f "$JAR" ]; then
     BUILT="$(built_on "$JAR")"

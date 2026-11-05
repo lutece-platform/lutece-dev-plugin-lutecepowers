@@ -711,12 +711,12 @@ def floor_parent():
     lutece-site-pom 8.x (latest-lutece.py, as tools/v8-floor.conf reads it)."""
     if os.environ.get("V8_FLOOR_SITE_PARENT"):
         return os.environ["V8_FLOOR_SITE_PARENT"]
-    return latest_release("fr.paris.lutece.tools:lutece-site-pom") or "8.0.0"
+    return latest_lutece("release", "fr.paris.lutece.tools:lutece-site-pom") or "8.0.0"
 
 
-def latest_release(ga):
-    """The latest Lutece 8 release latest-lutece.py reads for groupId:artifactId, or None."""
-    r = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("latest-lutece.py")), "release", ga],
+def latest_lutece(kind, ga):
+    """The version latest-lutece.py reads for groupId:artifactId (kind: release, snapshot or bom), or None."""
+    r = subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("latest-lutece.py")), kind, ga],
                        capture_output=True, encoding="utf-8", errors="replace")
     return r.stdout.strip().split(":")[2] if r.stdout.count(":") >= 2 else None
 
@@ -731,8 +731,10 @@ def check_pom(site, bom, out, m2=None):
         out.passed("SI01", f"parent lutece-site-pom {ver}")
     boms = [i for i in site.managed_imports() if i["artifactId"] == "lutece-bom"]
     if not boms:
+        target = latest_lutece("bom", "fr.paris.lutece.starters:lutece-bom")
         out.add("WARN", "SI02", "pom.xml: no lutece-bom import; the transitive Lutece versions come from the ranges of each plugin, "
-                "not from the BOM: import the latest published lutece-bom (scope import, type pom), or pin what those ranges pull")
+                f"not from the BOM: import lutece-bom {target or '<the published one that manages the highest lutece-core>'} "
+                "(scope import, type pom), or pin what those ranges pull")
     elif len(boms) > 1:
         out.add("FAIL", "SI02", f"pom.xml: {len(boms)} lutece-bom imports; a v8 site imports lutece-bom once (scope import, type pom)")
     else:

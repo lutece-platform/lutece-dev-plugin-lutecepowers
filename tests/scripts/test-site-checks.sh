@@ -419,7 +419,7 @@ expect("SI89 leaves a key deleted first, an upsert and a key of the theme's own"
 
 
 tool = runpy.run_path(TOOL)
-site_parent, bom_version = tool["latest_release"]("fr.paris.lutece.tools:lutece-site-pom"), tool["latest_release"]("fr.paris.lutece.starters:lutece-bom")
+site_parent, bom_version = tool["latest_lutece"]("release", "fr.paris.lutece.tools:lutece-site-pom"), tool["latest_lutece"]("bom", "fr.paris.lutece.starters:lutece-bom")
 maven = ROOT / "maven-site"
 write(maven / "pom.xml", f"""<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
 <parent><groupId>fr.paris.lutece.tools</groupId><artifactId>lutece-site-pom</artifactId><version>{site_parent}</version></parent>

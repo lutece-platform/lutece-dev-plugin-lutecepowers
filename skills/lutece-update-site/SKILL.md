@@ -65,7 +65,9 @@ such a url into a file of the toolkit or of the site. `.migration/before.tree` (
 the gate say which direct dependency brings each blocker: an artefact only a replaced layer brought is a plugin
 decision, not a blocker.
 
-The target BOM is the one the site will import (the latest released `lutece-bom` 8, or the one the user names).
+The target BOM is the one the site will import: the one the user names, else the one
+`python3 ${LUTECEPOWERS_ROOT}/tools/latest-lutece.py bom fr.paris.lutece.starters:lutece-bom` gives (the published
+`lutece-bom` that manages the highest `lutece-core`; the highest BOM number is not always the newest one).
 Each Lutece artefact the before war ships, and each lutece-site dependency of the pom (theme, pack), gets a status:
 
 | Status | Meaning | What to do |

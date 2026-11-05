@@ -2,7 +2,7 @@
 # Checks tools/latest-lutece.py on fake repositories (file://): the latest Lutece 8 snapshot is the highest version whose
 # pom has lutece-global-pom 8.x as parent, not the repository's <latest> (a v7 maintenance snapshot deployed after it),
 # with its build; --line 7 asks for the Lutece 7 line; lutece-core is judged by its major, a plugin release by its
-# parent; an unreachable repository falls back on the local Maven repository.
+# parent; a BOM by the core it manages; an unreachable repository falls back on the local Maven repository.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOOL="$HERE/../../tools/latest-lutece.py"
@@ -47,6 +47,14 @@ rel plugin-demo 5.0.1 8.0.2; rel plugin-demo 6.0.0 7.0.2
 check "a plugin's release is of the line by its parent, not by its number" "$(run release fr.paris.lutece.plugins:plugin-demo)" "fr.paris.lutece.plugins:plugin-demo:5.0.1"
 rel plugin-v7only 4.0.14 7.0.2
 check "a plugin with Lutece 7 releases only has no Lutece 8 release" "$(run release fr.paris.lutece.plugins:plugin-v7only)" ""
+bom() {
+  local v=$1 core=$2 d="$R/fr/paris/lutece/starters/lutece-bom"
+  mkdir -p "$d/$v"
+  printf '<project><artifactId>lutece-bom</artifactId><properties><lutece.core.version>%s</lutece.core.version></properties><dependencyManagement><dependencies><dependency><groupId>fr.paris.lutece</groupId><artifactId>lutece-core</artifactId><version>${lutece.core.version}</version></dependency></dependencies></dependencyManagement></project>\n' "$core" > "$d/$v/lutece-bom-$v.pom"
+  printf '<metadata><versioning><release>8.0.0-RC-01</release><versions>%s</versions></versioning></metadata>\n' "$(ls "$d" | grep -v xml | sed 's|.*|<version>&</version>|' | tr -d '\n')" > "$d/maven-metadata.xml"
+}
+bom 8.0.0-RC-01 8.0.0; bom 8.0.0-beta-01 8.0.2-beta-03; bom 8.0.0-beta-02 8.0.2-beta-03
+check "the BOM that manages the highest core, the highest of those with the same core, not the highest number" "$(run bom fr.paris.lutece.starters:lutece-bom)" "fr.paris.lutece.starters:lutece-bom:8.0.0-beta-02"
 mkdir -p "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT"
 printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>8.0.2</version></parent></project>\n' > "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT/plugin-other-3.0.0-SNAPSHOT.pom"
 check "an unreachable repository falls back on the local Maven repository" "$(LUTECE_SNAPSHOT_REPO=file:///nowhere run snapshot fr.paris.lutece.plugins:plugin-other)" "fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT"
