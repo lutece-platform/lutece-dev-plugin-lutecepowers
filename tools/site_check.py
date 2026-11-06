@@ -612,15 +612,21 @@ def latest_lutece_vkey():
     return runpy.run_path(str(pathlib.Path(__file__).with_name("latest-lutece.py")))["vkey"]
 
 
+def plain_version(v, props):
+    """A declared version as one version: its properties resolved, a hard pin [x] read as x."""
+    v = re.sub(r"\$\{([^}]+)\}", lambda m: props.get(m.group(1), m.group(0)), v)
+    return v[1:-1] if re.fullmatch(r"\[[^,\]]+\]", v) else v
+
+
 def bom_versions(pom_path):
-    """artifactId -> (version, type) managed by a lutece-bom pom, properties resolved."""
+    """(groupId, artifactId) -> (version, type) managed by a lutece-bom pom, properties resolved."""
     root = ET.parse(pom_path).getroot()
     props = pom_properties(root)
     out = {}
     for d in root.findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS):
         v = child_text(d, "version")
         v = props.get(v[2:-1], v) if v.startswith("${") else v
-        out[child_text(d, "artifactId")] = (v, child_text(d, "type") or "jar")
+        out[(child_text(d, "groupId"), child_text(d, "artifactId"))] = (v, child_text(d, "type") or "jar")
     return out
 
 
@@ -673,7 +679,7 @@ def parent_managed(pom_path, m2):
 
 
 def effective_managed(site_dir, m2=None):
-    """artifactId -> (version, type) of the dependencyManagement Maven computes for a site (mvn help:effective-pom: the
+    """(groupId, artifactId) -> (version, type) of the dependencyManagement Maven computes for a site (mvn help:effective-pom: the
     parents, the BOMs imported, the site's own entries), resolved through the user's Maven settings, in the local
     repository m2 when given; (None, Maven's error lines) when Maven cannot build the model."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -689,21 +695,23 @@ def effective_managed(site_dir, m2=None):
             lines = [l.strip() for l in (r.stdout + r.stderr).splitlines() if "[ERROR]" in l or "[FATAL]" in l]
             return None, lines or ["mvn help:effective-pom exits %d" % r.returncode]
         deps = ET.parse(target).getroot().findall("m:dependencyManagement/m:dependencies/m:dependency", POM_NS)
-        return {child_text(d, "artifactId"): (child_text(d, "version"), child_text(d, "type") or "jar") for d in deps}, []
+        return {(child_text(d, "groupId"), child_text(d, "artifactId")): (child_text(d, "version"), child_text(d, "type") or "jar")
+                for d in deps}, []
 
 
 def pom_management(site, bom, boms, m2):
-    """What the site's dependencies are judged against: (artifactId -> (version, type) for SI04 and SI05, empty without
-    a lutece-bom import; the artifactIds managed at all, None when unknown; Maven's errors when the model fails). With
-    --bom, that file and the parent poms of m2; otherwise what Maven computes (effective_managed)."""
+    """What the site's dependencies are judged against: ((groupId, artifactId) -> (version, type) for SI04 and SI05,
+    empty without a lutece-bom import; the artifactIds managed at all, None when unknown; Maven's errors when the model
+    fails). With --bom, that file and the parent poms of m2 (the user's local repository by default); otherwise what
+    Maven computes (effective_managed)."""
     if bom:
-        return (bom_versions(bom) if boms else {}), (parent_managed(site.path / "pom.xml", m2) if m2 else None), []
+        return (bom_versions(bom) if boms else {}), parent_managed(site.path / "pom.xml", m2 or os.path.expanduser("~/.m2/repository")), []
     eff, errors = effective_managed(site.path, m2)
     if eff is None:
         return {}, None, errors
-    own = {child_text(d, "artifactId") for d in site.find("m:dependencyManagement/m:dependencies/m:dependency")
+    own = {(child_text(d, "groupId"), child_text(d, "artifactId")) for d in site.find("m:dependencyManagement/m:dependencies/m:dependency")
            if child_text(d, "scope") != "import"}
-    return ({a: x for a, x in eff.items() if a not in own} if boms else {}), set(eff), []
+    return ({k: x for k, x in eff.items() if k not in own} if boms else {}), {a for _, a in eff}, []
 
 
 def floor_parent():
@@ -738,39 +746,44 @@ def check_pom(site, bom, out, m2=None):
     elif len(boms) > 1:
         out.add("FAIL", "SI02", f"pom.xml: {len(boms)} lutece-bom imports; a v8 site imports lutece-bom once (scope import, type pom)")
     else:
-        starters = [d for d in site.dependencies() if d["artifactId"].endswith("-starter")]
-        other = [d for d in starters if d["version"] != boms[0]["version"]]
+        props = site.properties()
+        starters = [d for d in site.dependencies() if d["artifactId"].endswith("-starter") and d["version"]]
+        other = [d for d in starters if plain_version(d["version"], props) != plain_version(boms[0]["version"], props)]
         if other:
             out.add("WARN", "SI02", "pom.xml: lutece-bom " + boms[0]["version"] + " but " + ", ".join(f"{d['artifactId']} {d['version']}" for d in other)
                     + ": the BOM wins over the starter's own versions, keep both on the same version")
         else:
             out.passed("SI02", f"lutece-bom {boms[0]['version']} imported once")
     managed, inherited, broken = pom_management(site, bom, boms, m2)
+    source = f"the BOM file {bom}" if bom else "the imported BOM or the parent poms"
     for d in site.dependencies():
         a, v, t = d["artifactId"], d["version"], d["type"] or "jar"
+        m = managed.get((d["groupId"], a))
         if a == "lutece-core" and boms:
             out.add("WARN", "SI03", "pom.xml: lutece-core declared; the starter brings the core the BOM manages")
-        if a in managed and v:
-            out.add("WARN", "SI04", f"pom.xml: {a} {v} while the imported BOM or the parent poms manage it ({managed[a][0]}): drop the version")
-        if a in managed and t != managed[a][1]:
-            out.add("FAIL", "SI05", f"pom.xml: {a} declared as type {t}, the imported BOM or the parent poms manage it as {managed[a][1]}: the version is not found")
+        if m and v:
+            out.add("WARN", "SI04", f"pom.xml: {a} {v} while {source} manage it ({m[0]}): drop the version")
+        if m and not v and t != m[1]:
+            out.add("FAIL", "SI05", f"pom.xml: {a} declared as type {t}, {source} manage it as {m[1]}: the version is not found")
         if v and v[0] in "[(" and "," in v:
             out.add("WARN", "SI07", f"pom.xml: {a} {v}: a range; a v8 site pins what the BOM does not manage")
-    missing = sorted(set(re.findall(r"'dependencies\.dependency\.version' for [^:\s]+:([^:\s]+):\S+ is missing", "\n".join(broken))))
+    unresolved = [l for l in broken if "Non-resolvable" in l]
+    missing = [] if unresolved else sorted(set(re.findall(r"'dependencies\.dependency\.version' for [^:\s]+:([^:\s]+):\S+ is missing", "\n".join(broken))))
     for a in missing:
         out.add("FAIL", "SI06", f"pom.xml: {a} has no version and neither lutece-bom nor the parent poms manage it: the pom does not load (Maven)")
     if broken:
-        out.add("WARN", "SI04", "pom.xml: the managed versions are NOT EVALUATED (SI04, SI05): "
-                + ("the pom does not load (SI06)" if missing else f"mvn help:effective-pom fails: {broken[0]}"))
+        out.add("WARN", "SI04", "pom.xml: the managed versions are NOT EVALUATED (SI04, SI05" + (", SI06" if unresolved else "") + "): "
+                + ("the pom does not load (SI06)" if missing else f"mvn help:effective-pom fails: {(unresolved or broken)[0]}"))
     for where, d in [("", d) for d in site.dependencies()] + [(f" (profile {i})", d) for i, d in site.profile_dependencies()]:
         a = d["artifactId"]
-        if broken or not (managed or inherited) or d["version"] or a in managed or (inherited is not None and a in inherited):
+        if broken or not (managed or inherited) or d["version"] or (d["groupId"], a) in managed or (inherited is not None and a in inherited):
             continue
         if inherited is not None or d["scope"] not in ("provided", "test"):
             out.add("FAIL", "SI06", f"pom.xml{where}: {a} has no version and neither lutece-bom nor the parent poms manage it: the pom does not load")
         else:
             out.add("WARN", "SI06", f"pom.xml{where}: {a} has no version and lutece-bom does not manage it; the parent poms are not in the local repository to tell")
-    dead = [k for k in site.properties() if re.fullmatch(r"lutece\.[\w.\-]+\.version", k)]
+    bom_props = set(re.findall(r"\$\{([^}]+)\}", " ".join(b["version"] for b in boms)))
+    dead = [k for k in site.properties() if re.fullmatch(r"lutece\.[\w.\-]+\.version", k) and k not in bom_props]
     if boms and dead:
         out.add("WARN", "SI08", "pom.xml: " + ", ".join(dead) + ": a lutece.*.version property of the site does not change the version the imported BOM manages")
     profiles = [p for p in site.find("m:profiles/m:profile") if p.find(".//m:defaultConfDirectory", POM_NS) is not None]
@@ -1720,7 +1733,7 @@ def gate(war_dir, bom, offline, site_dir=None, m2=None, extra=()):
     """Prints the Lutece 8 status of every Lutece artefact of an assembled site, and of the lutece-site dependencies
     (theme, pack) of its pom, which leave no jar in the war; returns 1 when one has no Lutece 8 version."""
     war = War(war_dir)
-    managed = bom_versions(bom) if bom else {}
+    managed = {a: x for (_, a), x in bom_versions(bom).items()} if bom else {}
     known = successors()
     tree = pathlib.Path(str(war_dir).rstrip("/") + ".tree")
     via = direct_parents(tree) if tree.is_file() else {}

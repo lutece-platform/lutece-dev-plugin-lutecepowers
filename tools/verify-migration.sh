@@ -414,6 +414,7 @@ case "$FLOOR_RC" in
     0) emit "PM14" "PASS" "lutece-core at or above the supported Lutece 8 level" 0 ;;
     1) emit "PM14" "FAIL" "lutece-core below the Lutece 8 level lutecepowers supports: the other checks judge the project against that level" 1 "$FLOOR_OUT" ;;
     3) emit "PM14" "WARN" "lutece-core snapshot older than the latest build deployed: refresh it with mvn -U" 1 "$FLOOR_OUT" ;;
+    4) emit "PM14" "WARN" "lutece-core pinned: declare the lowest core the project needs as a range [X,), the site or its BOM chooses the version" 1 "$FLOOR_OUT" ;;
     *) emit "PM14" "WARN" "lutece-core level NOT EVALUATED" 1 "$FLOOR_OUT" ;;
 esac
 

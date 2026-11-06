@@ -623,10 +623,10 @@ def dp06(root):
     does not: the project needs a core nobody can install yet."""
     core = os.path.dirname(os.path.dirname(CORE_SOURCES))
     git = lambda *a: subprocess.run(["git", "-C", core, *a], capture_output=True, encoding="utf-8", errors="replace")
-    tags = [t for t in git("tag", "--list", "lutece-core-[0-9]*").stdout.split() if "SNAPSHOT" not in t]
+    tags = [t for t in git("tag", "--list", "lutece-core-8.*").stdout.split() if "SNAPSHOT" not in t]
     tag = max(tags, key=lambda t: vkey()(t.removeprefix("lutece-core-")), default="")
     if not tag or git("cat-file", "-e", tag + "^{commit}").returncode:
-        return ["NOT EVALUATED: no readable lutece-core-<version> tag in %s (hooks/sync-references fetches them)" % core]
+        return ["NOT EVALUATED: no readable lutece-core-8.x tag in %s (hooks/sync-references fetches them)" % core]
     methods = lambda text: set(re.findall(r"(?:public|protected)\s+(?:static\s+|final\s+|abstract\s+|synchronized\s+|<[^>]+>\s+)*[\w<>\[\],.? ]+?\s+(\w+)\s*\(", text or ""))
     tables = lambda text: set(re.findall(r"CREATE TABLE(?: IF NOT EXISTS)?\s+(core_\w+)", text or "", re.I))
     out, cache = [], {}

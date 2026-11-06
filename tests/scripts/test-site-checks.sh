@@ -15,6 +15,7 @@ import os
 import pathlib
 import re
 import runpy
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -432,14 +433,27 @@ rc, out = run("check", maven)
 bom_pom = pathlib.Path.home() / f".m2/repository/fr/paris/lutece/starters/lutece-bom/{bom_version}/lutece-bom-{bom_version}.pom"
 if "NOT EVALUATED" in out or not bom_pom.is_file():
     print(f"SKIP: Maven cannot build the effective pom of a site on lutece-site-pom {site_parent} and lutece-bom {bom_version}, the Maven cases are not run")
+    if os.environ.get("CI"):
+        failures.append("the Maven cases are skipped on CI")
 else:
-    managed = tool["bom_versions"](bom_pom)["plugin-mylutece"][0]
+    managed = tool["bom_versions"](bom_pom)[("fr.paris.lutece.plugins", "plugin-mylutece")][0]
     expect("SI04 cites the version the imported BOM manages, as Maven computes it",
            f"WARN [SI04] pom.xml: plugin-mylutece 0.0.1 while the imported BOM or the parent poms manage it ({managed})" in out, out)
     (maven / "pom.xml").write_text((maven / "pom.xml").read_text().replace(
         "</dependencies></project>", "<dependency><groupId>x</groupId><artifactId>nobody-manages</artifactId></dependency></dependencies></project>"))
     rc, out = run("check", maven)
     expect("SI06 fails on the dependency Maven finds without a version", "FAIL [SI06] pom.xml: nobody-manages has no version" in out, out)
+    pom = (maven / "pom.xml").read_text().replace(f"<version>{bom_version}</version><type>pom</type>", "<version>${lutece.bom.version}</version><type>pom</type>")
+    pom = pom.replace("<dependencies><dependency>", f"<dependencies><dependency><groupId>fr.paris.lutece.starters</groupId><artifactId>forms-starter</artifactId><version>[{bom_version}]</version><type>pom</type></dependency><dependency>", 1)
+    (maven / "pom.xml").write_text(pom.replace("</project>", f"<properties><lutece.bom.version>{bom_version}</lutece.bom.version></properties></project>"))
+    rc, out = run("check", maven)
+    expect("SI02 reads a starter pinned [x] and a BOM version from a property as the version they name", "[SI02] pom.xml" not in out, out)
+    expect("SI08 leaves the property that sets the BOM's own version", "[SI08]" not in out, out)
+    (maven / "pom.xml").write_text((maven / "pom.xml").read_text().replace(f"<lutece.bom.version>{bom_version}<", "<lutece.bom.version>8.0.0-nope<"))
+    rc, out = run("check", maven)
+    expect("a BOM Maven cannot resolve leaves SI04 to SI06 NOT EVALUATED, with no SI06 FAIL",
+           "NOT EVALUATED" in out and "Non-resolvable" in out and "FAIL [SI06]" not in out, out)
+    shutil.rmtree(bom_pom.parent.parent / "8.0.0-nope", ignore_errors=True)
 
 sys.exit(1 if failures else 0)
 PY

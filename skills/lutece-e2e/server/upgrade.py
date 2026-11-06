@@ -152,7 +152,7 @@ def stop(bench):
 def liquibase7():
     """groupId:artifactId:version of the plugin-liquibase of the Lutece 7 line, read in the repositories."""
     r = sh(sys.executable, BENCH / "tools/latest-lutece.py", "snapshot", "--line", "7", LIQUIBASE)
-    if r.returncode or not r.stdout.strip():
+    if r.returncode not in (0, 3) or not r.stdout.strip():
         raise SystemExit("upgrade: no plugin-liquibase of the Lutece 7 line found: " + r.stderr.strip())
     return ":".join(r.stdout.strip().split(":")[:3])
 

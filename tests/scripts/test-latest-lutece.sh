@@ -2,7 +2,8 @@
 # Checks tools/latest-lutece.py on fake repositories (file://): the latest Lutece 8 snapshot is the highest version whose
 # pom has lutece-global-pom 8.x as parent, not the repository's <latest> (a v7 maintenance snapshot deployed after it),
 # with its build; --line 7 asks for the Lutece 7 line; lutece-core is judged by its major, a plugin release by its
-# parent; a BOM by the core it manages; an unreachable repository falls back on the local Maven repository.
+# parent; a BOM by the core it manages; an unreachable repository falls back on the local Maven repository (exit 3,
+# never cached), an artefact it does not know is read in the local Maven repository.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 TOOL="$HERE/../../tools/latest-lutece.py"
@@ -24,7 +25,7 @@ printf '<metadata><versioning><versions><version>7.1.10-SNAPSHOT</version><versi
 printf '<metadata><versioning><snapshot><timestamp>20261002.102953</timestamp><buildNumber>285</buildNumber></snapshot></versioning></metadata>\n' > "$S/fr/paris/lutece/lutece-core/8.0.2-SNAPSHOT/maven-metadata.xml"
 mkdir -p "$R/fr/paris/lutece/tools/lutece-global-pom"
 printf '<metadata><versioning><versions><version>7.0.2</version><version>8.0.1</version><version>8.0.2</version><version>8.0.3-SNAPSHOT</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml"
-run() { LUTECE_SNAPSHOT_REPO="file://$S" LUTECE_RELEASE_REPO="file://$R" LUTECE_LATEST_CACHE="$T/cache.json" M2_REPO="$T/m2" python3 "$TOOL" "$@" 2>/dev/null; }
+run() { LUTECE_SNAPSHOT_REPO="${LUTECE_SNAPSHOT_REPO:-file://$S}" LUTECE_RELEASE_REPO="${LUTECE_RELEASE_REPO:-file://$R}" LUTECE_LATEST_CACHE="$T/cache.json" M2_REPO="$T/m2" python3 "$TOOL" "$@" 2>/dev/null; }
 fail=0
 check() { if [ "$2" = "$3" ]; then echo "PASS: $1"; else echo "FAIL: $1 (expected $3, got $2)"; fail=1; fi; }
 check "the highest Lutece 8 snapshot, not the last one deployed" "$(run snapshot fr.paris.lutece.plugins:plugin-demo)" "fr.paris.lutece.plugins:plugin-demo:5.0.1-SNAPSHOT:20261001.101010-7"
@@ -54,10 +55,21 @@ bom() {
   printf '<metadata><versioning><release>8.0.0-RC-01</release><versions>%s</versions></versioning></metadata>\n' "$(ls "$d" | grep -v xml | sed 's|.*|<version>&</version>|' | tr -d '\n')" > "$d/maven-metadata.xml"
 }
 bom 8.0.0-RC-01 8.0.0; bom 8.0.0-beta-01 8.0.2-beta-03; bom 8.0.0-beta-02 8.0.2-beta-03
-check "the BOM that manages the highest core, the highest of those with the same core, not the highest number" "$(run bom fr.paris.lutece.starters:lutece-bom)" "fr.paris.lutece.starters:lutece-bom:8.0.0-beta-02"
+check "the BOM that manages the highest core, the highest of those with the same core, not the highest number" "$(run bom fr.paris.lutece.starters:lutece-bom)" "fr.paris.lutece.starters:lutece-bom:8.0.0-beta-02:8.0.2-beta-03"
 mkdir -p "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT"
 printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>8.0.2</version></parent></project>\n' > "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.0-SNAPSHOT/plugin-other-3.0.0-SNAPSHOT.pom"
-check "an unreachable repository falls back on the local Maven repository" "$(LUTECE_SNAPSHOT_REPO=file:///nowhere run snapshot fr.paris.lutece.plugins:plugin-other)" "fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT"
+check "an unreachable repository falls back on the local Maven repository, exit 3" "$(LUTECE_SNAPSHOT_REPO=http://127.0.0.1:9 run snapshot fr.paris.lutece.plugins:plugin-other; echo "rc=$?")" $'fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT\nrc=3'
+check "an artefact the Lutece repository does not know (a private one) is read in the local Maven repository" "$(run snapshot fr.paris.lutece.plugins:plugin-other; echo "rc=$?")" $'fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT\nrc=0'
+mkdir -p "$T/m2/fr/paris/lutece/plugins/plugin-other/3.0.1-SNAPSHOT"; rm -f "$T/cache.json"
+check "a local version without its pom is not a version" "$(LUTECE_SNAPSHOT_REPO=http://127.0.0.1:9 run snapshot fr.paris.lutece.plugins:plugin-other)" "fr.paris.lutece.plugins:plugin-other:3.0.0-SNAPSHOT"
+rm -f "$T/cache.json"; bom 8.0.0-beta-03 8.0.2-beta-04
+mv "$R/fr/paris/lutece/starters/lutece-bom/8.0.0-beta-03/lutece-bom-8.0.0-beta-03.pom" "$T/bom.pom"
+mkdir "$R/fr/paris/lutece/starters/lutece-bom/8.0.0-beta-03/lutece-bom-8.0.0-beta-03.pom"
+check "a BOM pom that cannot be read makes the repository unreachable, not a BOM without core" "$(run bom fr.paris.lutece.starters:lutece-bom; echo "rc=$?")" "rc=3"
+rmdir "$R/fr/paris/lutece/starters/lutece-bom/8.0.0-beta-03/lutece-bom-8.0.0-beta-03.pom"; mv "$T/bom.pom" "$R/fr/paris/lutece/starters/lutece-bom/8.0.0-beta-03/lutece-bom-8.0.0-beta-03.pom"
+check "an unreachable answer is not cached" "$(run bom fr.paris.lutece.starters:lutece-bom)" "fr.paris.lutece.starters:lutece-bom:8.0.0-beta-03:8.0.2-beta-04"
+order=$(python3 -c "import runpy, sys; k = runpy.run_path(sys.argv[1])['vkey']; print(sorted(sys.argv[2:], key=k))" "$TOOL" 8.0.10 8.0.2 8.0.2-SNAPSHOT 8.0.2-beta-04 8.0.2-beta-04-SNAPSHOT 8.0.2-RC-01 8.0.2-beta-10 8.0.2-beta-9 8.0.2-alpha-1)
+check "the Maven order: numbers as numbers, alpha < beta < rc < snapshot < release, a qualified snapshot below its version" "$order" "['8.0.2-alpha-1', '8.0.2-beta-04-SNAPSHOT', '8.0.2-beta-04', '8.0.2-beta-9', '8.0.2-beta-10', '8.0.2-RC-01', '8.0.2-SNAPSHOT', '8.0.2', '8.0.10']"
 P="$T/project"; mkdir -p "$P/src/java"
 cat > "$P/pom.xml" <<'POM'
 <project>
@@ -69,7 +81,11 @@ cat > "$P/pom.xml" <<'POM'
     <artifactId>plugin-scanned</artifactId>
     <packaging>lutece-plugin</packaging>
     <version>1.0.0</version>
+    <dependencyManagement><dependencies><dependency><groupId>fr.paris.lutece.starters</groupId><artifactId>lutece-bom</artifactId><version>8.0.0-beta-03</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement>
     <dependencies>
+        <!-- <dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-commented</artifactId></dependency> -->
+        <dependency><groupId>org.acme</groupId><artifactId>acme-lib</artifactId><version>1.0</version><exclusions><exclusion><groupId>fr.paris.lutece</groupId><artifactId>lutece-core</artifactId></exclusion></exclusions></dependency>
+        <dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-a</artifactId><version>1.0</version></dependency><dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-b</artifactId><version>2.0</version></dependency>
         <dependency>
             <groupId>fr.paris.lutece.plugins</groupId>
             <artifactId>plugin-demo</artifactId>
@@ -88,5 +104,6 @@ POM
 scan=$(cd "$P" && LUTECE_SNAPSHOT_REPO="file://$S" LUTECE_RELEASE_REPO="file://$R" LUTECE_LATEST_CACHE="$T/cache.json" M2_REPO="$T/m2" bash "$HERE/../../tools/scan-project.sh" . 2>/dev/null)
 dep() { echo "$scan" | python3 -c "import json, sys; d = [x for x in json.load(sys.stdin)['dependencies'] if x['artifactId'] == sys.argv[1]][0]; print(d['version'], d['type'], d['v8Status'], d['latestRelease'])" "$1"; }
 check "scan-project reads the version and the type of a dependency block, and a Lutece 8 release" "$(dep plugin-demo)" "[4.0.0,) lutece-plugin published 5.0.1"
+check "scan-project lists the Lutece dependencies only: no comment, no exclusion, no BOM import, two on one line" "$(echo "$scan" | python3 -c "import json, sys; print(' '.join(x['artifactId'] for x in json.load(sys.stdin)['dependencies']))")" "plugin-a plugin-b plugin-demo plugin-v7only"
 check "scan-project leaves to resolve a dependency with Lutece 7 releases only" "$(dep plugin-v7only)" "4.0.14 lutece-plugin to-resolve "
 [ $fail -eq 0 ] || exit 1

@@ -221,14 +221,15 @@ def base_site(bench, artifact_id):
 
 
 def latest(*coordinates):
-    """The latest Lutece 8 snapshot of each groupId:artifactId, as {coordinate: (version, build)} (tools/latest-lutece.py)."""
+    """The latest Lutece 8 snapshot of each groupId:artifactId, as {coordinate: (version, build)} (tools/latest-lutece.py,
+    the local Maven repository's when the repository cannot be read)."""
     r = sh("python3", BENCH / "tools/latest-lutece.py", "snapshot", *coordinates)
-    if r.returncode:
-        raise SystemExit("build: no latest Lutece 8 snapshot for %s: %s" % (" ".join(coordinates), r.stderr[-300:]))
     found = {}
     for line in r.stdout.split():
         g, a, v, *b = line.split(":")
         found["%s:%s" % (g, a)] = (v, b[0] if b else "")
+    if r.returncode not in (0, 3) or len(found) < len(coordinates):
+        raise SystemExit("build: no latest Lutece 8 snapshot for %s: %s" % (" ".join(coordinates), r.stderr[-300:]))
     return found
 
 

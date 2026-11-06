@@ -407,7 +407,7 @@ mkdir -p "$C7/$P6" "$C7/src/sql"
   && git add -A && git -c user.name=t -c user.email=t@t commit -qm dev )
 dp06=$(LUTECE_REFERENCES="$R7" python3 "$S/java_checks.py" dp06 "$T/dp6")
 check "DP06 reads the highest published tag when it is no ancestor of the clone's head" 'echo "$dp06" | grep -q "renderTemplate on the core.s develop, in no published core (last: lutece-core-8.0.2-beta-10)"'
-( cd "$C7" && git tag -d lutece-core-8.0.2-beta-10 lutece-core-8.0.1 lutece-core-8.0.2-beta-04 >/dev/null )
+( cd "$C7" && git tag -d lutece-core-8.0.2-beta-10 lutece-core-8.0.1 lutece-core-8.0.2-beta-04 >/dev/null && git tag lutece-core-7.1.10 )
 dp06=$(LUTECE_REFERENCES="$R7" python3 "$S/java_checks.py" dp06 "$T/dp6")
-check "DP06 says NOT EVALUATED on a clone with no published tag" '[ "$(echo "$dp06" | cut -c1-13)" = "NOT EVALUATED" ] && [ "$(echo "$dp06" | wc -l)" = 1 ]'
+check "DP06 says NOT EVALUATED on a clone with no published Lutece 8 tag, a v7 one aside" '[ "$(echo "$dp06" | cut -c1-13)" = "NOT EVALUATED" ] && [ "$(echo "$dp06" | wc -l)" = 1 ]'
 if [ $fail = 0 ]; then echo "PASS: ST04, MV01, SP03, HM01, HM02, CS03, WB10, WB11, DA03, DP04, PI01, RL01, PD02, GI01, CD08, MV08, WG01, PD03, DP01, DP05 and DP06 fire on their defect and stay silent on sound code"; else echo "$st04"; echo "$mv01"; echo "$hm"; exit 1; fi

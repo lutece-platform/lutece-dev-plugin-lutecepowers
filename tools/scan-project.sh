@@ -41,9 +41,21 @@ if [ "$PROJECT_TYPE" = "unknown" ]; then
     grep -q '<packaging>jar</packaging>' pom.xml 2>/dev/null && grep -q 'library-' pom.xml 2>/dev/null && PROJECT_TYPE="library"
 fi
 
-ARTIFACT=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<artifactId>' | sed 's/.*<artifactId>\(.*\)<\/artifactId>.*/\1/' | tr -d ' \r')
-VERSION=$(sed '/<parent>/,/<\/parent>/d' pom.xml | grep -m1 '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
-PARENT_VERSION=$(sed -n '/<parent>/,/<\/parent>/p' pom.xml | grep '<version>' | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | tr -d ' \r')
+POM_FIELDS=$(python3 - pom.xml <<'PY' 2>/dev/null
+import sys, xml.etree.ElementTree as ET
+def text(el, tag):
+    """Text of the child tag of el, any namespace, or an empty string."""
+    c = next((c for c in el if c.tag.rsplit("}", 1)[-1] == tag), None) if el is not None else None
+    return (c.text or "").strip() if c is not None else ""
+root = ET.parse(sys.argv[1]).getroot()
+parent = next((c for c in root if c.tag.rsplit("}", 1)[-1] == "parent"), None)
+print("|".join((text(root, "artifactId"), text(root, "version"), text(parent, "version"))))
+for d in root.iter():
+    if d.tag.rsplit("}", 1)[-1] == "dependency" and text(d, "scope") != "import" and text(d, "groupId").startswith("fr.paris.lutece"):
+        print("|".join(text(d, t) for t in ("groupId", "artifactId", "version", "type")))
+PY
+) || true
+IFS='|' read -r ARTIFACT VERSION PARENT_VERSION <<< "$(head -1 <<< "$POM_FIELDS")"
 # Prints the version latest-lutece.py reads: latest <release|snapshot> <groupId:artifactId>.
 latest() { python3 "$TOOLS_DIR/latest-lutece.py" "$@" 2>/dev/null | cut -d: -f3 || true; }
 LATEST_PARENT=$(latest release fr.paris.lutece.tools:lutece-global-pom)
@@ -52,13 +64,7 @@ LATEST_PARENT=$(latest release fr.paris.lutece.tools:lutece-global-pom)
 
 DEPS_JSON="["
 FIRST_DEP=true
-# Extract artifactId + version pairs for fr.paris.lutece dependencies
-while IFS= read -r dep_line; do
-    [ -z "$dep_line" ] && continue
-    DEP_AID=$(echo "$dep_line" | awk -F'<artifactId>' 'NF>1 { split($2, a, "<"); print a[1] }' | tr -d '\r' || true)
-    DEP_VER=$(echo "$dep_line" | awk -F'<version>' 'NF>1 { split($2, a, "<"); print a[1] }' | tr -d '\r' || true)
-    DEP_TYPE=$(echo "$dep_line" | awk -F'<type>' 'NF>1 { split($2, a, "<"); print a[1] }' | tr -d '\r' || true)
-    [ -z "$DEP_AID" ] && continue
+while IFS='|' read -r DEP_GID DEP_AID DEP_VER DEP_TYPE; do
     [ "$DEP_AID" = "lutece-global-pom" ] && continue
     $FIRST_DEP || DEPS_JSON="$DEPS_JSON,"
     FIRST_DEP=false
@@ -69,7 +75,6 @@ while IFS= read -r dep_line; do
     V8_VERSION=""
     V8_REL=""
     V8_SNAP=""
-    DEP_GID=$(echo "$dep_line" | awk -F'<groupId>' 'NF>1 { split($2, a, "<"); print a[1] }' | tr -d '\r' | head -1 || true)
     # A reference clone is named after the repository, not the artifact: look for a directory whose pom carries this artifactId.
     REF_DIR=""
     for rd in "$HOME"/.lutece-references/*/; do
@@ -88,10 +93,7 @@ while IFS= read -r dep_line; do
     [ "$V8_STATUS" = "to-resolve" ] && [ -n "$V8_REL$V8_SNAP" ] && V8_STATUS="published"
 
     DEPS_JSON="$DEPS_JSON{\"artifactId\":\"$DEP_AID\",\"version\":\"${DEP_VER:-unspecified}\",\"type\":\"${DEP_TYPE:-jar}\",\"v8Status\":\"$V8_STATUS\",\"latestRelease\":\"$V8_REL\",\"latestSnapshot\":\"$V8_SNAP\",\"v8Branch\":\"$V8_BRANCH\",\"v8Version\":\"$V8_VERSION\"}"
-done < <(
-    # Extract dependency blocks for fr.paris.lutece
-    awk '/<dependency>/{block=""} /<dependency>/,/<\/dependency>/{block=block $0 " "} /<\/dependency>/{if(block ~ /fr\.paris\.lutece/) print block}' pom.xml
-)
+done < <(tail -n +2 <<< "$POM_FIELDS")
 DEPS_JSON="$DEPS_JSON]"
 
 # ─── Java Files Analysis ────────────────────────────────

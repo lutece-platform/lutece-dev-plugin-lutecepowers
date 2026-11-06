@@ -52,7 +52,7 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 cp -a "$HARNESS/." "$OUT/"
 rm -f "$OUT/pom.xml.tpl" "$OUT/webapp/WEB-INF/plugins/plugins.dat.tpl"
 
-SITE_POM_VERSION=$(python3 "$LATEST" release fr.paris.lutece.tools:lutece-site-pom | cut -d: -f3)
+SITE_POM_VERSION=$(python3 "$LATEST" release fr.paris.lutece.tools:lutece-site-pom | cut -d: -f3 || true)
 [ -n "$SITE_POM_VERSION" ] || { echo "ERROR: no released lutece-site-pom 8.x found (repositories and local Maven repository)" >&2; exit 2; }
 sed -e "s#@@PUT_GROUPID@@#$G#" -e "s#@@PUT_ARTIFACTID@@#$A#" \
     -e "s#@@PUT_VERSION@@#$V#" -e "s#@@PUT_TYPE@@#$PTYPE#" -e "s#@@SITE_POM_VERSION@@#$SITE_POM_VERSION#" \
