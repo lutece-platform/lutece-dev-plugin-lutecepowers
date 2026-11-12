@@ -62,4 +62,5 @@ belongs to a plugin this webapp does not carry.
 |---------|-------|-----|
 | The label is simply absent from the page | No bundle answers the key | Add it, or point the call at the key that already exists |
 | Empty label, WARN `Error localizing key : myplugin.label.name` in the log | Prefix included in `.properties` file (`myplugin.label.name=` instead of `label.name=`) | Remove prefix — keep only `label.name=Value` |
+| Empty label, WARN `Error localizing key : theme.labelNoDataProvided` | Core key written without `portal.`: the first segment is read as a plugin name (`theme`) | `#i18n{portal.theme.labelNoDataProvided}`. In a template rendered once per question (a summary page), each miss is one WARN per question and per page |
 | The label is there but a screen reader says nothing | The text sits in a `d-none` span | `display:none` leaves the accessibility tree; `visually-hidden` does not |

@@ -11,6 +11,10 @@
 - [ ] **Stateful `@SessionScoped`/`@ConversationScoped` bean** → whole field graph `Serializable` + a **passivation test** (round-trip `ObjectOutputStream`/`ObjectInputStream`, cf. forms `FormXPageSessionPassivationTest`); AND the cluster sets `writeContents="GET_AND_SET_ATTRIBUTES"` (see empirical) — a serializable graph alone does NOT replicate in-place mutations.
 - [ ] **No `Future`/`Timer`/`Thread`/`Stream`/`Optional` in session**; resource "hold" materialised in DB (row + expiry, daemon sweep), not a `ScheduledFuture`.
 - [ ] **No JVM-local cache `static Map`** → `AbstractCacheableService` (JSR-107), CDI-event invalidation.
+- [ ] **Cached values never modified by their callers**: the Home returns a copy of a cached object or list (near cache `OBJECT` shares one instance per pod); the value is built once, on a miss, never completed and put back.
+- [ ] **Cache service robust to the provider**: `put`/`get`/`remove` catch `RuntimeException`, no `put` of `null`, cache typed (`initCache( name, K, V )` or a typed `configuration` field when `enableCache( true )` re-creates it), listeners registered at each creation.
+- [ ] **Cache key carries every input** of the value (front/back office, locale, parameters); no `getKeys()`/`getCacheSize()`/iteration on a hot path.
+- [ ] **Invalidation**: every event changing the source removes the entry or resets this cache only; resets of a transaction grouped after the commit (`registerInterposedSynchronization`).
 - [ ] **No hardcoded config/path/URL** → MicroProfile property (`@ConfigProperty`), defaults in `META-INF/microprofile-config.properties`; shared resources on a shared volume, not `java.io.tmpdir`.
 - [ ] **Container streams** (`response.getOutputStream()/getWriter()`) not closed by hand; `IOException` rethrown; guarded by `!isCommitted()`.
 - [ ] **`ThreadLocal.remove()`** in `finally` (never `set(null)`).

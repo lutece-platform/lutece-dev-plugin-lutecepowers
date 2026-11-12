@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Multi-instance configuration, included by server.xml (variable cluster.config).
+     Each replica runs a Hazelcast member (HTTP session, started by sessionCache-1.0) and a Hazelcast
+     client (Lutece cache) connected to that member. -->
+<server>
+    <featureManager>
+        <feature>sessionCache-1.0</feature>
+    </featureManager>
+
+    <!-- Library of the session member: EVERY jar of the war, not only Hazelcast. The members also host the
+         Lutece caches created by the clients and must resolve their types to migrate a partition.
+         The war is deployed expanded (/config/apps/expanded, created in the image by configure.sh). -->
+    <library id="hazelcastSessionLib">
+        <fileset dir="/config/apps/expanded/lutece.war/WEB-INF/lib/" includes="*.jar" />
+    </library>
+    <!-- GET_AND_SET_ATTRIBUTES is mandatory: the default does not replicate @SessionScoped beans modified in place. -->
+    <httpSessionCache libraryRef="hazelcastSessionLib" writeContents="GET_AND_SET_ATTRIBUTES"
+                      uri="file:${server.config.dir}/hazelcast-config-api-mode.yaml" />
+
+    <!-- Lutece application cache (JCache): Hazelcast client connected to the member of the replica.
+         A <variable> with value= is a MicroProfile Config source of ordinal 500, above conf/override. -->
+    <variable name="lutece.cache.jcache.cachingprovider" value="com.hazelcast.client.cache.HazelcastClientCachingProvider" />
+    <variable name="lutece.cache.jcache.config.uri" value="file:${server.config.dir}/hazelcast-client-config-api-mode.yaml" />
+</server>

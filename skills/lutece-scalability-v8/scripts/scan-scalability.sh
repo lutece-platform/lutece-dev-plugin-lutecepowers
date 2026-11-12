@@ -30,6 +30,7 @@ $(section "2-session"      "HTTP session state (must be Serializable + light)" '
 $(section "2-sessionscoped" "Stateful @SessionScoped/@ConversationScoped CDI beans (whole field graph must be Serializable; REQUIRES Liberty writeContents=GET_AND_SET_ATTRIBUTES to replicate in-place mutations; add a passivation test)" '@SessionScoped|@ConversationScoped'),
 $(section "2-nonserial"    "Non-serializable objects in session/cache (Future/Timer/Thread/Stream)" 'ScheduledFuture|java\.util\.Timer|ScheduledExecutorService|Executors\.new|new Thread\('),
 $(section "4-cache"        "In-JVM cache/state (distribute via JCache)" 'private\s+static\s+(final\s+)?(Map|HashMap|List|Set)\b|EhCache|CacheManager'),
+$(section "4-cache-contract" "JCache services, cache iteration, status tests and forced enabling (review the contract: copies, types, keys, invalidation, status)" 'extends\s+AbstractCacheableService|\.getKeys\(\s*\)|getCacheSize\(\s*\)|isCacheEnable\(\s*\)|enableCache\(\s*true\s*\)|initCache\([^)]*,\s*true\s*\)'),
 $(section "5-config"       "Hardcoded config/paths/URLs (externalize via MicroProfile)" 'new File\(\s*"/|"https?://|"jdbc:|System\.getProperty\(|/var/|/tmp/'),
 $(section "6-streams"      "Container streams closed by hand (response stream/writer)" 'getOutputStream\(\s*\)\.close|getWriter\(\s*\)\.close|out\.close\(\)'),
 $(section "6-threadlocal"  "ThreadLocal not cleaned (set(null) instead of remove())" 'ThreadLocal|setLocal\(\s*null|\.set\(\s*null\s*\)')
