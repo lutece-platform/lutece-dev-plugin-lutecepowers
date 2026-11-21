@@ -401,6 +401,37 @@ def wb11(root):
     return ["%s:%d: request parameter escaped by hand: the core XSS filter already escapes it, the value ends up escaped "
             "twice; drop the escaping (rules/web-bean.md)" % (os.path.relpath(p, root), n) for p, n in sorted(set(out))]
 
+HTML_VALUE = re.compile(r"\bgetHtml\w*\s*\(|\bstr\w*(?:Html|Content)\w*\b(?!\s*\()|\b\w*Html\b(?!\s*\()|\b\w*(?:[Bb]uffer|Builder)\s*\.\s*toString\s*\(")
+
+
+def ae01(root):
+    """HTML the project builds (a rendered template, a captcha code, a buffer of markup) put in a template model as a
+    String: lutece-core 8.1 auto-escaping prints it as text; HtmlMarkup.of( ) hands it to the template as markup."""
+    out = []
+    for path, raw in sorted(sources(root).items()):
+        code = strip(raw)
+        if "HtmlTemplate" not in code and "AppTemplateService" not in code:
+            continue
+        for m in re.finditer(r"\.\s*put\s*\(", code):
+            depth, i, comma = 1, m.end(), None
+            while i < len(code) and depth:
+                depth += code[i] == "("
+                depth -= code[i] == ")"
+                if code[i] == "," and depth == 1 and comma is None:
+                    comma = i
+                i += 1
+            if comma is None:
+                continue
+            value = code[comma + 1:i - 1]
+            if "markup" in value.lower():
+                continue
+            if HTML_VALUE.search(value):
+                out.append((path, code[:m.start()].count("\n") + 1))
+    return ["%s:%d: HTML built by the project put in a template model as a String: printed as text under auto-escaping, "
+            "put HtmlMarkup.of( html ) (HtmlMarkup.ofSanitized for rich text a user typed)" % (os.path.relpath(p, root), n)
+            for p, n in sorted(set(out))]
+
+
 DAO_CALL = re.compile(r"\b\w+\s*\.\s*(get|set)(\w+)\s*\(\s*(\"\w+\"|\d+|\w+\s*\+\+)\s*[,)]|\b(?:int\s+)?(\w+)\s*=\s*(\d+)\s*;|\b(\w+)\s*\+\+")
 METHOD_DECL = re.compile(r"(?m)^[ \t]*(?:public|protected|private)\b[^;={]*\(")
 BRANCH = re.compile(r"\b(?:if|else|for|while|switch|case)\b|\?")
@@ -980,7 +1011,7 @@ def pd03(root):
 
 CHECKS = {"dp01": dp01, "dp04": dp04, "dp05": dp05, "dp06": dp06, "pi01": pi01, "rl01": rl01, "pd02": pd02, "gi01": gi01,
           "cd05": cd05, "cd08": cd08, "mv08": mv08, "wg01": wg01, "pd03": pd03, "mv01": mv01, "st04": st04, "cs03": cs03,
-          "wb10": wb10, "wb11": wb11, "da03": da03, "hm01": hm01, "hm02": hm02}
+          "wb10": wb10, "wb11": wb11, "ae01": ae01, "da03": da03, "hm01": hm01, "hm02": hm02}
 
 
 def run_into(out_dir, root, names):

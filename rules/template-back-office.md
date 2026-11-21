@@ -179,28 +179,27 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - JS files go in `webapp/js/{pluginName}/`
 - CSS files go in `webapp/css/{pluginName}/`
 
-## Auto-escaping — write templates that render the same in both modes
+## Auto-escaping — always on since lutece-core 8.1
 
-The core reads `service.freemarker.templateAutoEscape` (default `false`, `FreeMarkerTemplateService`). A plugin
-template has to render the same with the property at `true` and at `false`, and four built-ins do not: `?html` and `?xhtml` are a **ParseException** when the property is `true`,
-`?no_esc` and `?esc` when it is `false` — the template does not load at all.
+Every `.html` template renders with the HTML output format and auto-escaping (`AbstractFreeMarkerTemplateService`
+of library-freemarker); `service.freemarker.templateAutoEscape=false` is ignored with an error in the log
+(`FreeMarkerTemplateService`). Back office and skin alike: `${x}` prints `x` escaped.
 
 | Goal | Do not write | Write |
 |---|---|---|
-| Print HTML unescaped | `${x?no_esc}` | `<#noautoesc>${x}</#noautoesc>` |
-| Escape explicitly | `${x?html}`, `${x?esc}` | `<#outputformat "HTML">${x}</#outputformat>` |
-| Escape inside a macro argument (a directive cannot sit in a string) | `params='title="${x?html}"'` | capture first: `<#assign p><#outputformat "HTML">title="${x}"</#outputformat></#assign>` then `params=p` |
-| URL-encode a value | `${x?url}` — **throws at render time**: the Lutece FreeMarker configuration sets no `url_escaping_charset` nor `output_encoding` (`AbstractFreeMarkerTemplateService` calls `setNumberFormat`, `setOutputFormat`, `setAutoEscapingPolicy`… and neither of those two) | `${x?url('UTF-8')}` |
-| Interpolate a value into JavaScript (string literal or identifier inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
-| Test a captured block | `c != ''`, `c = ''` | `c?has_content`, `!c?has_content` |
-| Pass a bundle of attributes to a macro | `<#assign p = 'title="x"'>` | `<#assign p>title="x"</#assign>` |
+| Attributes of a macro element | `params='data-x="1"'`, a captured block, a string variable (TM14: the rendering fails) | a map: `params={'data-x': '1', 'aria-label': label}` |
+| A class, a style, an event handler, a URL on a macro element | `params={'class': …}`, `{'style': …}`, `{'onclick': …}`, `{'href'/'src'/'formaction': …}` (TM15: refused) | `class=` of the macro; a theme class; a raw element (`<span style="width:${w}%">`, `<button formaction="${url}">`), whose `${…}` is escaped |
+| A conditional attribute | `cond?then('aria-current="true"', '')` | `cond?then({'aria-current': 'true'}, {})` |
+| HTML the plugin renders in Java (a sub-template, a captcha, a list of rows) | `model.put( MARK_X, strHtml )` (AE01: shown as text) | `model.put( MARK_X, HtmlMarkup.of( strHtml ) )`, `HtmlMarkup.ofAll( list )` |
+| Rich text stored by a user or an admin (editor, BBCode rendered to HTML) | `${x?no_esc}` on a value nobody cleaned | `${richText(x!)}` (sanitized markup) in the template, or `HtmlMarkup.ofSanitized( x )` in Java |
+| Print markup a template captured | `${p?no_esc}` | `${p}`: a capture is markup already |
+| Read a captured block as text | `p?trim`, `p == ''`, `default_value=p` (TM16: fails) | `p?markup_string?trim`, `p?has_content`, or assign the string itself: `<#assign v = cond?then(a?c, '-1')>` |
+| Escape explicitly | `${x?html}`, `${x?esc}` (`?html` is a ParseException in the HTML output format) | `${x}` |
+| URL-encode a value | `${x?url}` — throws at render time: no `url_escaping_charset` is set | `${x?url('UTF-8')}` |
+| A value in JavaScript (string literal inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
+| A value in a `<textarea>` or an input being edited | `${x?no_esc}` | `${x}`: escaped is right there |
 
-Why the capture: under auto-escaping a block capture is *markup* (already-safe HTML) and a string literal is
-not — a string holding HTML gets escaped a second time when a macro prints it. Escaping through a captured
-`<#outputformat "HTML">` block is what `?html` did, and it parses under both settings.
+A parameter of a project macro never takes the name of a macro its body calls (`icon=` beside `<@icon>`): inside the
+body the parameter hides the macro (TM17). After a template change on a running bench, the template cache keeps the
+old version for `service.freemarker.templateUpdateDelay` seconds: check the rendered page, not the source.
 
-HTML built on the Java side cannot be told apart from text by the template. Skin templates run with an undefined
-output format and print the value as it is — do not add `?no_esc` there, it is refused.
-
-Do **not** put `<#ftl output_format="HTML" auto_esc=true>` at the top of plugin templates as a migration
-vehicle: a non-migrated caller feeding a migrated macro double-escapes, and nothing catches it.

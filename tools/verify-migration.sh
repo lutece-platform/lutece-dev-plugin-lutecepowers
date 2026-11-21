@@ -197,7 +197,7 @@ js07_scan() {
 }
 
 JC_PIDS=()
-for checks in "wg01 cd08 cd05" "dp01 dp04 dp05 dp06 pi01 rl01 pd02 gi01 mv08 pd03 mv01 st04 cs03 wb10 wb11 da03 hm01 hm02"; do
+for checks in "wg01 cd08 cd05" "dp01 dp04 dp05 dp06 pi01 rl01 pd02 gi01 mv08 pd03 mv01 st04 cs03 wb10 wb11 ae01 da03 hm01 hm02"; do
     "$LP_PYTHON" "$SCRIPT_DIR/java_checks.py" --into "$BG_DIR" . $checks >/dev/null 2>&1 &
     JC_PIDS+=("$!")
 done
@@ -1074,6 +1074,13 @@ WB10_MATCHES=$(jc wb10)
 COUNT=0; [ -n "$WB10_MATCHES" ] && COUNT=$(echo "$WB10_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB10" "PASS" "No @RequestScoped bean relying on the inherited getPlugin( )" 0
 else emit "WB10" "FAIL" "Inherited getPlugin( ) in a @RequestScoped bean: null on a request without plugin_name; override it with PluginService.getPlugin( PLUGIN_NAME )" "$COUNT" "$WB10_MATCHES"; fi
+
+# AE01: HTML the project builds put in a template model as a String; lutece-core 8.1 auto-escaping prints it as text
+# (java_checks.py ae01). HtmlMarkup.of( ) for HTML the application rendered, HtmlMarkup.ofSanitized( ) for rich text.
+AE01_MATCHES=$(jc ae01)
+COUNT=0; [ -n "$AE01_MATCHES" ] && COUNT=$(echo "$AE01_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "AE01" "PASS" "HTML built by the project reaches the templates as markup" 0
+else emit "AE01" "WARN" "HTML built by the project put in a model as a String: printed as text under auto-escaping; HtmlMarkup.of( html )" "$COUNT" "$AE01_MATCHES"; fi
 
 # WB11: the core XSS filter (sanitizeFilterMode) escapes every parameter under /jsp/admin and /jsp/site; a JspBean or an
 # XPage escaping one again stores it escaped twice (java_checks.py wb11).
@@ -2149,6 +2156,40 @@ TM12_MATCHES=$(template_rules inline-forms 2>/dev/null)
 COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
 else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
+
+# TM14 to TM17: the always-on HTML auto-escaping and the params maps of lutece-core 8.1 (template_rules.py). Each one
+# answers 500 at render time on an 8.1 core: FAIL when the project targets 8.1 (the lower bound of its lutece-core
+# range, or the core of the assembled webapp), WARN before, as the breach waits for the move to 8.1.
+AE_SEV=$(python3 - "$SCRIPT_DIR/latest-lutece.py" <<'PY'
+import glob, os, re, runpy, sys
+vkey = runpy.run_path(sys.argv[1])["vkey"]
+found = []
+try:
+    pom = open("pom.xml", encoding="utf-8", errors="replace").read()
+    m = re.search(r"<artifactId>\s*lutece-core\s*</artifactId>\s*<version>\s*\[?\s*([^,\]<\s]+)", pom)
+    found += [m.group(1)] if m else []
+except OSError:
+    pass
+found += [re.sub(r"^lutece-core-|\.jar$", "", os.path.basename(j)) for j in glob.glob("target/lutece/WEB-INF/lib/lutece-core-*.jar")]
+print("FAIL" if any(vkey(v) >= vkey("8.1.0-beta-01") for v in found) else "WARN")
+PY
+)
+TM14_MATCHES=$(template_rules params-string 2>/dev/null)
+COUNT=0; [ -n "$TM14_MATCHES" ] && COUNT=$(echo "$TM14_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM14" "PASS" "Macro params given as maps" 0
+else emit "TM14" "$AE_SEV" "params given as a string or a capture: write a map, params={'aria-label': label} (lutece-core 8.1 refuses anything else)" "$COUNT" "$TM14_MATCHES"; fi
+TM15_MATCHES=$(template_rules params-refused 2>/dev/null)
+COUNT=0; [ -n "$TM15_MATCHES" ] && COUNT=$(echo "$TM15_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM15" "PASS" "params maps hold only allowed attributes" 0
+else emit "TM15" "$AE_SEV" "params key htmlAttributes refuses (class, style, event handler, URL): class= of the macro, a theme class, a raw element for a computed style or a URL" "$COUNT" "$TM15_MATCHES"; fi
+TM16_MATCHES=$(template_rules capture-as-string 2>/dev/null)
+COUNT=0; [ -n "$TM16_MATCHES" ] && COUNT=$(echo "$TM16_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM16" "PASS" "Captured blocks never read as strings" 0
+else emit "TM16" "$AE_SEV" "Captured block read as a string (?trim, comparison, default_value): it is markup under auto-escaping; x?markup_string, or assign the string itself" "$COUNT" "$TM16_MATCHES"; fi
+TM17_MATCHES=$(template_rules macro-shadow 2>/dev/null)
+COUNT=0; [ -n "$TM17_MATCHES" ] && COUNT=$(echo "$TM17_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM17" "PASS" "No macro parameter hides a macro" 0
+else emit "TM17" "FAIL" "Macro parameter named like a macro its body calls (icon= and <@icon>): rename the parameter" "$COUNT" "$TM17_MATCHES"; fi
 
 # TM02 to TM07: template rules read with FreeMarker, HTML, JSP and script comments blanked (template_rules.py).
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.

@@ -3,7 +3,7 @@
 
 Usage: template_rules.py <rule> [project_root | template_file]
        rule: offcanvas | fo-forms | inline-forms | jquery | fo-upload | unsafe-messages | suggestpoi | fo-required-js
-             | mvc-message | own-messages
+             | mvc-message | own-messages | params-string | params-refused | capture-as-string | macro-shadow
 
 Prints one line per breach, `path:line: excerpt`, and exits 1 when there is one. FreeMarker, HTML, JSP and script
 comments are ignored, and so are the macro libraries under templates/*/themes/. Shared by verify-migration.sh (TM02
@@ -32,7 +32,19 @@ to TM07, TM10 to TM12) and scan-template-design.py (TD48, TD49, TD50).
                 project fills that list with MVCMessage objects itself.
 - own-messages  ${x.message} over infos or warnings the project fills with MVCMessage objects itself: it works, the
                 modern form is the core's addInfo( ) / addWarning( ) and ${x}.
+- params-string a params argument of a macro call (params, titleParams, additionalParameters...) given as a string
+                literal, a captured block or a variable assigned one: htmlAttributes takes a map
+                ({'aria-label': label}), anything else fails the rendering.
+- params-refused a key of a params map htmlAttributes refuses: class (the class parameter of the macro), style, an
+                event handler, a URL (href, src, action, formaction) or any name out of its allow list, read from
+                the core of the references (HtmlAttributesMethod).
+- capture-as-string a captured block (<#assign x>...</#assign>, <#local x>) read as a string: a string built-in
+                (?trim, ?length, ?replace...), a comparison with a string, or default_value=x of a select. Under
+                auto-escaping a capture is markup: the page fails at render time.
+- macro-shadow  a macro of the project with a parameter named like a macro it calls (icon=... and <@icon>): inside the
+                body the parameter hides the macro, the call fails at render time.
 """
+import functools
 import os
 import re
 import sys
@@ -276,8 +288,125 @@ def own_messages(text, skin):
     return [line for line, kind in message_prints(text) if (kind, side) in OWN_MESSAGE_LISTS]
 
 
+MACRO_CALL = re.compile(r"<@[\w.]+\b(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|[^>'\"])*>", re.S)
+PARAMS_ARG = re.compile(r"""\b(\w*[pP]arams|additionalParameters)\s*=\s*(?:('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")|(\{)|([A-Za-z_]\w*))""")
+CAPTURE = re.compile(r"<#(?:assign|local)\s+(\w+)\s*>")
+STRING_ASSIGN = re.compile(r"""<#(?:assign|local)\s+(\w+)\s*=\s*(?:'|"|[^>]*\?then\(\s*['"])""")
+STRING_BUILTIN = "trim|length|substring|starts_with|ends_with|contains|replace|split|lower_case|upper_case|cap_first|index_of|matches|left_pad|right_pad"
+MACRO_DEF = re.compile(r"<#macro\s+(\w+)([^>]*)>(.*?)</#macro>", re.S)
+ALLOWED_FALLBACK = {"title", "name", "value", "id", "role", "tabindex", "hidden", "lang", "dir", "placeholder", "pattern",
+                    "required", "readonly", "disabled", "multiple", "min", "max", "step", "minlength", "maxlength", "size",
+                    "accept", "target", "rel", "download", "alt", "width", "height", "loading", "form", "rows", "cols",
+                    "selected", "checked", "autocomplete", "autofocus", "inputmode"}
+
+
+@functools.lru_cache(maxsize=None)
+def allowed_names():
+    """The attribute names htmlAttributes accepts in params, read from the core of the references when it is there."""
+    src = os.path.join(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")), "lutece-core",
+                       "src/java/fr/paris/lutece/portal/service/template/HtmlAttributesMethod.java")
+    names = set()
+    if os.path.isfile(src):
+        with open(src, encoding="utf-8") as f:
+            m = re.search(r"NAMES_ALLOWED\s*=\s*Set\.of\((.*?)\);", f.read(), re.S)
+        names = set(re.findall(r'"([^"]+)"', m.group(1))) if m else set()
+    return names or ALLOWED_FALLBACK
+
+
+def params_args(text):
+    """The params arguments of the macro calls: (offset in text, match of PARAMS_ARG) for each one."""
+    for call in MACRO_CALL.finditer(text):
+        for m in PARAMS_ARG.finditer(call.group(0)):
+            yield call.start(), m
+
+
+def params_string(text, skin):
+    """Lines of the params arguments given as a string, a capture or a variable assigned one."""
+    stringy = set(CAPTURE.findall(text)) | set(STRING_ASSIGN.findall(text))
+    return [line_of(text, base + m.start()) for base, m in params_args(text)
+            if m.group(2) or (m.group(4) and m.group(4) in stringy)]
+
+
+def map_keys(text, start):
+    """The keys of the map literal opening at start, the end offset: top-level keys only, values skipped."""
+    keys, depth, i, expect_key = [], 0, start, False
+    while i < len(text):
+        c = text[i]
+        if c in "'\"":
+            j = i + 1
+            while j < len(text) and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            if depth == 1 and expect_key:
+                keys.append(text[i + 1:j])
+                expect_key = False
+            i = j + 1
+            continue
+        if c in "{[(":
+            depth += 1
+            expect_key = depth == 1
+        elif c in "}])":
+            depth -= 1
+            if depth == 0:
+                return keys, i
+        elif c == "," and depth == 1:
+            expect_key = True
+        elif c == ":" and depth == 1:
+            expect_key = False
+        i += 1
+    return keys, i
+
+
+def params_refused(text, skin):
+    """Lines of the params map keys htmlAttributes refuses."""
+    allowed, out = allowed_names(), []
+    for base, m in params_args(text):
+        if not m.group(3):
+            continue
+        start = base + m.end() - 1
+        for key in map_keys(text, start)[0]:
+            low = key.lower()
+            ok = (re.fullmatch(r"aria-[a-z]+", low) or (re.fullmatch(r"data-[a-z0-9]+(-[a-z0-9]+)*", low)
+                  and low not in ("data-bs-sanitize", "data-bs-allow-list")) or low in allowed)
+            if not ok:
+                out.append((line_of(text, start), key))
+    return out
+
+
+def capture_as_string(text, skin):
+    """Lines reading a captured block as a string: a string built-in, a comparison in a directive or an interpolation,
+    default_value= of a macro call."""
+    out = []
+    names = {n for n in CAPTURE.findall(text) if not re.search(r"<#(?:assign|local)\s+%s\s*=\s*%s\?markup_string" % (n, n), text)}
+    expressions = [(m.start(), m.group(0)) for m in re.finditer(r"<#(?:if|elseif)\b[^>]*>|\$\{[^}]*\}", text)]
+    expressions += [(m.start(), m.group(0).split("=", 1)[-1]) for m in re.finditer(r"<#(?:assign|local)\b[^>]*>", text)]
+    for name in names:
+        n = re.escape(name)
+        for m in re.finditer(r"(?<![\w.])%s\?(?:%s)\b" % (n, STRING_BUILTIN), text):
+            out.append(line_of(text, m.start()))
+        for m in re.finditer(r"\bdefault_value\s*=\s*%s\b" % n, text):
+            out.append(line_of(text, m.start()))
+        for start, expr in expressions:
+            op = "==|!=|=" if expr.startswith(("<#if", "<#elseif", "${")) else "==|!="
+            if re.search(r"(?<![\w.])%s\s*(?:%s)\s*['\"]|['\"]\s*(?:==|!=)\s*%s\b" % (n, op, n), expr):
+                out.append(line_of(text, start))
+    return sorted(set(out))
+
+
+def macro_shadow(text, skin):
+    """Lines of the macros of the project whose parameter hides a macro the body calls."""
+    out = []
+    for m in MACRO_DEF.finditer(text):
+        names = set(re.findall(r"(?:^|\s)(\w+)\s*(?==|\s|$)", m.group(2)))
+        for name in names:
+            if re.search(r"<@%s\b" % re.escape(name), m.group(3)):
+                out.append(line_of(text, m.start()))
+    return out
+
+
 RULES = {"offcanvas": offcanvas, "fo-forms": fo_forms, "inline-forms": inline_forms, "jquery": jquery, "fo-upload": fo_upload,
-         "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages}
+         "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages,
+         "params-string": params_string, "params-refused": params_refused, "capture-as-string": capture_as_string,
+         "macro-shadow": macro_shadow}
 SCOPES = {"jquery": (("webapp/WEB-INF/templates",), (".html", ".ftl", ".js")),
           "suggestpoi": (("webapp",), (".html", ".ftl", ".jsp"))}
 DEFAULT_SCOPE = (("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"), (".html", ".ftl"))
