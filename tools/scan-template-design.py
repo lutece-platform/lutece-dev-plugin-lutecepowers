@@ -989,8 +989,9 @@ def check_common(text, findings, kind, know):
             add(findings, "TD61", "WARN", line, "script or stylesheet %s, which the assembled webapp does not carry: 404, and what it defines is missing from the page (an asset moved to themes/shared/plugins/<plugin>/ in v8)" % asset)
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
-    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
-    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp;")
+    ftl = [m.span() for m in re.finditer(r"<[#@](?:'[^']*'|\"[^\"]*\"|[^>'\"])*>", text)]
+    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text) if not any(a <= m.start() < b for a, b in ftl)]
+    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an HTML href/action attribute: &amp; (a FreeMarker literal keeps the & itself, TM18)")
 
 
 def nested_forms(text):

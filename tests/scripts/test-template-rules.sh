@@ -55,6 +55,12 @@ printf "<#macro rowAction url icon=''><button><@icon style=icon /></button></#ma
 expect "macro-shadow: icon parameter and <@icon>" 1 "$(rule macro-shadow "$A")"
 printf "<#macro rowAction url buttonIcon=''><button><@icon style=buttonIcon /></button></#macro>\n" > "$A"
 expect "macro-shadow: distinct names are fine" 0 "$(rule macro-shadow "$A")"
+printf "<@button title='x' params=on?then('aria-current=\"true\"', '') />\n" > "$A"
+expect "params-string: a string ternary" 1 "$(rule params-string "$A")"
+printf "<#assign u = 'Portal.jsp?page=x&amp;id=' + id><@cLink href='a?b=1&amp;c=2' label='&#8722;' />\n" > "$A"
+expect "entities-in-literals: entities in URLs and a label" 1 "$(rule entities-in-literals "$A")"
+printf "<#if (t!'')?replace('&nbsp;', '')?trim?has_content><@cLink href='a?b=1&c=2' label='−' /></#if><#assign h = '<span>&nbsp;</span>'>\n" > "$A"
+expect "entities-in-literals: a search argument, plain characters and a fragment are fine" 0 "$(rule entities-in-literals "$A")"
 printf "<@offcanvas id='x' title='t'>body</@offcanvas>\n" > "$A"
 expect "offcanvas: flagged" 1 "$(rule offcanvas "$A")"
 
@@ -70,6 +76,17 @@ printf "<@pageContainer><#if l?has_content>x<#else><@empty title='a' /></#if></@
 expect "TD55: empty state without subtitle, no create action" 1 "$(td TD55)"
 printf "<@pageContainer><@aButton href='jsp/admin/plugins/x/ManageX.jsp?view=createX' buttonIcon='plus' title='a' /><@empty /></@pageContainer>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD55: page with a create action" 0 "$(td TD55)"
+printf "<a href='jsp/admin/plugins/x/ManageX.jsp?view=a&id=1'>a</a>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
+expect "TD06: raw & in an HTML href" 1 "$(td TD06)"
+printf "<@aButton href='jsp/admin/plugins/x/ManageX.jsp?view=a&id=1' title='a' />\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
+expect "TD06: a FreeMarker literal keeps the &" 0 "$(td TD06)"
+P="$T/parse"
+mkdir -p "$P/webapp/WEB-INF/templates/skin/plugins/x"
+printf '\${t?no_esc}\n' > "$P/webapp/WEB-INF/templates/skin/plugins/x/a.html"
+printf '<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>\n' > "$P/pom.xml"
+expect "parse: ?no_esc reads in the HTML output format of lutece-core 8.1" 0 "$(bash "$S/check-template-parse.sh" "$P" | grep -c '^PARSE_ERROR')"
+printf '<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>8.0.2</version></dependency></dependencies></project>\n' > "$P/pom.xml"
+expect "parse: ?no_esc fails before 8.1" 1 "$(bash "$S/check-template-parse.sh" "$P" | grep -c '^PARSE_ERROR')"
 
 printf "<@tform action='x'><@box><@boxBody>a</@boxBody><@boxFooter><@button type='submit' title='ok' /></@boxFooter></@box><@box><@boxBody>b</@boxBody></@box></@tform>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD58: submit in one box footer of a two-box form" 1 "$(td TD58)"
@@ -300,5 +317,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD46, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, template parse, TD06, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD46, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
 exit $fail

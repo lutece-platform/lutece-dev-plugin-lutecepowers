@@ -2157,23 +2157,10 @@ COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
 else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
 
-# TM14 to TM17: the always-on HTML auto-escaping and the params maps of lutece-core 8.1 (template_rules.py). Each one
-# answers 500 at render time on an 8.1 core: FAIL when the project targets 8.1 (the lower bound of its lutece-core
-# range, or the core of the assembled webapp), WARN before, as the breach waits for the move to 8.1.
-AE_SEV=$(python3 - "$SCRIPT_DIR/latest-lutece.py" <<'PY'
-import glob, os, re, runpy, sys
-vkey = runpy.run_path(sys.argv[1])["vkey"]
-found = []
-try:
-    pom = open("pom.xml", encoding="utf-8", errors="replace").read()
-    m = re.search(r"<artifactId>\s*lutece-core\s*</artifactId>\s*<version>\s*\[?\s*([^,\]<\s]+)", pom)
-    found += [m.group(1)] if m else []
-except OSError:
-    pass
-found += [re.sub(r"^lutece-core-|\.jar$", "", os.path.basename(j)) for j in glob.glob("target/lutece/WEB-INF/lib/lutece-core-*.jar")]
-print("FAIL" if any(vkey(v) >= vkey("8.1.0-beta-01") for v in found) else "WARN")
-PY
-)
+# TM14 to TM18: the always-on HTML auto-escaping and the params maps of lutece-core 8.1 (template_rules.py). Each one
+# answers 500 at render time on an 8.1 core: FAIL when the project targets 8.1 (autoescape-target.py), WARN before, as
+# the breach waits for the move to 8.1.
+AE_SEV=WARN; python3 "$SCRIPT_DIR/autoescape-target.py" . && AE_SEV=FAIL
 TM14_MATCHES=$(template_rules params-string 2>/dev/null)
 COUNT=0; [ -n "$TM14_MATCHES" ] && COUNT=$(echo "$TM14_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM14" "PASS" "Macro params given as maps" 0
@@ -2190,6 +2177,10 @@ TM17_MATCHES=$(template_rules macro-shadow 2>/dev/null)
 COUNT=0; [ -n "$TM17_MATCHES" ] && COUNT=$(echo "$TM17_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM17" "PASS" "No macro parameter hides a macro" 0
 else emit "TM17" "FAIL" "Macro parameter named like a macro its body calls (icon= and <@icon>): rename the parameter" "$COUNT" "$TM17_MATCHES"; fi
+TM18_MATCHES=$(template_rules entities-in-literals 2>/dev/null)
+COUNT=0; [ -n "$TM18_MATCHES" ] && COUNT=$(echo "$TM18_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM18" "PASS" "No HTML entity in a FreeMarker string literal" 0
+else emit "TM18" "$AE_SEV" "HTML entity in a string literal (href='a?x=1&amp;y=2'): escaped once more under auto-escaping; write the character itself (&)" "$COUNT" "$TM18_MATCHES"; fi
 
 # TM02 to TM07: template rules read with FreeMarker, HTML, JSP and script comments blanked (template_rules.py).
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.

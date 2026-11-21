@@ -1,9 +1,11 @@
 #!/bin/bash
 # check-template-parse.sh — parse every template with FreeMarker itself: a template that does not parse answers 500.
 # Usage: check-template-parse.sh [project_root | template_file]
+# A project on lutece-core 8.1 or later (autoescape-target.py) is read in the HTML output format, as that core reads it.
 # Needs a JDK and the freemarker jar in ~/.m2 (any 2.3.x); compiles the helper on first use.
 set -euo pipefail
 . "$(dirname "$0")/portable.sh"
+. "$(dirname "$0")/python.sh"
 
 ROOT="${1:-.}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -24,4 +26,5 @@ else
     for d in webapp/WEB-INF/templates/admin webapp/WEB-INF/templates/skin; do [ -d "$ROOT/$d" ] && DIRS+=("$ROOT/$d"); done
 fi
 [ ${#DIRS[@]} -gt 0 ] || { echo "FMPARSE files=0 errors=0"; exit 0; }
-java -cp "$JAR:$HERE/fmparse" FmParse "${DIRS[@]}"
+MODE=(); python3 "$HERE/autoescape-target.py" "$ROOT" 2>/dev/null && MODE=(--html)
+java -cp "$JAR:$HERE/fmparse" FmParse "${MODE[@]}" "${DIRS[@]}"

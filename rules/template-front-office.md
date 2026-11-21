@@ -86,10 +86,14 @@ of library-freemarker); `service.freemarker.templateAutoEscape=false` is ignored
 | URL-encode a value | `${x?url}` — throws at render time: no `url_escaping_charset` is set | `${x?url('UTF-8')}` |
 | A value in JavaScript (string literal inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
 | A value in a `<textarea>` or an input being edited | `${x?no_esc}` | `${x}`: escaped is right there |
+| A special character in a string literal | `href='a?x=1&amp;y=2'`, `label='&#8722;'` (TM18: escaped once more, the page shows the entity) | the character itself: `href='a?x=1&y=2'`, `label='−'` |
+| A text turned to markup in Java (`HtmlMarkup.of`, `richText`) read by a string built-in | `x?contains('…')`, `x?replace(…)` (fails: markup) | `x?markup_string?contains('…')` |
 
 A parameter of a project macro never takes the name of a macro its body calls (`icon=` beside `<@icon>`): inside the
-body the parameter hides the macro (TM17). After a template change on a running bench, the template cache keeps the
-old version for `service.freemarker.templateUpdateDelay` seconds: check the rendered page, not the source.
+body the parameter hides the macro (TM17). A macro parameter is not the attribute it sounds like: read the macro
+(the `role` of `cForm` writes `aria-label`; a real `role` goes in `params={'role': 'search'}`). After a template change
+on a running bench, the template cache keeps the old version for `service.freemarker.templateUpdateDelay` seconds:
+check the rendered page, not the source.
 
 ## i18n resolution order
 
