@@ -1082,12 +1082,12 @@ COUNT=0; [ -n "$AE01_MATCHES" ] && COUNT=$(echo "$AE01_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "AE01" "PASS" "HTML built by the project reaches the templates as markup" 0
 else emit "AE01" "WARN" "HTML built by the project put in a model as a String: printed as text under auto-escaping; HtmlMarkup.of( html )" "$COUNT" "$AE01_MATCHES"; fi
 
-# WB11: the core XSS filter (sanitizeFilterMode) escapes every parameter under /jsp/admin and /jsp/site; a JspBean or an
-# XPage escaping one again stores it escaped twice (java_checks.py wb11).
+# WB11: a JspBean or an XPage escaping a request parameter stores it escaped, and FreeMarker auto-escaping escapes it
+# again where it is printed (java_checks.py wb11); since lutece-core 8.1 a parameter is stored as typed.
 WB11_MATCHES=$(jc wb11)
 COUNT=0; [ -n "$WB11_MATCHES" ] && COUNT=$(echo "$WB11_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "WB11" "PASS" "No request parameter escaped on top of the core XSS filter" 0
-else emit "WB11" "WARN" "Request parameter HTML-escaped by hand: the core XSS filter already escapes it, the value is stored escaped twice; drop the escaping" "$COUNT" "$WB11_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "WB11" "PASS" "No request parameter escaped by hand" 0
+else emit "WB11" "WARN" "Request parameter HTML-escaped by hand: the templates escape it again where they print it; store it as typed" "$COUNT" "$WB11_MATCHES"; fi
 
 # DA03: a DAO reading or binding as a number a column its create scripts declare as text (java_checks.py da03).
 DA03_MATCHES=$(jc da03)

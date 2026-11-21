@@ -41,9 +41,10 @@ with the core `web.xml` of the before version (`unzip -p lutece-core-<v7>-webapp
 difference is a choice of the site to carry, one decision each.
 
 - A filter parameter that v8 reads from the configuration first is ignored by v8 as soon as the key exists, and the
-  core defines them: the XSS filters read `lutece.safe.request.{admin|site}.{activateXssFilter,sanitizeFilterMode,
-  xssCharacters}` (`SafeRequestFilterSite`, `SafeRequestFilterAdmin`) and fall back to `web.xml` only when all three
-  are absent. The site's choice becomes those keys in `conf/override`.
+  core defines them: the XSS filters read `lutece.safe.request.{admin|site}.{activateXssFilter,xssCharacters}`
+  (`SafeRequestFilterSite`, `SafeRequestFilterAdmin`). `sanitizeFilterMode` is gone since lutece-core 8.1: the
+  parameters are no longer rewritten, a site's `sanitizeFilterMode` setting is dropped. The site's choice becomes
+  those keys in `conf/override`.
 - The upload limit of v7 (`requestSizeMax` of the upload filters) is the `<multipart-config><max-request-size>` of
   the v8 core's servlets: the site ships the v8 core's `web.xml` with that value changed, and nothing else.
 
