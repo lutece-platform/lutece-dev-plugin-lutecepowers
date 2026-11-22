@@ -4,12 +4,12 @@
 Usage: template_rules.py <rule> [project_root | template_file]
        rule: offcanvas | fo-forms | inline-forms | jquery | fo-upload | unsafe-messages | suggestpoi | fo-required-js
              | mvc-message | own-messages | params-string | params-refused | capture-as-string | macro-shadow
-             | entities-in-literals
+             | entities-in-literals | html-escaped
 
 Prints one line per breach, `path:line: excerpt`, and exits 1 when there is one. FreeMarker, HTML, JSP and script
 comments are ignored, and so are the macro libraries under templates/*/themes/ (only the core's for the rules
-reading project macros: params-*, capture-as-string, macro-shadow, entities-in-literals). Shared by verify-migration.sh (TM02
-to TM07, TM10 to TM12) and scan-template-design.py (TD48, TD49, TD50).
+reading project macros: params-*, capture-as-string, macro-shadow, entities-in-literals, html-escaped). Shared by
+verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template-design.py (TD48, TD49, TD50).
 
 - offcanvas     no @offcanvas / @cOffcanvas / offcanvas markup: the content of the page goes in a @modal (@cModal),
                 another page is reached by a plain link.
@@ -45,9 +45,14 @@ to TM07, TM10 to TM12) and scan-template-design.py (TD48, TD49, TD50).
                 auto-escaping a capture is markup: the page fails at render time.
 - macro-shadow  a macro of the project with a parameter named like a macro it calls (icon=... and <@icon>): inside the
                 body the parameter hides the macro, the call fails at render time.
-- entities-in-literals an HTML entity (&amp;, &nbsp;, &#8722;) in a string literal of a directive or a macro call:
-                auto-escaping escapes it once more. An argument of a built-in searching a text is left alone.
+- entities-in-literals an HTML entity (&amp;, &nbsp;, &#8722;) in a string literal of a directive, a macro call or
+                an interpolation: auto-escaping escapes it once more. An argument of a built-in searching a text is
+                left alone.
+- html-escaped  ${o.p} where the property p of an object is named as HTML (htmlContent, htmlSubscription...), directly
+                or through a variable assigned from one: a getter returns a string, auto-escaping prints the tags as
+                text. Rich text goes through ${richText(x)}.
 """
+import bisect
 import functools
 import os
 import re
@@ -295,7 +300,8 @@ def own_messages(text, skin):
 QUOTED = r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\""""
 THEN_STRING = r"""\?then\(\s*['"]"""
 MACRO_CALL = re.compile(r"""<@[\w.]+\b(?:%s|[^>'"])*>""" % QUOTED, re.S)
-TAG = re.compile(r"""<[#@](?:%s|[^>'"])*>""" % QUOTED, re.S)
+DIRECTIVE_TAG = r"""<[#@](?:%s|[^>'"])*>""" % QUOTED
+TAG = re.compile(DIRECTIVE_TAG + r"""|\$\{(?:%s|[^}'"])*\}""" % QUOTED, re.S)
 LITERAL = re.compile(QUOTED, re.S)
 PARAMS_ARG = re.compile(r"""\b(\w*[pP]arams|additionalParameters)\s*=\s*(?:(%s)|(\{)|([A-Za-z_]\w*))""" % QUOTED)
 CAPTURE = re.compile(r"<#(?:assign|local)\s+(\w+)\s*>")
@@ -343,8 +349,8 @@ def params_string(text, skin):
 
 
 def entities_in_literals(text, skin):
-    """Lines of the HTML entities in a string literal of a directive or a macro call, markup fragments and the
-    arguments of a search built-in (?replace('&nbsp;', '')) aside."""
+    """Lines of the HTML entities in a string literal of a directive, a macro call or an interpolation, markup
+    fragments and the arguments of a search built-in (?replace('&nbsp;', '')) aside."""
     out = []
     for tag in TAG.finditer(text):
         body = tag.group(0)
@@ -424,6 +430,35 @@ def capture_as_string(text, skin):
     return sorted(set(out))
 
 
+HTML_NAMED = re.compile(r"\w\.(?:html(?:[A-Z_]\w*)?|[a-z]\w*Html\w*)\b(?!\s*\()")
+INTERPOLATION = re.compile(r"\$\{([^}]*)\}")
+DIRECTIVE = re.compile(r"<#noautoesc>.*?</#noautoesc>|" + DIRECTIVE_TAG, re.S)
+TEXTAREA_OPEN = re.compile(r"<textarea\b|<@(?:input|cInput)\b[^>]*type\s*=\s*['\"]textarea['\"][^>]*(?<!/)>|<@(?:cTextarea|textarea)\b[^>]*(?<!/)>")
+TEXTAREA_CLOSE = re.compile(r"</textarea\s*>|</@(?:input|cInput|cTextarea|textarea)\s*>")
+SAFE_OUTPUT = re.compile(r"richText\(|\?(?:no_esc|markup_string|js_string|json_string|url|c|size|length|has_content|string\b|then)")
+
+
+def html_escaped(text, skin):
+    """Lines printing a value named as HTML, or a variable assigned from one, with ${...} and no richText; not in a
+    textarea, an argument of a directive or a macro, or a noautoesc block."""
+    tainted = {m.group(1) for m in re.finditer(r"<#(?:assign|local)\s+(\w+)\s*=([^>]*)>", text)
+               if HTML_NAMED.search(m.group(2)) and not SAFE_OUTPUT.search(m.group(2))}
+    skipped = [d.span() for d in DIRECTIVE.finditer(text)]
+    starts = [a for a, _ in skipped]
+    opens = [t.end() for t in TEXTAREA_OPEN.finditer(text)]
+    closes = [t.end() for t in TEXTAREA_CLOSE.finditer(text)]
+    out = []
+    for m in INTERPOLATION.finditer(text):
+        pos, expr = m.start(), m.group(1)
+        i = bisect.bisect_left(starts, pos) - 1
+        if (i >= 0 and pos < skipped[i][1]) or SAFE_OUTPUT.search(expr) \
+                or bisect.bisect_right(opens, pos) > bisect.bisect_right(closes, pos):
+            continue
+        if HTML_NAMED.search(expr) or re.sub(r"!\s*(?:''|\"\")?\s*$", "", expr.strip()) in tainted:
+            out.append(line_of(text, pos))
+    return out
+
+
 def macro_shadow(text, skin):
     """Lines of the macros of the project whose parameter hides a macro the body calls."""
     out = []
@@ -438,13 +473,13 @@ def macro_shadow(text, skin):
 RULES = {"offcanvas": offcanvas, "fo-forms": fo_forms, "inline-forms": inline_forms, "jquery": jquery, "fo-upload": fo_upload,
          "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages,
          "params-string": params_string, "params-refused": params_refused, "capture-as-string": capture_as_string,
-         "macro-shadow": macro_shadow, "entities-in-literals": entities_in_literals}
+         "macro-shadow": macro_shadow, "entities-in-literals": entities_in_literals, "html-escaped": html_escaped}
 SCOPES = {"jquery": (("webapp/WEB-INF/templates",), (".html", ".ftl", ".js")),
           "suggestpoi": (("webapp",), (".html", ".ftl", ".jsp"))}
 DEFAULT_SCOPE = (("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"), (".html", ".ftl"))
 MACRO_LIBRARY = re.compile(r"/templates/(admin|skin)/themes/")
 CORE_MACROS = re.compile(r"/templates/(admin/themes/tabler|skin/themes/macros)/")
-PROJECT_MACRO_RULES = ("params-string", "params-refused", "capture-as-string", "macro-shadow", "entities-in-literals")
+PROJECT_MACRO_RULES = ("params-string", "params-refused", "capture-as-string", "macro-shadow", "entities-in-literals", "html-escaped")
 
 
 def main():

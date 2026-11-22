@@ -34,6 +34,12 @@ resolve each by hand, keeping the site's intent on the v8 lines. For each file:
 A copy of a core `commons*.html` or of the corporate theme is always dropped (SI54). A skin override of a plugin
 template that the v8 plugin renders through `<@cTpl>` moves under `skin/themes/<code>/tpl/` of the theme.
 
+The same replay holds when only the core moves to 8.1 (always-on auto-escaping): a plugin version for 8.1 changes
+how its templates print values (`${richText(x)}`, `HtmlMarkup` in the model, `params` maps), and an override written
+against the previous version prints the stored HTML as text (TM19) or fails. Diff each override with the plugin
+template of the version the site now ships, and open every overridden page on the bench signed in, with the
+content the environments hold.
+
 ## web.xml and JSP
 
 A site ships no `web.xml` unless it must; then it starts from the v8 core's one (SI56). `diff` the site's `web.xml`

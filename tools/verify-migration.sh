@@ -2181,6 +2181,11 @@ TM18_MATCHES=$(template_rules entities-in-literals 2>/dev/null)
 COUNT=0; [ -n "$TM18_MATCHES" ] && COUNT=$(echo "$TM18_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM18" "PASS" "No HTML entity in a FreeMarker string literal" 0
 else emit "TM18" "$AE_SEV" "HTML entity in a string literal (href='a?x=1&amp;y=2'): escaped once more under auto-escaping; write the character itself (&)" "$COUNT" "$TM18_MATCHES"; fi
+# TM19: an HTML property printed with ${x} shows its tags as text; WARN, read from names.
+TM19_MATCHES=$(template_rules html-escaped 2>/dev/null)
+COUNT=0; [ -n "$TM19_MATCHES" ] && COUNT=$(echo "$TM19_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM19" "PASS" "No HTML property printed escaped" 0
+else emit "TM19" "WARN" "HTML property (htmlContent...) printed with \${x}: auto-escaping shows the tags as text; print it with \${richText(x)}" "$COUNT" "$TM19_MATCHES"; fi
 
 # TM02 to TM07: template rules read with FreeMarker, HTML, JSP and script comments blanked (template_rules.py).
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.

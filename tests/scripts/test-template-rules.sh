@@ -61,6 +61,12 @@ printf "<#assign u = 'Portal.jsp?page=x&amp;id=' + id><@cLink href='a?b=1&amp;c=
 expect "entities-in-literals: entities in URLs and a label" 1 "$(rule entities-in-literals "$A")"
 printf "<#if (t!'')?replace('&nbsp;', '')?trim?has_content><@cLink href='a?b=1&c=2' label='−' /></#if><#assign h = '<span>&nbsp;</span>'>\n" > "$A"
 expect "entities-in-literals: a search argument, plain characters and a fragment are fine" 0 "$(rule entities-in-literals "$A")"
+printf "<a href=\"\${u!'Portal.jsp?page=x&amp;id=1'}\">x</a>\n" > "$A"
+expect "entities-in-literals: an entity in an interpolation" 1 "$(rule entities-in-literals "$A")"
+printf "<#assign c = (page.htmlContent!'')?trim><article>\${c}</article><div>\${s.htmlSubscription!}</div>\n" > "$A"
+expect "html-escaped: an HTML property, directly and through a variable" 1 "$(rule html-escaped "$A")"
+printf "<article>\${richText(page.htmlContent!)}</article><textarea>\${page.htmlContent}</textarea><@input type='textarea' name='h' value='\${page.htmlContent}' /><#noautoesc>\${s.htmlSubscription}</#noautoesc><h1>\${htmlpage.description}</h1>\n" > "$A"
+expect "html-escaped: richText, a textarea, a macro argument, noautoesc and a plain property are fine" 0 "$(rule html-escaped "$A")"
 printf "<@offcanvas id='x' title='t'>body</@offcanvas>\n" > "$A"
 expect "offcanvas: flagged" 1 "$(rule offcanvas "$A")"
 
