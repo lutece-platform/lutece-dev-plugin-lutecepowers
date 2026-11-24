@@ -428,6 +428,7 @@ each difference (`- key|plugin|file|profile <id>: <reason>`). Rules and evidence
 | SI30 | WARN | Secret written in the overlay (properties or bean property) | key name | webapp/WEB-INF/conf |
 | SI31 | WARN | Liberty `<variable>` named like a key of the site configuration: it wins at ordinal 500 | (custom check) | server.xml |
 | SI32 | WARN | Properties file of the overlay (webapp or `src/conf/<env>`) under `WEB-INF/` where the core reads none: its keys apply nowhere | (path) | webapp, src/conf |
+| SI33 | WARN | `server.xml` without the `mpTelemetry-2.0` feature or without `<mpTelemetry source="message, trace, ffdc"/>`: the server logs, traces and FFDC are not exported through OpenTelemetry | (custom check) | server.xml |
 | SI40 | WARN | Plugin descriptor without `<name>.installed=1`: disabled on a new database | (custom check) | plugins.dat |
 | SI41 | WARN | `plugins.dat` line naming no descriptor of the war | (custom check) | plugins.dat |
 | SI42 | WARN | Plugins requiring a pool without `<name>.pool` | (custom check) | plugins.dat |
