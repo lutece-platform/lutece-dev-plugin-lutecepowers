@@ -53,7 +53,12 @@ jobs:
           SNAP=$(python3 tools/latest-lutece.py snapshot fr.paris.lutece:lutece-core | cut -d: -f3)
           IFS=: read -r _ _ BOMV BOMCORE <<< "$(python3 tools/latest-lutece.py bom fr.paris.lutece.starters:lutece-bom)"
           for a in fr.paris.lutece:lutece-core:RELEASE fr.paris.lutece:lutece-core:8.0.1 "fr.paris.lutece:lutece-core:$V8_FLOOR_CORE" "fr.paris.lutece:lutece-core:$SNAP" "fr.paris.lutece:lutece-core:$BOMCORE" "fr.paris.lutece.starters:lutece-bom:$BOMV:pom" "org.freemarker:freemarker:$FM"; do
-            mvn -B -q dependency:get -Dartifact="$a" -Dtransitive=false -DremoteRepositories="$REPOS"
+            for attempt in 1 2 3; do
+              if mvn -B -q dependency:get -Dartifact="$a" -Dtransitive=false -DremoteRepositories="$REPOS"; then break; fi
+              if [ "$attempt" -eq 3 ]; then echo "Failed to download $a after $attempt attempts"; exit 1; fi
+              echo "Retrying $a after failed attempt $attempt"
+              sleep 10
+            done
           done
           W=$(mktemp -d)
           printf '<project><modelVersion>4.0.0</modelVersion><parent><groupId>fr.paris.lutece.tools</groupId><artifactId>lutece-site-pom</artifactId><version>%s</version></parent><groupId>x</groupId><artifactId>site-warm</artifactId><version>1.0.0</version><packaging>lutece-site</packaging><repositories><repository><id>lutece</id><url>https://dev.lutece.paris.fr/maven_repository</url></repository></repositories><pluginRepositories><pluginRepository><id>lutece</id><url>https://dev.lutece.paris.fr/maven_repository</url></pluginRepository></pluginRepositories></project>\n' "$V8_FLOOR_SITE_PARENT" > "$W/pom.xml"
