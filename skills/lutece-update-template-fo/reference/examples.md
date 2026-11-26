@@ -130,7 +130,7 @@ replaced by keys; a template never carries literal copy):
 <@cRow>
     <@cCol cols='12 col-md-6'>
         <@cTitle level=2>#i18n{mylutece.xpage.login_form.pageTitle}</@cTitle>
-        <@cForm method='post' action='${url_dologin}' class='login-form' params='autocomplete="on"'>
+        <@cForm method='post' action='${url_dologin}' class='login-form' params={'autocomplete': 'on'}>
             <@cInput type='hidden' name='page' value='mylutece' class='' />
             <@cInput type='hidden' name='action' value='doLogin' class='' />
             <@cInput type='hidden' name='token' value='${token}' class='' />
@@ -230,10 +230,10 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                             <@cInline>·</@cInline>
                             <#if blog.updateDate??>
                                 <#assign dateIso = blog.updateDate?string('yyyy-MM-dd')>
-                                <@cInline type='time' params='datetime="${dateIso}"'>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
+                                <@cInline type='time' params={'datetime': dateIso}>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
                             </#if>
                             <@cInline>·</@cInline>
-                            <@cInline class='reading-time' params='data-reading-time-label="${readingTimeLabel}"'></@cInline>
+                            <@cInline class='reading-time' params={'data-reading-time-label': readingTimeLabel}></@cInline>
                         </@cBlock>
                         <@cTitle level=2 class='hero__title'>${blog.contentLabel}</@cTitle>
                         <@cText class='hero__lede'>${blog.description!}</@cText>

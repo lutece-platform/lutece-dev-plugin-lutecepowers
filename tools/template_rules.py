@@ -3,11 +3,13 @@
 
 Usage: template_rules.py <rule> [project_root | template_file]
        rule: offcanvas | fo-forms | inline-forms | jquery | fo-upload | unsafe-messages | suggestpoi | fo-required-js
-             | mvc-message | own-messages
+             | mvc-message | own-messages | params-string | params-refused | capture-as-string | macro-shadow
+             | entities-in-literals | html-escaped
 
 Prints one line per breach, `path:line: excerpt`, and exits 1 when there is one. FreeMarker, HTML, JSP and script
-comments are ignored, and so are the macro libraries under templates/*/themes/. Shared by verify-migration.sh (TM02
-to TM07, TM10 to TM12) and scan-template-design.py (TD48, TD49, TD50).
+comments are ignored, and so are the macro libraries under templates/*/themes/ (only the core's for the rules
+reading project macros: params-*, capture-as-string, macro-shadow, entities-in-literals, html-escaped). Shared by
+verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template-design.py (TD48, TD49, TD50).
 
 - offcanvas     no @offcanvas / @cOffcanvas / offcanvas markup: the content of the page goes in a @modal (@cModal),
                 another page is reached by a plain link.
@@ -32,7 +34,27 @@ to TM07, TM10 to TM12) and scan-template-design.py (TD48, TD49, TD50).
                 project fills that list with MVCMessage objects itself.
 - own-messages  ${x.message} over infos or warnings the project fills with MVCMessage objects itself: it works, the
                 modern form is the core's addInfo( ) / addWarning( ) and ${x}.
+- params-string a params argument of a macro call (params, titleParams, additionalParameters...) given as a string
+                literal, a captured block, a variable assigned one or a ternary choosing strings: htmlAttributes takes a map
+                ({'aria-label': label}), anything else fails the rendering.
+- params-refused a key of a params map htmlAttributes refuses: class (the class parameter of the macro), style, an
+                event handler, a URL (href, src, action, formaction) or any name out of its allow list, read from
+                the core of the references (HtmlAttributesMethod).
+- capture-as-string a captured block (<#assign x>...</#assign>, <#local x>) read as a string: a string built-in
+                (?trim, ?length, ?replace...), a comparison with a string, or default_value=x of a select. Under
+                auto-escaping a capture is markup: the page fails at render time.
+- macro-shadow  a macro of the project with a parameter named like a macro it calls (icon=... and <@icon>): inside the
+                body the parameter hides the macro, the call fails at render time.
+- entities-in-literals an HTML entity (&amp;, &nbsp;, &#8722;) in a string literal of a directive, a macro call or
+                an interpolation: auto-escaping escapes it once more. An argument of a built-in searching a text is
+                left alone.
+- html-escaped  ${o.p} where the property p of an object is named as HTML (htmlContent, htmlSubscription...), directly
+                or through a variable assigned from one: a getter returns a string, auto-escaping prints the tags as
+                text. Rich text goes through ${richText(x)}.
 """
+import bisect
+import functools
+import glob
 import os
 import re
 import sys
@@ -276,12 +298,194 @@ def own_messages(text, skin):
     return [line for line, kind in message_prints(text) if (kind, side) in OWN_MESSAGE_LISTS]
 
 
+QUOTED = r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\""""
+THEN_STRING = r"""\?then\(\s*['"]"""
+MACRO_CALL = re.compile(r"""<@[\w.]+\b(?:%s|[^>'"])*>""" % QUOTED, re.S)
+DIRECTIVE_TAG = r"""<[#@](?:%s|[^>'"])*>""" % QUOTED
+TAG = re.compile(DIRECTIVE_TAG + r"""|\$\{(?:%s|[^}'"])*\}""" % QUOTED, re.S)
+LITERAL = re.compile(QUOTED, re.S)
+PARAMS_ARG = re.compile(r"""\b(\w*[pP]arams|additionalParameters)\s*=\s*(?:(%s)|(\{)|([A-Za-z_]\w*))""" % QUOTED)
+CAPTURE = re.compile(r"<#(?:assign|local)\s+(\w+)\s*>")
+STRING_TERNARY = re.compile(r"(?:\.\w+|\?\w+)*" + THEN_STRING)
+STRING_ASSIGN = re.compile(r"""<#(?:assign|local)\s+(\w+)\s*=\s*(?:'|"|[^>]*%s)""" % THEN_STRING)
+ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);")
+MARKUP = re.compile(r"<[#@/a-zA-Z]")
+OPEN_CALL = re.compile(r"\?(\w+)\([^()]*$")
+SEARCH_BUILTINS = {"replace", "contains", "starts_with", "ends_with", "index_of", "last_index_of", "keep_before", "keep_after",
+                   "keep_before_last", "keep_after_last", "split", "matches", "remove_beginning", "remove_ending"}
+STRING_BUILTIN = "trim|length|substring|starts_with|ends_with|contains|replace|split|lower_case|upper_case|cap_first|index_of|matches|left_pad|right_pad"
+MACRO_DEF = re.compile(r"<#macro\s+(\w+)([^>]*)>(.*?)</#macro>", re.S)
+ALLOWED_FALLBACK = {"title", "name", "value", "id", "role", "tabindex", "hidden", "lang", "dir", "placeholder", "pattern",
+                    "required", "readonly", "disabled", "multiple", "min", "max", "step", "minlength", "maxlength", "size",
+                    "accept", "target", "rel", "download", "alt", "width", "height", "loading", "form", "rows", "cols",
+                    "selected", "checked", "autocomplete", "autofocus", "inputmode"}
+
+
+def tabler_css(themes):
+    """The tabler-icons.min.css under the shared css folder of a webapp's themes, wherever the core puts it; '' when none."""
+    return min(glob.glob(os.path.join(themes, "shared/css/**/tabler-icons.min.css"), recursive=True), default="")
+
+
+@functools.lru_cache(maxsize=None)
+def allowed_names():
+    """The attribute names htmlAttributes accepts in params, read from the core of the references when it is there."""
+    src = os.path.join(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")), "lutece-core",
+                       "src/java/fr/paris/lutece/portal/service/template/HtmlAttributesMethod.java")
+    names = set()
+    if os.path.isfile(src):
+        with open(src, encoding="utf-8") as f:
+            m = re.search(r"NAMES_ALLOWED\s*=\s*Set\.of\((.*?)\);", f.read(), re.S)
+        names = set(re.findall(r'"([^"]+)"', m.group(1))) if m else set()
+    return names or ALLOWED_FALLBACK
+
+
+def params_args(text):
+    """The params arguments of the macro calls: (offset in text, match of PARAMS_ARG) for each one."""
+    for call in MACRO_CALL.finditer(text):
+        for m in PARAMS_ARG.finditer(call.group(0)):
+            yield call.start(), m
+
+
+def params_string(text, skin):
+    """Lines of the params arguments given as a string, a capture, a variable assigned one, or a ternary choosing
+    between strings (cond?then('a="1"', ''))."""
+    stringy = set(CAPTURE.findall(text)) | set(STRING_ASSIGN.findall(text))
+    return [line_of(text, base + m.start()) for base, m in params_args(text)
+            if m.group(2) or m.group(4) in stringy or (m.group(4) and STRING_TERNARY.match(text, base + m.end()))]
+
+
+def entities_in_literals(text, skin):
+    """Lines of the HTML entities in a string literal of a directive, a macro call or an interpolation, markup
+    fragments and the arguments of a search built-in (?replace('&nbsp;', '')) aside."""
+    out = []
+    for tag in TAG.finditer(text):
+        body = tag.group(0)
+        for lit in LITERAL.finditer(body):
+            value = lit.group(0)[1:-1]
+            if not ENTITY.search(value) or MARKUP.search(value):
+                continue
+            call = OPEN_CALL.search(body, 0, lit.start())
+            if call and call.group(1) in SEARCH_BUILTINS:
+                continue
+            out.append(line_of(text, tag.start() + lit.start()))
+    return sorted(set(out))
+
+
+def map_keys(text, start):
+    """The keys of the map literal opening at start, the end offset: top-level keys only, values skipped."""
+    keys, depth, i, expect_key = [], 0, start, False
+    while i < len(text):
+        c = text[i]
+        if c in "'\"":
+            j = i + 1
+            while j < len(text) and text[j] != c:
+                j += 2 if text[j] == "\\" else 1
+            if depth == 1 and expect_key:
+                keys.append(text[i + 1:j])
+                expect_key = False
+            i = j + 1
+            continue
+        if c in "{[(":
+            depth += 1
+            expect_key = depth == 1
+        elif c in "}])":
+            depth -= 1
+            if depth == 0:
+                return keys, i
+        elif c == "," and depth == 1:
+            expect_key = True
+        elif c == ":" and depth == 1:
+            expect_key = False
+        i += 1
+    return keys, i
+
+
+def params_refused(text, skin):
+    """Lines of the params map keys htmlAttributes refuses."""
+    allowed, out = allowed_names(), []
+    for base, m in params_args(text):
+        if not m.group(3):
+            continue
+        start = base + m.end() - 1
+        for key in map_keys(text, start)[0]:
+            low = key.lower()
+            ok = (re.fullmatch(r"aria-[a-z]+", low) or (re.fullmatch(r"data-[a-z0-9]+(-[a-z0-9]+)*", low)
+                  and low not in ("data-bs-sanitize", "data-bs-allow-list")) or low in allowed)
+            if not ok:
+                out.append((line_of(text, start), key))
+    return out
+
+
+def capture_as_string(text, skin):
+    """Lines reading a captured block as a string: a string built-in, a comparison in a directive or an interpolation,
+    default_value= of a macro call."""
+    out = []
+    names = {n for n in CAPTURE.findall(text) if not re.search(r"<#(?:assign|local)\s+%s\s*=\s*%s\?markup_string" % (n, n), text)}
+    expressions = [(m.start(), m.group(0)) for m in re.finditer(r"<#(?:if|elseif)\b[^>]*>|\$\{[^}]*\}", text)]
+    expressions += [(m.start(), m.group(0).split("=", 1)[-1]) for m in re.finditer(r"<#(?:assign|local)\b[^>]*>", text)]
+    for name in names:
+        n = re.escape(name)
+        for m in re.finditer(r"(?<![\w.])%s\?(?:%s)\b" % (n, STRING_BUILTIN), text):
+            out.append(line_of(text, m.start()))
+        for m in re.finditer(r"\bdefault_value\s*=\s*%s\b" % n, text):
+            out.append(line_of(text, m.start()))
+        for start, expr in expressions:
+            op = "==|!=|=" if expr.startswith(("<#if", "<#elseif", "${")) else "==|!="
+            if re.search(r"(?<![\w.])%s\s*(?:%s)\s*['\"]|['\"]\s*(?:==|!=)\s*%s\b" % (n, op, n), expr):
+                out.append(line_of(text, start))
+    return sorted(set(out))
+
+
+HTML_NAMED = re.compile(r"\w\.(?:html(?:[A-Z_]\w*)?|[a-z]\w*Html\w*)\b(?!\s*\()")
+INTERPOLATION = re.compile(r"\$\{([^}]*)\}")
+DIRECTIVE = re.compile(r"<#noautoesc>.*?</#noautoesc>|" + DIRECTIVE_TAG, re.S)
+TEXTAREA_OPEN = re.compile(r"<textarea\b|<@(?:input|cInput)\b[^>]*type\s*=\s*['\"]textarea['\"][^>]*(?<!/)>|<@(?:cTextarea|textarea)\b[^>]*(?<!/)>")
+TEXTAREA_CLOSE = re.compile(r"</textarea\s*>|</@(?:input|cInput|cTextarea|textarea)\s*>")
+SAFE_OUTPUT = re.compile(r"richText\(|\?(?:no_esc|markup_string|js_string|json_string|url|c|size|length|has_content|string\b|then)")
+
+
+def html_escaped(text, skin):
+    """Lines printing a value named as HTML, or a variable assigned from one, with ${...} and no richText; not in a
+    textarea, an argument of a directive or a macro, or a noautoesc block."""
+    tainted = {m.group(1) for m in re.finditer(r"<#(?:assign|local)\s+(\w+)\s*=([^>]*)>", text)
+               if HTML_NAMED.search(m.group(2)) and not SAFE_OUTPUT.search(m.group(2))}
+    skipped = [d.span() for d in DIRECTIVE.finditer(text)]
+    starts = [a for a, _ in skipped]
+    opens = [t.end() for t in TEXTAREA_OPEN.finditer(text)]
+    closes = [t.end() for t in TEXTAREA_CLOSE.finditer(text)]
+    out = []
+    for m in INTERPOLATION.finditer(text):
+        pos, expr = m.start(), m.group(1)
+        i = bisect.bisect_left(starts, pos) - 1
+        if (i >= 0 and pos < skipped[i][1]) or SAFE_OUTPUT.search(expr) \
+                or bisect.bisect_right(opens, pos) > bisect.bisect_right(closes, pos):
+            continue
+        if HTML_NAMED.search(expr) or re.sub(r"!\s*(?:''|\"\")?\s*$", "", expr.strip()) in tainted:
+            out.append(line_of(text, pos))
+    return out
+
+
+def macro_shadow(text, skin):
+    """Lines of the macros of the project whose parameter hides a macro the body calls."""
+    out = []
+    for m in MACRO_DEF.finditer(text):
+        names = set(re.findall(r"(?:^|\s)(\w+)\s*(?==|\s|$)", m.group(2)))
+        for name in names:
+            if re.search(r"<@%s\b" % re.escape(name), m.group(3)):
+                out.append(line_of(text, m.start()))
+    return out
+
+
 RULES = {"offcanvas": offcanvas, "fo-forms": fo_forms, "inline-forms": inline_forms, "jquery": jquery, "fo-upload": fo_upload,
-         "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages}
+         "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages,
+         "params-string": params_string, "params-refused": params_refused, "capture-as-string": capture_as_string,
+         "macro-shadow": macro_shadow, "entities-in-literals": entities_in_literals, "html-escaped": html_escaped}
 SCOPES = {"jquery": (("webapp/WEB-INF/templates",), (".html", ".ftl", ".js")),
           "suggestpoi": (("webapp",), (".html", ".ftl", ".jsp"))}
 DEFAULT_SCOPE = (("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"), (".html", ".ftl"))
 MACRO_LIBRARY = re.compile(r"/templates/(admin|skin)/themes/")
+CORE_MACROS = re.compile(r"/templates/(admin/themes/tabler|skin/themes/macros)/")
+PROJECT_MACRO_RULES = ("params-string", "params-refused", "capture-as-string", "macro-shadow", "entities-in-literals", "html-escaped")
 
 
 def main():
@@ -300,7 +504,8 @@ def main():
             for dirpath, dirs, files in os.walk(os.path.join(root, sub)):
                 dirs.sort()
                 paths += [os.path.join(dirpath, n) for n in sorted(files) if n.endswith(exts)]
-        paths = [p for p in paths if not MACRO_LIBRARY.search(os.path.abspath(p).replace(os.sep, "/"))]
+        library = CORE_MACROS if sys.argv[1] in PROJECT_MACRO_RULES else MACRO_LIBRARY
+        paths = [p for p in paths if not library.search(os.path.abspath(p).replace(os.sep, "/"))]
     if sys.argv[1] in ("mvc-message", "own-messages"):
         OWN_MESSAGE_LISTS.update(own_message_lists(project_root(root)))
     found = 0

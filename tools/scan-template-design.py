@@ -134,7 +134,7 @@ REFERENCES = os.path.expanduser("~/.lutece-references")
 CORE = os.path.join(REFERENCES, "lutece-core")
 BO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/admin/themes/tabler")
 FO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/skin/themes/macros")
-TABLER_CSS = os.path.join(CORE, "webapp/themes/shared/css/tabler-icons.min.css")
+TABLER_CSS = template_rules.tabler_css(os.path.join(CORE, "webapp/themes"))
 
 EMAIL_MARKERS = ("cellpadding=", "<!--[if mso", "x-apple-disable-message-reformatting", "email-container", "darkmode-bg", "@portal_url@")
 INTERACTIVE = re.compile(r"<script\b|<form\b|<select\b|<input\b|<button\b", re.I)
@@ -505,8 +505,8 @@ class Knowledge:
                 CORE, BO_MACRO_DIR, FO_MACRO_DIR, self.source = base, bo, fo, label
                 self.webapps = [base, os.path.join(root, "webapp")]
                 templates_root = os.path.join(base, "WEB-INF/templates")
-                css = os.path.join(base, "themes/shared/css/tabler-icons.min.css")
-                if os.path.isfile(css):
+                css = template_rules.tabler_css(os.path.join(base, "themes"))
+                if css:
                     TABLER_CSS = css
                 break
         self.available = os.path.isdir(BO_MACRO_DIR) and os.path.isdir(FO_MACRO_DIR)
@@ -989,8 +989,9 @@ def check_common(text, findings, kind, know):
             add(findings, "TD61", "WARN", line, "script or stylesheet %s, which the assembled webapp does not carry: 404, and what it defines is missing from the page (an asset moved to themes/shared/plugins/<plugin>/ in v8)" % asset)
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
-    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
-    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp;")
+    ftl = [m.span() for m in re.finditer(r"<[#@](?:'[^']*'|\"[^\"]*\"|[^>'\"])*>", text)]
+    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text) if not any(a <= m.start() < b for a, b in ftl)]
+    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an HTML href/action attribute: &amp; (a FreeMarker literal keeps the & itself, TM18)")
 
 
 def nested_forms(text):

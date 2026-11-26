@@ -1078,6 +1078,7 @@ def check_conf(site, war, out):
                 out.add("FAIL", "SI23", f"src/main/liberty/config/server.xml: no <dataSource jndiName=\"{ds}\"> for pool {pool}")
             if props.get(f"{pool}.password"):
                 out.add("WARN", "SI24", f"webapp/WEB-INF/conf/db.properties: {pool}.password in clear; the datasource credentials belong to server.xml variables or the environment")
+    check_telemetry(site, out)
     if war:
         check_driver(site, war, out)
         check_server_variables(site, war, out)
@@ -1100,6 +1101,25 @@ def check_driver(site, war, out):
             if not any(rx.match(n) for n in names):
                 out.add("FAIL", "SI25", f"src/main/liberty/config/server.xml: fileset {pattern.strip()} matches no jar of the war (drivers shipped: " +
                         ", ".join(n for n in names if re.search(r"mariadb|mysql|postgres|ojdbc", n)) + ")")
+
+
+def check_telemetry(site, out):
+    """SI33: the Liberty server exports its logs, traces and FFDC through OpenTelemetry (mpTelemetry-2.0)."""
+    server = site.path / "src/main/liberty/config/server.xml"
+    if not server.exists():
+        return
+    text = re.sub(r"<!--.*?-->", "", server.read_text(encoding="utf-8", errors="replace"), flags=re.S)
+    missing = []
+    if not re.search(r"<feature>\s*mpTelemetry-2\.\d+\s*</feature>", text):
+        missing.append("<feature>mpTelemetry-2.0</feature>")
+    source = re.search(r'<mpTelemetry\b[^>]*\bsource="([^"]*)"', text)
+    wanted = {"message", "trace", "ffdc"}
+    have = {x.strip() for x in source.group(1).split(",")} if source else set()
+    if not wanted <= have:
+        missing.append('<mpTelemetry source="message, trace, ffdc"/>')
+    if missing:
+        out.add("WARN", "SI33", "src/main/liberty/config/server.xml: no " + " nor ".join(missing) +
+                ": the server logs do not reach the OpenTelemetry collector of the platform")
 
 
 def check_server_variables(site, war, out):

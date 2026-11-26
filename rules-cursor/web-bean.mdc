@@ -151,23 +151,21 @@ cover each one with a negative e2e scenario:
 
 Forbidden with `securityTokenEnabled = true`: `SecurityTokenService.MARK_TOKEN` in the model, `getToken()`, `validate()`, `@Inject SecurityTokenService` in the bean. Keep them ONLY in non-MVC beans (no `@Controller`), where `getSecurityTokenService()` (inherited from `AdminFeaturesPageJspBean`) is the accessor.
 
-## Request parameters arrive sanitized
+## Request parameters arrive raw (lutece-core 8.1)
 
-The core `SafeRequestFilter` (`/jsp/admin/*` and `/jsp/site/*`, `lutece.safe.request.*.sanitizeFilterMode=true` by
-default) passes every request parameter through `XSSSanitizerService.sanitize`, whose v8 implementation is
-`OwaspXSSSanitizer` (OWASP policy FORMATTING, LINKS, BLOCKS, IMAGES, STYLES, TABLES). What
-`request.getParameter( )` returns:
+lutece-core 8.1 no longer rewrites the request parameters: the sanitize mode of `SafeRequestFilter` is removed
+(`lutece.properties`, LUT-34109); only a rejection mode remains, off by default. `request.getParameter( )` returns
+the text as typed, and FreeMarker auto-escaping escapes it where a template prints it.
 
-- text characters as entities: `&` → `&amp;`, `=` → `&#61;`, `'` → `&#39;`, `"` → `&#34;`, `` ` `` → `&#96;`
-  (`@` and `+` kept);
-- allowed tags kept (`<b>`, `<a href>`, `<table>`…), other tags removed with their content (`<script>`), an unclosed
-  one closed (`a<b` → `a<b></b>`).
-
-Never escape a parameter again in Java (a v7 `replace( "&", "&amp;" )` or `StringEscapeUtils.escapeHtml*` encodes
-twice: `&amp;amp;` in the database, a broken link on screen) (WB11), and do not add `?html` in the template for a
-value that came from a request. A field that must hold the raw text (a URL, a pattern, code) reads
-`StringEscapeUtils.unescapeHtml4( request.getParameter( … ) )`, as core `SecurityHeaderJspBean` does. A servlet or a
-REST resource is outside the filter and receives raw parameters.
+- Store the value as typed. Never escape it in Java before storing (`replace( "&", "&amp;" )`,
+  `StringEscapeUtils.escapeHtml*`, an own escaping helper, a multipart special case): the template escapes it a
+  second time and the page shows `L&amp;#39;idée` (WB11).
+- Rich text a user or an administrator typed (an editor, BBCode rendered to HTML) is stored as typed and printed
+  through `${richText(x)}` or `HtmlMarkup.ofSanitized( x )`, never `?no_esc`.
+- A project that stored escaped text before 8.1 (the core filter wrote `&#39;`, `&#34;`, `&#61;`, `&amp;`… into
+  every parameter of `/jsp/admin/*` and `/jsp/site/*`) decodes its plain text columns once, in an upgrade changeset,
+  as `update_db_lutece_core-8.0.2-8.1.0.sql` (rev3) does for the core: a `REPLACE` chain per column, `WHERE col LIKE
+  '%&%;%'`, columns holding HTML left out.
 
 ## Errors from a view
 

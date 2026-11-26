@@ -18,8 +18,8 @@ cs03  an MVC controller comparing the request method with POST: a guard around t
       @Action on GET without its token (the core owns the fix; the e2e scenario carries core_defect).
 wb10  a @RequestScoped admin bean calling the inherited getPlugin( ): PluginAdminPageJspBean.init sets the plugin
       from the plugin_name parameter only, so a fresh bean per request holds null on every request without it.
-wb11  a request parameter HTML-escaped by hand: the core XSS filter (sanitizeFilterMode, on by default for admin and
-      site) already escapes every parameter, so the value is stored escaped twice (&amp;amp;).
+wb11  a request parameter HTML-escaped by hand: the value is stored escaped, and FreeMarker auto-escaping escapes it
+      again where a template prints it (L&amp;#39;idée); since lutece-core 8.1 a parameter is stored as typed.
 da03  a DAO reading as a number (getInt, getLong) a column the create scripts declare as text (char, varchar, text),
       or comparing such a column with a number bound (setInt, setLong in a where clause): the driver throws on a
       non-numeric value read, the database casts every row on the comparison (no index, '' equals 0). A number
@@ -383,7 +383,7 @@ AMP_REPLACE = r"%s\s*\.\s*replace(?:All)?\s*\(\s*\"&\"\s*,\s*\"&amp;\"\s*\)"
 
 def wb11(root):
     """Request parameters HTML-escaped by hand, in a bean served under /jsp/admin or /jsp/site (a JspBean, an XPage),
-    where the core XSS filter already escapes them; a servlet or a REST resource is outside the filter."""
+    where FreeMarker auto-escaping escapes them again when they are printed."""
     files = sources(root)
     info = types(files)
     served = {t["path"] for n, t in info.items() if _served_by_jsp(info, n)}
@@ -398,8 +398,39 @@ def wb11(root):
             for pattern in (ESCAPE_CALL, AMP_REPLACE):
                 for m in re.finditer(pattern % subject, raw):
                     out.append((path, raw[:m.start()].count("\n") + 1))
-    return ["%s:%d: request parameter escaped by hand: the core XSS filter already escapes it, the value ends up escaped "
+    return ["%s:%d: request parameter escaped by hand: the templates escape it again where they print it, the value ends up escaped "
             "twice; drop the escaping (rules/web-bean.md)" % (os.path.relpath(p, root), n) for p, n in sorted(set(out))]
+
+HTML_VALUE = re.compile(r"\bgetHtml\w*\s*\(|\bstr\w*(?:Html|Content)\w*\b(?!\s*\()|\b\w*Html\b(?!\s*\()|\b\w*(?:[Bb]uffer|Builder)\s*\.\s*toString\s*\(")
+
+
+def ae01(root):
+    """HTML the project builds (a rendered template, a captcha code, a buffer of markup) put in a template model as a
+    String: lutece-core 8.1 auto-escaping prints it as text; HtmlMarkup.of( ) hands it to the template as markup."""
+    out = []
+    for path, raw in sorted(sources(root).items()):
+        code = strip(raw)
+        if "HtmlTemplate" not in code and "AppTemplateService" not in code:
+            continue
+        for m in re.finditer(r"\.\s*put\s*\(", code):
+            depth, i, comma = 1, m.end(), None
+            while i < len(code) and depth:
+                depth += code[i] == "("
+                depth -= code[i] == ")"
+                if code[i] == "," and depth == 1 and comma is None:
+                    comma = i
+                i += 1
+            if comma is None:
+                continue
+            value = code[comma + 1:i - 1]
+            if "markup" in value.lower():
+                continue
+            if HTML_VALUE.search(value):
+                out.append((path, code[:m.start()].count("\n") + 1))
+    return ["%s:%d: HTML built by the project put in a template model as a String: printed as text under auto-escaping, "
+            "put HtmlMarkup.of( html ) (HtmlMarkup.ofSanitized for rich text a user typed)" % (os.path.relpath(p, root), n)
+            for p, n in sorted(set(out))]
+
 
 DAO_CALL = re.compile(r"\b\w+\s*\.\s*(get|set)(\w+)\s*\(\s*(\"\w+\"|\d+|\w+\s*\+\+)\s*[,)]|\b(?:int\s+)?(\w+)\s*=\s*(\d+)\s*;|\b(\w+)\s*\+\+")
 METHOD_DECL = re.compile(r"(?m)^[ \t]*(?:public|protected|private)\b[^;={]*\(")
@@ -980,7 +1011,7 @@ def pd03(root):
 
 CHECKS = {"dp01": dp01, "dp04": dp04, "dp05": dp05, "dp06": dp06, "pi01": pi01, "rl01": rl01, "pd02": pd02, "gi01": gi01,
           "cd05": cd05, "cd08": cd08, "mv08": mv08, "wg01": wg01, "pd03": pd03, "mv01": mv01, "st04": st04, "cs03": cs03,
-          "wb10": wb10, "wb11": wb11, "da03": da03, "hm01": hm01, "hm02": hm02}
+          "wb10": wb10, "wb11": wb11, "ae01": ae01, "da03": da03, "hm01": hm01, "hm02": hm02}
 
 
 def run_into(out_dir, root, names):

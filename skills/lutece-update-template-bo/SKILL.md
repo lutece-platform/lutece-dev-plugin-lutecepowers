@@ -176,7 +176,7 @@ Rule: `rules/template-back-office.md` § List Layout. `@manageFeature` for entit
 - **No offcanvas**, ever. Content written in the page itself (a search form, a small creation form, properties) goes
   in a modal opened by a button:
   ```freemarker
-  <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' params='data-bs-toggle="modal" data-bs-target="#searchModal"' />
+  <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' params={'data-bs-toggle': 'modal', 'data-bs-target': '#searchModal'} />
   <@modal id='searchModal'>
       <@modalHeader modalTitle='#i18n{portal.util.labelSearch}' />
       <@modalBody><@tform action='…'>…</@tform></@modalBody>
