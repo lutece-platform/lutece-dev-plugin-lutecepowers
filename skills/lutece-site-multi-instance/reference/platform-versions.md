@@ -1,14 +1,16 @@
 # Platform versions
 
 The plugin fixes a site needs to run on several replicas (shared session, shared cache, concurrent replicas) are carried by
-the BOM and the starters of `lutece-platform` **8.0.0-beta-04** or later: `fr.paris.lutece.starters:lutece-bom` imported in
-`dependencyManagement`, a starter (`forms-starter`, `appointment-starter`, `editorial-starter`, `lutece-starter`) or the
+the latest BOM and starters of `lutece-platform`: `fr.paris.lutece.starters:lutece-bom` imported in `dependencyManagement`, a starter (`forms-starter`, `appointment-starter`, `editorial-starter`, `lutece-starter`) or the
 organisation's pack built on them. The layers and the rules of the site pom are in `lutece-update-site`
 (`reference/layers.md`).
 
 Check, on the site and on its assembled war:
 
-1. The `lutece-bom` import and the starter are at 8.0.0-beta-04 or later.
+1. The `lutece-bom` import and the starter are the latest BOM as `tools/latest-lutece.py bom fr.paris.lutece.starters:lutece-bom`
+   picks it: the BOM that manages the highest `lutece-core`, not the highest BOM number (an old `8.0.0-RC-01` sorts above
+   the betas, manages core 8.0.0 and no `library-cache-hazelcast`). `check-v8-floor.sh` refuses a site whose resolved core
+   is below that BOM's core; `site_check.py` SI02 names the BOM when none is imported.
 2. No artefact the BOM manages carries a version of its own in the site pom (`site_check.py` SI04): an older version pinned
    there brings back the defect the BOM fixes.
 3. The `cluster` profile adds `library-cache-hazelcast` (managed by the BOM): without it every Lutece cache holds 10,000

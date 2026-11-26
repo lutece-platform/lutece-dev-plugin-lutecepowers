@@ -67,21 +67,22 @@ Reference: `TransactionManager` in `lutece-core` (`fr.paris.lutece.util.sql`); u
 **Lock table** (one row = one named lock):
 ```sql
 CREATE TABLE IF NOT EXISTS <plugin>_lock (
-  lock_name     varchar(80)  NOT NULL,   -- e.g. 'reservation.slot.42'
-  instance_name varchar(80),             -- holder = hostname-pid
-  is_locked     boolean,
+  lock_name     varchar(255) NOT NULL,   -- e.g. 'reservation.slot.42'
+  instance_name varchar(255),            -- holder = hostname-pid (a pod name can be long)
+  is_locked     smallint,
   date_begin    timestamp,
   expired_date  timestamp,               -- TTL: past it, the lock is considered abandoned
-  uuid          varchar(50),             -- unique holder token (anti-steal)
+  uuid          varchar(255),            -- unique holder token (anti-steal)
   PRIMARY KEY (lock_name)
 );
 ```
+Column types of forms `create_db_forms.sql` (`forms_lucene_lock`, key column `index_name`).
 **Atomic acquire** (the DB serialises the UPDATE on the PK row; clock is 100% DB-side → no clock skew):
 ```sql
 UPDATE <plugin>_lock
-SET instance_name=?, is_locked=true, date_begin=CURRENT_TIMESTAMP,
+SET instance_name=?, is_locked=1, date_begin=CURRENT_TIMESTAMP,
     expired_date={fn TIMESTAMPADD(SQL_TSI_SECOND, ?, CURRENT_TIMESTAMP)}, uuid=?
-WHERE lock_name=? AND (is_locked=false OR expired_date < CURRENT_TIMESTAMP);   -- rowCount==1 => acquired
+WHERE lock_name=? AND (is_locked=0 OR expired_date < CURRENT_TIMESTAMP);   -- rowCount==1 => acquired
 ```
 **Heartbeat** (renew only if still ours AND not expired; 0 rows => lock lost => ABORT) and **release** (by uuid) — see the forms `LockDAO`.
 

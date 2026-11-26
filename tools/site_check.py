@@ -1337,6 +1337,11 @@ def check_cluster(site, war, out):
     if not (cluster or "sessionCache-1.0" in server or "sessionDatabase-1.0" in server or "hazelcast" in deps):
         return
     jars = [j.name for j in war.jars()] if war else []
+
+    def ships(artifact):
+        """Whether the pom declares artifact or the war carries its jar."""
+        return artifact in deps or any(j.startswith(artifact + "-") for j in jars)
+
     override = override_text(site)
     member, client = read_text(cfg / "hazelcast-config-api-mode.yaml"), read_text(cfg / "hazelcast-client-config-api-mode.yaml")
     jvm = read_text(cfg / "jvm.options")
@@ -1349,7 +1354,7 @@ def check_cluster(site, war, out):
         hazelcast, n = False, n + 1
     else:
         hazelcast = "hazelcast" in liberty.lower() or "hazelcast" in deps
-        if hazelcast and "hazelcast" not in deps and not any(j.startswith("hazelcast-") for j in jars):
+        if hazelcast and not ships("hazelcast"):
             out.add("FAIL", "SI60", "pom.xml: sessionCache-1.0 configured for Hazelcast and no hazelcast dependency: the provider is not found")
             n += 1
     if hazelcast:
@@ -1404,7 +1409,7 @@ def check_cluster(site, war, out):
         if needle not in server:
             out.add("WARN", "SI65", f"server.xml: {why}")
             n += 1
-    if "plugin-quartz-scheduler" not in deps and not any(j.startswith("plugin-quartz-scheduler-") for j in jars):
+    if not ships("plugin-quartz-scheduler"):
         out.add("FAIL", "SI66", "pom.xml: no plugin-quartz-scheduler: every daemon runs on every replica")
         n += 1
     elif not re.search(r"^\s*quartzscheduler\.cluster\.enable\s*=\s*true", override, re.M):
@@ -1424,6 +1429,9 @@ def check_cluster(site, war, out):
             out.add("INFO", "SI66", "daemons of the war running on every replica: " + ", ".join(rest))
     if any(j.startswith("ehcache-") for j in jars) and hazelcast:
         out.add("WARN", "SI67", "the war ships Ehcache: neutralise it (scope provided in the cluster profile)")
+        n += 1
+    if hazelcast and not ships("library-cache-hazelcast"):
+        out.add("WARN", "SI67", "pom.xml: no fr.paris.lutece.plugins:library-cache-hazelcast (cluster profile): under Hazelcast every Lutece cache holds 10,000 entries (lutece.cache.default.maxElementsInMemory), whatever its Lutece size")
         n += 1
     if cluster and "${cluster.config}" not in server:
         out.add("WARN", "SI67", "server.xml: cluster.xml is not included through the cluster.config variable: the local profile cannot skip it")

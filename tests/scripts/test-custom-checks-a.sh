@@ -225,6 +225,34 @@ fixture cs01-commented "$J/web/portlet/MyPortletJspBean.java" 'public class MyPo
 expect cs01-parent CS01 FAIL
 expect cs01-helper CS01 PASS
 expect cs01-commented CS01 FAIL
+CS01_COMMON='public class MyPortletJspBean extends PortletJspBean
+{
+    public String doCreate( HttpServletRequest request )
+    {
+        String strError = setPortletCommonData( request, portlet );
+        if ( strError != null )
+        {
+            return strError;
+        }
+        return "";
+    }
+}'
+CORE81='<project><packaging>lutece-plugin</packaging><dependencies><dependency><artifactId>lutece-core</artifactId><type>lutece-core</type><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>'
+fixture cs01-core81 "$J/web/portlet/MyPortletJspBean.java" "$CS01_COMMON"
+fixture cs01-core81 pom.xml "$CORE81"
+fixture cs01-core80 "$J/web/portlet/MyPortletJspBean.java" "$CS01_COMMON"
+fixture cs01-dropped "$J/web/portlet/MyPortletJspBean.java" 'public class MyPortletJspBean extends PortletJspBean
+{
+    public String doCreate( HttpServletRequest request )
+    {
+        setPortletCommonData( request, portlet );
+        return "";
+    }
+}'
+fixture cs01-dropped pom.xml "$CORE81"
+expect cs01-core81 CS01 PASS
+expect cs01-core80 CS01 FAIL
+expect cs01-dropped CS01 FAIL
 
 fixture cs02-bad "$J/service/MyContentService.java" 'public class MyContentService extends ContentService
 {
@@ -416,5 +444,5 @@ expect st08-ok ST08 PASS
 expect st08-inner ST08 PASS
 expect st08-leading ST08 PASS
 
-[ "$fails" -eq 0 ] && { echo "PASS: CD01 flags a static singleton on a CDI or @Singleton bean only, outside comments, CD05 a lazy bean registering itself in its constructor or @PostConstruct without @Observes @Initialized, never Plugin.init, a declaration or an unregister, CS01 each portlet do* without its token, through a project parent and a validating helper, CS02 unqualified or super. cache calls on a ContentService, not its own methods or comments, ST02 a final normal-scoped bean resolved by its concrete type (field or Instance), not through its interface nor @Dependent, ST05 a beans.xml or test config git ignores, ST07 a production class surefire takes for a test, ST08 a src/site descriptor maven-site-plugin cannot read (HTML entity in the root tag, unclosed tag), not an entity elsewhere nor blank lines before the declaration"; exit 0; }
+[ "$fails" -eq 0 ] && { echo "PASS: CD01 flags a static singleton on a CDI or @Singleton bean only, outside comments, CD05 a lazy bean registering itself in its constructor or @PostConstruct without @Observes @Initialized, never Plugin.init, a declaration or an unregister, CS01 each portlet do* without its token, through a project parent and a validating helper, guarded on 8.1 by the result of setPortletCommonData, CS02 unqualified or super. cache calls on a ContentService, not its own methods or comments, ST02 a final normal-scoped bean resolved by its concrete type (field or Instance), not through its interface nor @Dependent, ST05 a beans.xml or test config git ignores, ST07 a production class surefire takes for a test, ST08 a src/site descriptor maven-site-plugin cannot read (HTML entity in the root tag, unclosed tag), not an entity elsewhere nor blank lines before the declaration"; exit 0; }
 exit 1

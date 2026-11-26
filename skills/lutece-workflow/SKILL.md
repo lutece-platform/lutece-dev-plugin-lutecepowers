@@ -156,7 +156,7 @@ task.{name}.info.noConfig=No configuration found
 
 ## 13. pom.xml Dependencies
 
-`library-workflow-core` comes transitively through `plugin-workflow`; do not declare it (reference: `module-workflow-forms/pom.xml`).
+`library-workflow-core` comes transitively with `lutece-core`, which pins it; do not declare it (`rules/dependency-convergence.md` § Never redeclare what the core pins; reference: `module-workflow-forms/pom.xml`).
 
 ```xml
 <dependencies>

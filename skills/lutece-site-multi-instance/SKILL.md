@@ -26,8 +26,8 @@ one, follow `reference/session-options.md` (OpenLiberty documentation links) and
 Session affinity is recommended, by a cookie the load balancer sets on the first response, never named `JSESSIONID` and
 never a hash of `JSESSIONID` (the first request has no cookie: the visitor changes replica once). The session stays shared (a replica lost, its users
 continue on the other one), but OpenLiberty writes it at the end of the request, after a redirect is sent: the request that
-follows the redirect can reach the other replica first and read the session before the POST (back office actions and their
-`AdminMessage`: `Invalid security token`). Form steps answer 200 without a redirect and pass without affinity. Measured on 2
+follows the redirect can reach the other replica first and read the session before the POST (back office actions refused
+with a 403, security token unknown to that replica, a WARN of `lutece.security`; `rules/web-bean.md` § CSRF Policy). Form steps answer 200 without a redirect and pass without affinity. Measured on 2
 replicas, 11-step form: −12 to −21 % CPU per request and p50 −17 to −32 % with affinity (`reference/kubernetes.md`).
 
 ## Before writing anything
@@ -35,7 +35,7 @@ replicas, 11-step form: −12 to −21 % CPU per request and p50 −17 to −32 
 1. Read the site: `pom.xml`, `src/main/liberty/config/*`, `Dockerfile`, `webapp/WEB-INF/conf/override/*.properties`,
    `webapp/WEB-INF/plugins/plugins.dat`.
 2. Note the site code (`<site>` in the templates: cluster name, Kubernetes names), the database, the plugins.
-3. Check `reference/platform-versions.md`: `lutece-platform` BOM and starter 8.0.0-beta-04 or later, nothing pinned below them.
+3. Check `reference/platform-versions.md`: the latest `lutece-bom` (`latest-lutece.py bom`) and its starter, nothing pinned below them.
 4. Ask the user only what cannot be read: the session store if not Hazelcast, the Kubernetes service name of the Hazelcast
    port and the Hazelcast version if the organisation imposes them, the ReadWriteMany storage class.
 
@@ -89,6 +89,7 @@ Each one was observed; the evidence and the numbers are in `reference/rules.md` 
   bounded (12 threads for a 2 CPU limit on the example Forms site; every figure of the skill is a measure of that site, so
   tell the user the values depend on their site and are measured under its target load), `maxPoolSize` 12;
   the database user limit covers (replicas + surge + migration run) x `maxPoolSize`.
+- Lutece: `lutece.security.trustedProxies` set to the proxies in front of the replicas (`reference/rules.md`).
 - Kubernetes: preStop 10 s and grace period 60 s, startup probe, readiness on the database, liveness on the webapp only,
   probe timeouts 5 s / 10 s, CPU limit above the request, autoscaling on CPU only.
 - Data changed outside Lutece (SQL, restore): reset the caches from the back office; a rolling restart keeps them. Under

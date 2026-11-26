@@ -1,33 +1,30 @@
 # What this artefact must refuse. Mandatory file (`<artefact>-negative.yaml`): a mutation without its CSRF token,
 # one empty-mandatory-field and one duplicate-key refusal per main entity, an unknown id answered gracefully, and,
 # when the artefact enforces rights of its own, a restricted account seeded in harness/db/seed-<target>.sql.
-# The oracle is `expect_message: error` (a Lutece AdminMessage, never an internal error) plus the row unchanged.
+# The oracle of a refused form is `expect_message: error` (a Lutece AdminMessage, never an internal error) plus the
+# row unchanged; the oracle of a forgery is the status the core's token filter answers plus the row unchanged.
 scenarios:
 
-  # Two forgeries, both mandatory. The POST without token is what the core filter refuses. The GET is a link or an
-  # <img> in any page: the core runs an @Action on GET without checking the token (SecurityTokenHandler exempts GET).
-  # That is the core's to fix: never work around it in the plugin, keep the scenario with its `core_defect:`, and the
-  # report lists it as a core defect not handled while the run stays green; the day the core refuses the GET, the
-  # scenario passes and the report says to drop the key.
+  # Two forgeries, both mandatory. The core's token filter answers 403 to an @Action posted without its token. A GET
+  # (a link or an <img> in any page) follows lutece.mvc.action.getPolicy: `log`, the default, checks the token as for
+  # a POST (403) and logs a WARN; `refuse` answers 405; `allow`, or an entry of lutece.mvc.action.getPolicy.allowed,
+  # runs the action: a site choice, never a plugin's. Keep 403 unless the bench site sets another policy.
   # A forgery that goes through deletes its target: point the forged calls at a row of their own (a sql_exec before
   # the call creates it), never at a seed row the other scenarios read in parallel.
   - id: myentity_csrf_post_without_token_refused
-    title: Une suppression postée sans jeton CSRF est refusée et la ligne reste en base
+    title: Une suppression postée sans jeton CSRF est refusée (403) et la ligne reste en base
     req: MYPLUGIN_MANAGEMENT
     steps:
       - sql_exec: "REPLACE INTO myplugin_myentity (id_myentity, title) VALUES (9101, 'E2E forged POST')"
-      - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp', method: POST, headers: {Content-Type: application/x-www-form-urlencoded}, body: 'action=removeMyEntity&id=9101'}
+      - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp', method: POST, headers: {Content-Type: application/x-www-form-urlencoded}, body: 'action=removeMyEntity&id=9101', expect_status: 403}
       - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9101", expect: 1}
 
   - id: myentity_csrf_get_without_token_refused
-    title: "Défaut du core : une suppression appelée par un simple lien, sans jeton, ne doit rien supprimer"
-    description: >-
-      Core defect: lutece-core runs an @Action called on GET without checking its token, so the link deletes the row.
-    core_defect: "lutece-core runs an @Action on GET without checking its token (SecurityTokenHandler ALLOWED_METHODS)"
+    title: Une suppression appelée par un simple lien, sans jeton, est refusée (403) et la ligne reste en base
     req: MYPLUGIN_MANAGEMENT
     steps:
       - sql_exec: "REPLACE INTO myplugin_myentity (id_myentity, title) VALUES (9102, 'E2E forged GET')"
-      - goto: jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=removeMyEntity&id=9102
+      - http: {url: 'jsp/admin/plugins/myplugin/ManageMyEntities.jsp?action=removeMyEntity&id=9102', expect_status: 403}
       - sql: {query: "SELECT COUNT(*) FROM myplugin_myentity WHERE id_myentity=9102", expect: 1}
 
   # - id: myentity_empty_title_refused

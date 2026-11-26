@@ -64,7 +64,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### cIcon - Tabler icons
 - **Prefer `<@cIcon>`** over `<@cInline type='i' class='ti ti-xxx' />`; `@parisIcon` does not exist in the core
 - The `ti ti-` prefix is added automatically: `<@cIcon name='eye' />` → `<span class="ti ti-eye">`
-- `name` must be a Tabler name (the `tabler-icons.min.css` under `webapp/themes/shared/css/`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
+- `name` must be a Tabler name (`webapp/themes/shared/css/vendor/tabler/tabler-icons.min.css`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
 - `name` is the glyph, never a label: `<@cIcon name='#i18n{...}' />` is wrong
 - Vocabulary in use: submit `check`, send `mail`, search `search`, reset `refresh`, edit `edit`, view `eye`, delete `trash`, top `chevron-up`, back `arrow-left`, forward/login `arrow-right`
 - Extra classes via `class`: `<@cIcon name='settings' class='me-1' />`
@@ -108,7 +108,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - `progressId`: ID of the bar (used by JS for DOM manipulation)
 - `color`: Bootstrap color (`'primary'`, `'danger'`, `'warning'`, etc.)
 - `value`: initial value (0 by default)
-- Not for password strength any more: `cInputPassword passwordMeter=true` carries its own
+- Not for password strength: `cInputPassword passwordMeter=true` carries its own
 
 ### cBtn - Buttons
 - The class is prefixed automatically with `btn btn-`: `class='primary'` → `class="btn btn-primary"`
@@ -228,11 +228,8 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
   ```freemarker
   <#assign isChecked = false>
   <#if someCondition><#assign isChecked = true></#if>
-  <#assign cbParams = ''>
-  <#if field.comment?? && field.comment != ''>
-      <#assign cbParams = 'title="${field.comment}"'>
-  </#if>
-  <#assign cbLabelClass><#if field.noDisplayTitle>visually-hidden</#if></#assign>
+  <#assign cbParams = field.comment?has_content?then({'title': field.comment}, {})>
+  <#assign cbLabelClass = field.noDisplayTitle?then('visually-hidden', '')>
   <@cCheckbox name='myField' id='myField_${field.id}' value='${field.id}' checked=isChecked label=field.title labelClass=cbLabelClass params=cbParams inline=isInline />
   ```
 - For checkboxes grouped in a vertical list, do not wrap them in a `<@cBlock class='checkbox'>` — the macro handles its own container

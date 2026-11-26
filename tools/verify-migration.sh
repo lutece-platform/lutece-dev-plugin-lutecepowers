@@ -26,6 +26,7 @@ EXPLODED_RC=0; EXPLODED_OUT=""
 if [ -d "webapp/WEB-INF/templates" ]; then
     EXPLODED_OUT=$(bash "$SCRIPT_DIR/ensure-exploded.sh" . 2>&1) || EXPLODED_RC=$?
 fi
+CORE81=0; python3 "$SCRIPT_DIR/autoescape-target.py" . && CORE81=1
 
 # The slowest checks are functions started in the background here, each writing its output, errors and status to
 # files the check reads at its turn (fetched); the report keeps its order.
@@ -967,7 +968,7 @@ for dirpath, _, files in os.walk("webapp/WEB-INF/templates"):
             for m in re.finditer(r"\$\{\s*token\b", block.group(1)):
                 lines.add(line_of(text, block.start(1) + m.start()))
         for i in sorted(lines):
-            print("%s:%d: the token rides a GET link to an action or a script: move that mutation to a POST form first (TD71), never drop the manual check while the action is reachable by GET: the core runs an @Action on GET without its token" % (path, i))
+            print("%s:%d: the token rides a GET link to an action or a script: move that mutation to a POST form first (TD71), never drop the manual check while the action is reachable by GET: under lutece.mvc.action.getPolicy=allow the core runs it without the framework token" % (path, i))
 PY
 )
     fi
@@ -1061,12 +1062,12 @@ COUNT=0; [ -n "$ST04_MATCHES" ] && COUNT=$(echo "$ST04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST04" "PASS" "Every project type CDI resolves has a bean" 0
 else emit "ST04" "FAIL" "Project type resolved by CDI with no bean: the lookup is unsatisfied at deployment (give it a scope or a producer)" "$COUNT" "$ST04_MATCHES"; fi
 
-# CS03: a @Controller comparing the request method with POST works around the core defect that runs an @Action on GET
-# without its token; the core owns the fix, the e2e scenario carries core_defect (java_checks.py).
+# CS03: a @Controller comparing the request method with POST duplicates the core, which applies
+# lutece.mvc.action.getPolicy to an @Action requested by GET (java_checks.py).
 CS03_MATCHES=$(jc cs03)
 COUNT=0; [ -n "$CS03_MATCHES" ] && COUNT=$(echo "$CS03_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "CS03" "PASS" "No plugin guard around the core GET token defect" 0
-else emit "CS03" "WARN" "Request method guard in a @Controller: the core runs an @Action on GET without its token, a core defect to report, not to work around; remove the guard, keep the e2e scenario with core_defect" "$COUNT" "$CS03_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "CS03" "PASS" "No plugin guard on the request method of an @Action" 0
+else emit "CS03" "WARN" "Request method guard in a @Controller: the core applies lutece.mvc.action.getPolicy to an @Action requested by GET (403 without its token, 405 under refuse); remove the guard" "$COUNT" "$CS03_MATCHES"; fi
 
 # WB10: PluginAdminPageJspBean.init sets the plugin from the plugin_name parameter only; a @RequestScoped bean is new on
 # every request, so its inherited getPlugin( ) is null on each request that does not carry it (java_checks.py wb10).
@@ -1392,10 +1393,12 @@ else emit "TL01" "FAIL" "ThreadLocal not cleared with remove()" "$COUNT" "$TL01_
 # template is included INSIDE the core form and getCreateTemplate/getModifyTemplate take a model.
 # Pattern: model.put( SecurityTokenService.MARK_TOKEN, getSecurityTokenService( ).getToken( request, ACTION ) )
 # in getCreate/getModify, a hidden input in the specific template, validate( request, ACTION ) in every do*.
+# On lutece-core 8.1 (autoescape-target.py) the common form posts a token that setPortletCommonData checks: a do*
+# using its result (directly or through a method of the class) is guarded.
 CS01_MATCHES=""
 if [ -d "src/" ]; then
-    CS01_MATCHES=$(python3 - <<'PY'
-import glob, re
+    CS01_MATCHES=$(CS01_CORE_TOKEN=$CORE81 python3 - <<'PY'
+import glob, os, re
 def body(text, start):
     depth, i = 1, start
     while depth and i < len(text):
@@ -1415,15 +1418,16 @@ for f, text in files.items():
 def portlet_bean(cls, seen=()):
     up = parent.get(cls, (None,))[0]
     return up == "PortletJspBean" or (up in parent and up not in seen and portlet_bean(up, seen + (cls,)))
+guard = r"\.validate\s*\(\s*request" + (r"|(?:=|\(|return)\s*setPortletCommonData\s*\(" if os.environ.get("CS01_CORE_TOKEN") == "1" else "")
 for cls, (up, f) in sorted(parent.items(), key=lambda x: x[1][1]):
     if not portlet_bean(cls):
         continue
     text = files[f]
     methods = {m.group(1): body(text, m.end()) for m in re.finditer(r"\b(\w+)\s*\([^)]*\)[^{;]*\{", text) if m.group(1) not in ("if", "for", "while", "switch", "catch", "synchronized")}
-    guards = {n for n, b in methods.items() if re.search(r"\.validate\s*\(\s*request", b)}
+    guards = {n for n, b in methods.items() if re.search(guard, b)}
     for m in re.finditer(r"public\s+String\s+(do\w+)\s*\([^)]*\)[^{]*\{", text):
         b = body(text, m.end())
-        if not re.search(r"\.validate\s*\(\s*request", b) and not any(re.search(r"\b%s\s*\(" % g, b) for g in guards):
+        if not re.search(guard, b) and not any(re.search(r"\b%s\s*\(" % g, b) for g in guards):
             print("%s:%d: %s() is public and validates no token (reachable or not, a public do* is a mutation entry)" % (f, text[:m.start()].count("\n") + 1, m.group(1)))
 PY
 )
@@ -2161,7 +2165,7 @@ else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, t
 # TM14 to TM18: the always-on HTML auto-escaping and the params maps of lutece-core 8.1 (template_rules.py). Each one
 # answers 500 at render time on an 8.1 core: FAIL when the project targets 8.1 (autoescape-target.py), WARN before, as
 # the breach waits for the move to 8.1.
-AE_SEV=WARN; python3 "$SCRIPT_DIR/autoescape-target.py" . && AE_SEV=FAIL
+AE_SEV=WARN; [ "$CORE81" = 1 ] && AE_SEV=FAIL
 TM14_MATCHES=$(template_rules params-string 2>/dev/null)
 COUNT=0; [ -n "$TM14_MATCHES" ] && COUNT=$(echo "$TM14_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM14" "PASS" "Macro params given as maps" 0

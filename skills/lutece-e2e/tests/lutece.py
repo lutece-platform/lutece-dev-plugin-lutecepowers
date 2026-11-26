@@ -617,14 +617,6 @@ V7_ENV_NOISE = tuple(re.compile(p, re.I) for p in (
 ))
 
 
-# Console noise of the core's own pages: every bench of every artefact sees it, and no artefact can fix it.
-CORE_ASSET_NOISE = tuple(re.compile(p, re.I) for p in (
-    # The theme loads theme.js on every front page, which reads the global xssChars; page_frameset.html declares it,
-    # the minimal page of a site message (page_site_message.html) does not: every SiteMessage page logs it.
-    r"^xssChars is not defined$",
-))
-
-
 SERVER_LOG = ARTIFACTS / "logs" / "messages.log"
 """The Liberty log of the bench's server, mounted from its /logs."""
 
@@ -751,11 +743,10 @@ def console_noise(page, baseline=None):
     """Console messages and JS errors worth failing on: everything the bench did not declare, minus a baseline.
     On the v7 leg, the surrounding site's own noise is excluded (see V7_ENV_NOISE)."""
     base = baseline or {}
-    core_asset = lambda t: any(p.search(t or "") for p in CORE_ASSET_NOISE)
     if os.environ.get("E2E_VERSION") == "v7":
-        allowed = lambda t: console_allowed(t) or core_asset(t) or any(p.search(t or "") for p in V7_ENV_NOISE)
+        allowed = lambda t: console_allowed(t) or any(p.search(t or "") for p in V7_ENV_NOISE)
     else:
-        allowed = lambda t: console_allowed(t) or core_asset(t)
+        allowed = console_allowed
     errs = [e for e in page.obs["errors"] if e not in (base.get("errors") or []) and not allowed(e)]
     noise = [c["text"] for c in page.obs["console"]
              if c["text"] not in (base.get("console") or []) and not allowed(c["text"])]

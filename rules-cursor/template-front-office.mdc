@@ -38,6 +38,7 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 - **NEVER** use CDN links. All third-party JS/CSS must be downloaded and placed locally.
 - JS files go in `webapp/js/{pluginName}/`
 - CSS files go in `webapp/css/{pluginName}/`
+- The skin theme loads the Tabler icons from `themes/shared/css/vendor/tabler/`, not Bootstrap Icons (`bi bi-*`: use Tabler `ti ti-*`). It does not ship `js/plugins/asynchronousupload`, `js/plugins/forms` (Sortable) nor `js/plugins/genericattributes/modules/openstreetmap` (Leaflet) under `themes/skin/lutece/`. A plugin that needs one ships it in its own webapp or uses a core equivalent.
 
 ## Common Patterns
 
@@ -66,27 +67,36 @@ Use exclusively Bootstrap 5 utility classes and components. No custom CSS unless
 
 Never `<#if errors?size gt 0>` or `<#list errors as error>` without the `!` default.
 
-## Auto-escaping — always on since lutece-core 8.1
+## Auto-escaping (always on)
 
-Every `.html` template renders with the HTML output format and auto-escaping (`AbstractFreeMarkerTemplateService`
-of library-freemarker); `service.freemarker.templateAutoEscape=false` is ignored with an error in the log
+Every template renders with the HTML output format and auto-escaping (`AbstractFreeMarkerTemplateService` of
+library-freemarker), whatever its extension: `.html`, `.ftl`, `.txt`, `.xml` (a text mail, a CSV) alike. Only `.js`,
+`.json` and `.css` templates get their own output format and escape their values themselves (`?js_string`,
+`?json_string`). A template whose output is not HTML starts with `<#ftl output_format="plainText">` (core
+`admin/user/export/export_csv.ftl`). `service.freemarker.templateAutoEscape=false` is ignored with an error in the log
 (`FreeMarkerTemplateService`). Back office and skin alike: `${x}` prints `x` escaped.
 
 | Goal | Do not write | Write |
 |---|---|---|
 | Attributes of a macro element | `params='data-x="1"'`, a captured block, a string variable (TM14: the rendering fails) | a map: `params={'data-x': '1', 'aria-label': label}` |
-| A class, a style, an event handler, a URL on a macro element | `params={'class': …}`, `{'style': …}`, `{'onclick': …}`, `{'href'/'src'/'formaction': …}` (TM15: refused) | `class=` of the macro; a theme class; a raw element (`<span style="width:${w}%">`, `<button formaction="${url}">`), whose `${…}` is escaped |
+| A class, a style, an event handler, a URL, an attribute the macro writes itself, on a macro element | `params={'class': …}`, `{'style': …}`, `{'onclick': …}`, `{'href'/'src'/'formaction': …}`, `{'id': …}` beside `id=` (TM15: refused) | `class=` of the macro; a theme class; the macro parameter; a raw element (`<span style="width:${w}%">`, `<button formaction="${url}">`), whose `${…}` is escaped |
+| A behaviour (`onclick`, `onchange`, `onerror`, `href="javascript:…"`) | an event handler attribute or a `javascript:` URL, in raw HTML or in `params` | `data-lutece-action`: `back`, `close`, `hide-parent`, `skip` on a link or a button, `submit` on a field (submits its form on change); `data-lutece-confirm="message"`; `data-lutece-fallback-src="url"` on an image (`themes/{admin,skin}/shared/js/util/lutece-actions.js`, loaded by both themes). Anything else: `addEventListener` in the page script |
+| A URL that comes from data (a site property, a stored link) | `href="${url}"`: escaping does not stop a `javascript:` URL | `href="${safeUrl(url)}"` (relative, http, https, mailto, tel; `'#'` otherwise, or `safeUrl(url, fallback)`); in CSS `url('${cssUrl(url)}')` |
 | A conditional attribute | `cond?then('aria-current="true"', '')` | `cond?then({'aria-current': 'true'}, {})` |
-| HTML the plugin renders in Java (a sub-template, a captcha, a list of rows) | `model.put( MARK_X, strHtml )` (AE01: shown as text) | `model.put( MARK_X, HtmlMarkup.of( strHtml ) )`, `HtmlMarkup.ofAll( list )` |
+| HTML the application renders (a sub-template, a captcha, a list of rows) | `model.put( MARK_X, strHtml )` (AE01: shown as text); `<#noautoesc>` | `model.put( MARK_X, HtmlMarkup.of( strHtml ) )`, `HtmlMarkup.ofAll( list )`; in the template, `${x?no_esc}` (core `admin/features/assign_users_right.html`: `${attribute.getHtmlFormSearchAttribute( … )?no_esc}`) |
 | Rich text stored by a user or an admin (editor, BBCode rendered to HTML) | `${x?no_esc}` on a value nobody cleaned; `${page.htmlContent}` (TM19: the tags show as text) | `${richText(x!)}` (sanitized markup) in the template, or `HtmlMarkup.ofSanitized( x )` in Java |
 | Print markup a template captured | `${p?no_esc}` | `${p}`: a capture is markup already |
 | Read a captured block as text | `p?trim`, `p == ''`, `default_value=p` (TM16: fails) | `p?markup_string?trim`, `p?has_content`, or assign the string itself: `<#assign v = cond?then(a?c, '-1')>` |
 | Escape explicitly | `${x?html}`, `${x?esc}` (`?html` is a ParseException in the HTML output format) | `${x}` |
-| URL-encode a value | `${x?url}` — throws at render time: no `url_escaping_charset` is set | `${x?url('UTF-8')}` |
-| A value in JavaScript (string literal inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
+| A value in JavaScript (string literal inside `<script>`) | `${x}` (HTML escaping is not JS escaping); `${x?js_string}` (HTML-escaped on top: the script reads `\&#39;`) | `${x?js_string?no_esc}`, inside a `<script>` only |
 | A value in a `<textarea>` or an input being edited | `${x?no_esc}` | `${x}`: escaped is right there |
 | A special character in a string literal | `href='a?x=1&amp;y=2'`, `label='&#8722;'` (TM18: escaped once more, the page shows the entity) | the character itself: `href='a?x=1&y=2'`, `label='−'` |
 | A text turned to markup in Java (`HtmlMarkup.of`, `richText`) read by a string built-in | `x?contains('…')`, `x?replace(…)` (fails: markup) | `x?markup_string?contains('…')` |
+
+A refused attribute is left out with a warning in the log under `portal.template.params.strict=false` (the default of
+the core `config.properties`), and fails the rendering under `true`, the value the core gives its own tests
+(`%test.portal.template.params.strict=true`) and recommends for continuous integration. A page that looks right may
+have lost an attribute: read the log.
 
 A parameter of a project macro never takes the name of a macro its body calls (`icon=` beside `<@icon>`): inside the
 body the parameter hides the macro (TM17). A macro parameter is not the attribute it sounds like: read the macro
@@ -99,3 +109,9 @@ check the rendered page, not the source.
 **`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )`, then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )`, then `DatastoreService.replaceKeys( template.getHtml( ) )`. Two consequences:
 - **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html` (`#i18n{${column.titleKey}}`).
 - **A template never writes `_csrftoken` itself**: the token is injected into the rendered `<form>`.
+
+## A project on core 8.0.2
+
+Auto-escaping is off by default and `htmlAttributes`, `HtmlMarkup`, `richText`, `safeUrl`, `cssUrl` and
+`data-lutece-action` do not exist: `params` is a string written as is (`params='data-x="1"'`) and `${x?url}` needs
+`${x?url('UTF-8')}`.

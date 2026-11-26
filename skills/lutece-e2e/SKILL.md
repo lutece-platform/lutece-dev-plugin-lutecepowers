@@ -239,7 +239,7 @@ bench's own** `harness/db/seed-<target>.sql` and prove the refusal with it — t
 account, because who is restricted from what is a property of the target. `templates/scenarios-negative-example.yaml`
 is the model.
 
-**A defect of the core the plugin must not work around** (an `@Action` the core runs on GET without its token) is
+**A defect of the core the plugin must not work around** is
 proven by its scenario with `core_defect: "<the defect>"`: the report lists it under the core defects not handled
 and the run stays green; never add a guard in the plugin to turn it green.
 

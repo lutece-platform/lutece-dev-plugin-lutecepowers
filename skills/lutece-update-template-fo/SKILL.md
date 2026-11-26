@@ -59,7 +59,7 @@ If the clone is missing, the theme also ships in any assembled site under
 ### Global structure
 - **Always** wrap a page template in `<@cTpl>...</@cTpl>`: it is the theme override hook (`skin/themes/<code>/tpl/<same path>`, `global_theme_commons.ftl`). Page-local `<#macro>` and `<#assign>` live inside it; FreeMarker hoists macro definitions, their position is style
 - A page is `<@cTpl>` → `<@cContainer>` → `<@cRow>` → `<@cCol cols=...>` → content: the shape of every core `skin/site/*.html` (examples.md § Page skeleton). Only a fragment included by another template (portlet body, component) skips `cTpl` and `cContainer`
-- Titles: `level=2` for the page title (the `h1` belongs to the frameset), `level=3` below
+- Titles: `level=1` for the page title of an XPage (core `skin/site/site_map.html`, `skin/search/search_results.html`), `level=2` below. The frameset writes an `h1` only in `cMainBanner`, when a banner title is set
 - Forms: `<@cForm>` → `<@cField for= required=true>` → input → a `<@cRow>` of `<@cBtn>` at the end. No `<@cFieldset>` around a whole form
 - Models to copy: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/site/*.html` and `skin/search/search_results.html`
 - The theme ships component CSS under `webapp/themes/skin/lutece/css/{components,layout}` and `themes/skin/shared/css` (`bl-*`, `search-*`, `tile*`, `lutece-ds-empty`): target those classes through `class=`, never inline styles
@@ -120,11 +120,11 @@ If the clone is missing, the theme also ships in any assembled site under
 - `params` refuses `style` (TM15): use a CSS class; a computed style (a width, a colour) goes on a raw element, `<span style="width:${w}%">`:
   ```freemarker
   <#-- INCORRECT -->
-  <@cTitle level=2 style='margin-bottom:30px'>
+  <@cTitle level=1 style='margin-bottom:30px'>
   <@cTd style='vertical-align: middle'>
 
   <#-- CORRECT -->
-  <@cTitle level=2 class='mb-4'>
+  <@cTitle level=1 class='mb-4'>
   <@cTd class='align-middle'>
   ```
 

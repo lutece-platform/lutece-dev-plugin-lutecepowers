@@ -272,18 +272,10 @@ CREATE TABLE myplugin_indexer_action (
     PRIMARY KEY (id_action)
 );
 CREATE INDEX idx_mia_id_document ON myplugin_indexer_action ( id_document );
-
-DROP TABLE IF EXISTS myplugin_lucene_lock;
-CREATE TABLE myplugin_lucene_lock (
-    index_name VARCHAR(50),
-    instance_name VARCHAR(50),
-    is_locked SMALLINT,
-    date_begin TIMESTAMP NULL,
-    expired_date TIMESTAMP NULL,
-    uuid VARCHAR(50),
-    PRIMARY KEY (index_name)
-);
 ```
+
+`myplugin_lucene_lock` is the lease lock table of `lutece-scalability-v8` `patterns/distributed-lock.md` (B2), its key
+column named `index_name` as the forms `LockDAO` it copies expects.
 
 With the corresponding `IndexerAction` and `Lock` entities, DAOs and Homes in the `business/` package.
 

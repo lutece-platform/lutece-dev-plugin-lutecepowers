@@ -34,9 +34,11 @@ verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template
                 project fills that list with MVCMessage objects itself.
 - own-messages  ${x.message} over infos or warnings the project fills with MVCMessage objects itself: it works, the
                 modern form is the core's addInfo( ) / addWarning( ) and ${x}.
-- params-string a params argument of a macro call (params, titleParams, additionalParameters...) given as a string
-                literal, a captured block, a variable assigned one or a ternary choosing strings: htmlAttributes takes a map
-                ({'aria-label': label}), anything else fails the rendering.
+- params-string a params argument of a macro call (params, titleParams, additionalParameters...: the parameters the
+                core macros hand to htmlAttributes, read from the core of the references, and those the project's macros
+                forward to them) given as a non-empty string literal, a captured block, a variable assigned a string or a
+                ternary choosing strings: htmlAttributes takes a map ({'aria-label': label}) or '', anything else fails
+                the rendering. A variable assigned a map literal ({...}) is a map.
 - params-refused a key of a params map htmlAttributes refuses: class (the class parameter of the macro), style, an
                 event handler, a URL (href, src, action, formaction) or any name out of its allow list, read from
                 the core of the references (HtmlAttributesMethod).
@@ -304,10 +306,15 @@ MACRO_CALL = re.compile(r"""<@[\w.]+\b(?:%s|[^>'"])*>""" % QUOTED, re.S)
 DIRECTIVE_TAG = r"""<[#@](?:%s|[^>'"])*>""" % QUOTED
 TAG = re.compile(DIRECTIVE_TAG + r"""|\$\{(?:%s|[^}'"])*\}""" % QUOTED, re.S)
 LITERAL = re.compile(QUOTED, re.S)
-PARAMS_ARG = re.compile(r"""\b(\w*[pP]arams|additionalParameters)\s*=\s*(?:(%s)|(\{)|([A-Za-z_]\w*))""" % QUOTED)
+PARAMS_ARG = re.compile(r"""\b(\w+)\s*=\s*(?:(%s)|(\{)|([A-Za-z_]\w*))""" % QUOTED)
+EMPTY_LITERAL = ("''", '""')
 CAPTURE = re.compile(r"<#(?:assign|local)\s+(\w+)\s*>")
 STRING_TERNARY = re.compile(r"(?:\.\w+|\?\w+)*" + THEN_STRING)
-STRING_ASSIGN = re.compile(r"""<#(?:assign|local)\s+(\w+)\s*=\s*(?:'|"|[^>]*%s)""" % THEN_STRING)
+STRING_ASSIGN = re.compile(r"""<#(?:assign|local)\s+(\w+)\s*=(?!\s*\{)(?!\s*(?:''|"")\s*/?>)\s*(?:'|"|[^>]*%s)""" % THEN_STRING)
+MAP_DEFAULT = re.compile(r"(?i)\b(\w*params\w*|additionalParameters)\s*=\s*\{\s*\}")
+FORWARD = re.compile(r"\b(\w+)\s*=\s*\(?\s*(\w+)\b(?![?.(])")
+MAP_PARAMS_FALLBACK = {"params", "macroParams", "titleParams", "labelParams", "legendParams", "fieldsetParams", "headerParams",
+                       "actionParams", "anchorsParams", "paramsIncrease", "paramsDecrease", "additionalParameters"}
 ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);")
 MARKUP = re.compile(r"<[#@/a-zA-Z]")
 OPEN_CALL = re.compile(r"\?(\w+)\([^()]*$")
@@ -315,6 +322,8 @@ SEARCH_BUILTINS = {"replace", "contains", "starts_with", "ends_with", "index_of"
                    "keep_before_last", "keep_after_last", "split", "matches", "remove_beginning", "remove_ending"}
 STRING_BUILTIN = "trim|length|substring|starts_with|ends_with|contains|replace|split|lower_case|upper_case|cap_first|index_of|matches|left_pad|right_pad"
 MACRO_DEF = re.compile(r"<#macro\s+(\w+)([^>]*)>(.*?)</#macro>", re.S)
+MACRO_PARAM = re.compile(r"(?:^|\s)(\w+)\s*(?==|\s|$)")
+CORE_REFERENCE = os.path.join(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")), "lutece-core")
 ALLOWED_FALLBACK = {"title", "name", "value", "id", "role", "tabindex", "hidden", "lang", "dir", "placeholder", "pattern",
                     "required", "readonly", "disabled", "multiple", "min", "max", "step", "minlength", "maxlength", "size",
                     "accept", "target", "rel", "download", "alt", "width", "height", "loading", "form", "rows", "cols",
@@ -329,8 +338,7 @@ def tabler_css(themes):
 @functools.lru_cache(maxsize=None)
 def allowed_names():
     """The attribute names htmlAttributes accepts in params, read from the core of the references when it is there."""
-    src = os.path.join(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")), "lutece-core",
-                       "src/java/fr/paris/lutece/portal/service/template/HtmlAttributesMethod.java")
+    src = os.path.join(CORE_REFERENCE, "src/java/fr/paris/lutece/portal/service/template/HtmlAttributesMethod.java")
     names = set()
     if os.path.isfile(src):
         with open(src, encoding="utf-8") as f:
@@ -339,19 +347,59 @@ def allowed_names():
     return names or ALLOWED_FALLBACK
 
 
+def forwarded_params(texts, names):
+    """The macro parameters names grows into: a params-like parameter defaulting to {}, the last argument of a call to
+    htmlAttributes, or a parameter a macro forwards to an argument already in names, until nothing is added."""
+    pairs = []
+    for text in texts:
+        for m in MACRO_DEF.finditer(text):
+            header, body = m.group(2), m.group(3)
+            names |= set(MAP_DEFAULT.findall(header))
+            own = set(MACRO_PARAM.findall(header))
+            for call in re.finditer(r"htmlAttributes\(", body):
+                _, end = map_keys(body, call.end() - 1)
+                last = re.search(r"([A-Za-z_]\w*)\s*$", body[call.end():end])
+                names |= {last.group(1)} & own if last else set()
+            pairs += [(f.group(1), f.group(2)) for f in FORWARD.finditer(body) if f.group(2) in own]
+    grown = True
+    while grown:
+        size = len(names)
+        names |= {dst for src, dst in pairs if src in names}
+        grown = len(names) > size
+    return names
+
+
+@functools.lru_cache(maxsize=None)
+def map_params():
+    """The macro parameters lutece-core hands to htmlAttributes as a map (params, titleParams, additionalParameters...),
+    read from the core macros of the references when they are there."""
+    base = os.path.join(CORE_REFERENCE, "webapp/WEB-INF/templates")
+    texts = []
+    for pattern in ("*.html", "*.ftl", "admin/themes/**/*.ftl", "skin/themes/**/*.ftl"):
+        for path in glob.glob(os.path.join(base, pattern), recursive=True):
+            with open(path, encoding="utf-8", errors="replace") as f:
+                texts.append(blank_comments(f.read()))
+    names = forwarded_params(texts, set())
+    return frozenset(names) if "params" in names else frozenset(MAP_PARAMS_FALLBACK)
+
+
 def params_args(text):
-    """The params arguments of the macro calls: (offset in text, match of PARAMS_ARG) for each one."""
+    """The params arguments of the macro calls, the core's and those the macros of text forward to them: (offset in
+    text, match of PARAMS_ARG) for each one."""
+    names = forwarded_params([text], set(map_params())) if "<#macro" in text else map_params()
     for call in MACRO_CALL.finditer(text):
         for m in PARAMS_ARG.finditer(call.group(0)):
-            yield call.start(), m
+            if m.group(1) in names:
+                yield call.start(), m
 
 
 def params_string(text, skin):
-    """Lines of the params arguments given as a string, a capture, a variable assigned one, or a ternary choosing
-    between strings (cond?then('a="1"', ''))."""
+    """Lines of the params arguments given as a non-empty string, a capture, a variable assigned one, or a ternary
+    choosing between strings (cond?then('a="1"', ''))."""
     stringy = set(CAPTURE.findall(text)) | set(STRING_ASSIGN.findall(text))
     return [line_of(text, base + m.start()) for base, m in params_args(text)
-            if m.group(2) or m.group(4) in stringy or (m.group(4) and STRING_TERNARY.match(text, base + m.end()))]
+            if (m.group(2) and m.group(2) not in EMPTY_LITERAL) or m.group(4) in stringy
+            or (m.group(4) and STRING_TERNARY.match(text, base + m.end()))]
 
 
 def entities_in_literals(text, skin):
@@ -469,7 +517,7 @@ def macro_shadow(text, skin):
     """Lines of the macros of the project whose parameter hides a macro the body calls."""
     out = []
     for m in MACRO_DEF.finditer(text):
-        names = set(re.findall(r"(?:^|\s)(\w+)\s*(?==|\s|$)", m.group(2)))
+        names = set(MACRO_PARAM.findall(m.group(2)))
         for name in names:
             if re.search(r"<@%s\b" % re.escape(name), m.group(3)):
                 out.append(line_of(text, m.start()))

@@ -27,15 +27,22 @@ Reference: `~/.lutece-references/lutece-core/webapp/jsp/admin/theme/ManageThemes
 
 - One JSP per `@Controller` bean. Views and actions are dispatched by `processController()` from the `view=` / `action=` parameters — no separate `DoXxx.jsp` files.
 - **A migration keeps no legacy admin JSP.** A `DoXxx.jsp` (or any admin JSP) calling a bean that is not a `@Controller` is ported to `MVCAdminJspBean`, whatever its size: the core's CSRF filter only covers `@Action` methods, so a legacy action accepts a forged call. `verify-migration.sh` fails on it (JS04). Portlet JspBeans are the one exception (their token: CS01).
-- **An insert service** (the "insert a link" popups of the editors) ports to a `@Controller` too, but the core does not
-  obtain it through CDI: `InsertService.getSelectionActionBean()` instantiates the class by reflection, and the
-  core's `admin/insert/page_insertservice_data.html` reads `selectionActionBean.subCategories`. The bean keeps a
-  public no-argument constructor and a `getSubCategories()` method (only the legacy `InsertServiceJspBean` base
-  class provided it); without it the insert list throws a FreeMarker InvalidReferenceException.
+- **An insert service** (the "insert a link" popups of the editors) ports to a `@Controller` too.
+  `InsertService.getSelectionActionBean()` takes the CDI bean when its class is a resolvable bean (`@Inject` fields
+  work), and instantiates the class by reflection otherwise (a public no-argument constructor is then required). The
+  core's `admin/insert/page_insertservice_data.html` reads `selectionActionBean.subCategories`: the bean keeps a
+  `getSubCategories()` method (only the legacy `InsertServiceJspBean` base class provided it); without it the insert
+  list throws a FreeMarker InvalidReferenceException. Core 8.0.2 always uses reflection: no injection, no-argument
+  constructor mandatory.
 - NEVER call `init()` in the JSP: `processController()` calls `init(request, right)` itself with the `@Controller.right` value. `${bean.init(request, bean.RIGHT_X)}` is also invalid EL (a static constant cannot be read through an instance).
 - `init()` in a JSP is only for non-MVC beans (portlet JspBeans without `@Controller`).
 - No `<jsp:useBean>`, no scriptlets (`<% %>`, `<%= %>`). The bean is resolved by CDI name in EL.
-- Download endpoints: `${ entityJspBean.download( pageContext.request, pageContext.response ) }` after the `errorPage` directive, no header/footer.
+- A `@ResponseBody` view or action and a `download( … )` of `MVCAdminJspBean` go through the controller's own JSP:
+  the core writes the body (`@ResponseBody`: UTF-8, `Content-Length` in bytes), then closes the response, so the header,
+  content and footer the JSP writes after it are dropped. No separate JSP without header/footer. A method that writes
+  to the response itself (`getWriter( )`, `getOutputStream( )`) gets none of this: the admin page is appended to its
+  output; make it `@ResponseBody` or call `download( … )`. Core 8.0.2 does not close the response: such an endpoint
+  needs its own JSP without header/footer.
 
 ## Bean Naming
 

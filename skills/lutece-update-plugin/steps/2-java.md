@@ -30,12 +30,12 @@ From the catalog of step 1 (`.migration/context-beans.json`), for each bean of t
   `@Action` per former JSP, like core `ThemeJspBean`; step 3 collapses the JSPs. `rules/jsp-admin.md`.
 - **XSL portlet → HTML portlet** (a portlet class that still defines `getXml` / `getXmlDocument`): extend
   `PortletHtmlContent`, write the skin template, delete the XSL and every `core_style*` insert. `patterns/mvc-patterns.md` §10.
-- **Portlet JspBean CSRF**: the automatic token filter covers MVC controllers only; the plugin protects its portlet
-  forms itself. `patterns/mvc-patterns.md` §11.
+- **Portlet JspBean CSRF**: the automatic token filter covers MVC controllers only; the core checks the token of the
+  common creation and modification form, every other portlet mutation carries the plugin's own. `patterns/mvc-patterns.md` §11.
 - **A `catch` guarding what v8 no longer throws**: check every `catch` against the current core source. v7 caught
   `AppException` from `PageHome.getPage`; v8 returns the row or nothing, so the guard becomes
-  `if ( !PageHome.checkPageExist( nId ) )`. Conversely `PortletHome.findByPrimaryKey` dereferences the row it
-  loaded: a lookup driven by a request parameter needs its own guard (`patterns/mvc-patterns.md` §11).
+  `if ( !PageHome.checkPageExist( nId ) )`. Likewise `PortletHome.findByPrimaryKey` returns null for an unknown id: a
+  lookup driven by a request parameter tests it (`patterns/mvc-patterns.md` §11).
 - **Startup initialisation** (PI01, DP04 on a `*RemovalListenerService`): a plugin `init( )` that initialises a
   service, and listeners registered on a static service, become an `@Observes @Initialized( ApplicationScoped.class )`
   method of the service with the core's removal services injected by name (`patterns/cdi-patterns.md` §23).

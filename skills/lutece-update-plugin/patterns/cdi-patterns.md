@@ -924,6 +924,12 @@ Common self-registration calls affected by this pattern:
 - `ImageResourceManager.registerProvider(this)`
 - Any `SomeService.register*(this)` in a constructor
 
+An image provider registered with `ImageResourceManager` gives each `ImageResource` its real `image/*` type: the core
+`ImageServlet` (core 8.1) sends every response with `X-Content-Type-Options: nosniff` and a sandbox
+`Content-Security-Policy`, and a resource whose type is not `image/*` (none, a PDF, HTML) as an
+`application/octet-stream` attachment. A file that is not an image goes through the plugin's own download, not the
+image servlet.
+
 ## 23. Startup initialisation: the plugin's `init( )` and the removal listeners
 
 A v7 plugin class initialised its services from `PluginDefaultImplementation.init( )`
@@ -955,6 +961,32 @@ public class AgendaService
     {
         _workgroupRemovalService.registerListener( new AgendaWorkgroupRemovalListener( ) );
         _roleRemovalService.registerListener( new AgendaRoleRemovalListener( ) );
+    }
+}
+```
+
+**A plugin can refuse the deletion of a back office user** it still references (units, assignments). Core 8.1 produces
+`@Named( BeanUtils.BEAN_ADMIN_USER_REMOVAL_SERVICE )` (`"adminUserRemovalService"`, `RemovalListenerServiceProducer`);
+`AdminUserJspBean` asks its listeners on the confirmation screen and again before deleting, and shows their messages in
+a STOP message. The listener implements `RemovalListener` (`canBeRemoved( id )`, `getRemovalRefusedMessage( id, locale )`).
+Core 8.0.2 has no such bean: inject an `Instance` with the literal name, which compiles and starts on both
+(`lutece-system-plugin-unittree` `UnitTreeAdminUserListenerInitializer` does the same through `CDI.current( ).select`):
+
+```java
+@Inject
+@Named( "adminUserRemovalService" )
+private Instance<RemovalListenerService> _adminUserRemovalService;
+
+/**
+ * Registers the admin user removal listener when the core provides the service.
+ *
+ * @param context the servlet context
+ */
+public void initializedService( @Observes @Initialized( ApplicationScoped.class ) ServletContext context )
+{
+    if ( _adminUserRemovalService.isResolvable( ) )
+    {
+        _adminUserRemovalService.get( ).registerListener( new MyPluginAdminUserRemovalListener( ) );
     }
 }
 ```

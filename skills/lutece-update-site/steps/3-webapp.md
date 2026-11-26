@@ -40,6 +40,20 @@ against the previous version prints the stored HTML as text (TM19) or fails. Dif
 template of the version the site now ships, and open every overridden page on the bench signed in, with the
 content the environments hold.
 
+## What the frameset and the theme read
+
+An override of `page_frameset.html` or a site theme starts from these behaviours of the core:
+
+- `core.include.tree_menu.enabled=false` (`lutece.properties`): `page_tree_menu` is empty and no core template
+  prints it. A frameset that prints `${page_tree_menu}` sets the key to `true` in `conf/override`.
+- `themes/skin/<code>/theme.json` hides the theme site properties the theme does not use from the site properties
+  screen: `{"siteProperties": {"groups": {"consent": false}, "keys": {"portal.theme.site_property.…": false}}}`.
+  Only `false` hides; a hidden property keeps its stored value (`ThemeSitePropertiesFilter`).
+- `themes.<code>.menu.depth` (in `WEB-INF/conf/themes/<code>.properties`) sets how many levels the main menu holds,
+  from 2 (the default) to 4 (`PortalMenuService`).
+- The frameset writes no `<link rel="manifest">` nor `theme-color` meta: it prints `${pwa_head}` when a plugin
+  provides it. A site that served a web manifest keeps it through such a plugin or its frameset override.
+
 ## web.xml and JSP
 
 A site ships no `web.xml` unless it must; then it starts from the v8 core's one (SI56). `diff` the site's `web.xml`
@@ -48,8 +62,8 @@ difference is a choice of the site to carry, one decision each.
 
 - A filter parameter that v8 reads from the configuration first is ignored by v8 as soon as the key exists, and the
   core defines them: the XSS filters read `lutece.safe.request.{admin|site}.{activateXssFilter,xssCharacters}`
-  (`SafeRequestFilterSite`, `SafeRequestFilterAdmin`). `sanitizeFilterMode` is gone since lutece-core 8.1: the
-  parameters are no longer rewritten, a site's `sanitizeFilterMode` setting is dropped. The site's choice becomes
+  (`SafeRequestFilterSite`, `SafeRequestFilterAdmin`). The core reads no `sanitizeFilterMode` (core 8.0.2 still
+  does): the parameters are not rewritten, a site's `sanitizeFilterMode` setting is dropped. The site's choice becomes
   those keys in `conf/override`.
 - The upload limit of v7 (`requestSizeMax` of the upload filters) is the `<multipart-config><max-request-size>` of
   the v8 core's servlets: the site ships the v8 core's `web.xml` with that value changed, and nothing else.

@@ -332,7 +332,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 			</@formGroup>
 			<@formGroup labelFor='html_content' labelKey='#i18n{plugin.create_item.labelContent}' hideLabel=['all'] rows=2>
 				<@input type='textarea' name='html_content' id='html_content' value='${item.htmlContent!}' class='visually-hidden' />
-				<@div id='div_html_content' class='content-body' params={'contenteditable': 'true'}>${item.htmlContent!}</@div>
+				<@div id='div_html_content' class='content-body' params={'contenteditable': 'true'}>${richText(item.htmlContent!)}</@div>
 				<@button class='my-3 me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save_bottom' name='action_save' hideTitle=['xs','sm'] />
 			</@formGroup>
 		</@tform>

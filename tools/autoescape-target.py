@@ -4,9 +4,9 @@
 
 Usage: autoescape-target.py [project_root | file]
 
-The core is read from the lower bound of the lutece-core version of the pom, the lutece-core jar of an assembled
-webapp under target/, or the lutece-core a lutece-bom imported by the pom manages (its pom in the local Maven
-repository). A file stands for the nearest project above it.
+The core is read from the lower bound of the lutece-core version of the pom (a ${property} resolved from its
+<properties>), the lutece-core jar of an assembled webapp under target/, or the lutece-core a lutece-bom imported by
+the pom manages (its pom in the local Maven repository). A file stands for the nearest project above it.
 """
 import glob
 import os
@@ -27,11 +27,29 @@ def project_root(path):
     return os.path.abspath(path)
 
 
+def dependency_versions(pom, artifact):
+    """The versions of the <dependency> blocks of the pom naming artifact, a ${property} resolved from the pom's
+    <properties>, a range read as its lower bound."""
+    block = re.search(r"<properties>(.*?)</properties>", pom, re.S)
+    props = dict(re.findall(r"<([\w.-]+)>\s*([^<]*?)\s*</\1>", block.group(1))) if block else {}
+    found = []
+    for dep in re.findall(r"<dependency>(.*?)</dependency>", pom, re.S):
+        if not re.search(r"<artifactId>\s*%s\s*</artifactId>" % re.escape(artifact), dep):
+            continue
+        m = re.search(r"<version>\s*([^<]*?)\s*</version>", dep)
+        version = m.group(1) if m else ""
+        for _ in range(5):
+            version = re.sub(r"\$\{([^}]+)\}", lambda p: props.get(p.group(1), p.group(0)), version)
+        bound = re.match(r"[\[(]?\s*([^,\])\s$]+)", version)
+        found += [bound.group(1)] if bound else []
+    return found
+
+
 def bom_cores(pom):
     """The lutece-core versions the lutece-bom imports of the pom manage, read in the local Maven repositories."""
     found = []
-    for m in re.finditer(r"<artifactId>\s*lutece-bom\s*</artifactId>\s*<version>\s*([^<\s]+)", pom):
-        for path in glob.glob(os.path.expanduser("~/.m2*/repository/fr/paris/lutece/starters/lutece-bom/%s/lutece-bom-%s.pom") % (m.group(1), m.group(1))):
+    for version in dependency_versions(pom, "lutece-bom"):
+        for path in glob.glob(os.path.expanduser("~/.m2*/repository/fr/paris/lutece/starters/lutece-bom/%s/lutece-bom-%s.pom") % (version, version)):
             core = re.search(r"<lutece\.core\.version>\s*([^<\s]+)", open(path, encoding="utf-8", errors="replace").read())
             found += [core.group(1)] if core else []
     return found
@@ -44,8 +62,7 @@ def main():
     found = []
     try:
         pom = open(os.path.join(root, "pom.xml"), encoding="utf-8", errors="replace").read()
-        m = re.search(r"<artifactId>\s*lutece-core\s*</artifactId>\s*<version>\s*\[?\s*([^,\]<\s]+)", pom)
-        found += [m.group(1)] if m else []
+        found += dependency_versions(pom, "lutece-core")
         found += bom_cores(pom)
     except OSError:
         pass

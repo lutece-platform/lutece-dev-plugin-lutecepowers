@@ -73,14 +73,14 @@ public String doCreate(@Validated({ValidationGroups.Creation.class}) @ModelAttri
 Return JSON/XML directly from a method (no template rendering).
 
 ```java
-@Action("getData")
+@View("getData")
 @ResponseBody
 public List<MyItem> getData(@RequestParam("page") int nPage) {
     return MyItemHome.getItemsList(nPage, ITEMS_PER_PAGE);
 }
 ```
 
-Used for AJAX pagination with the `paginationAjax` macro — the macro is in core `webapp/WEB-INF/templates/admin/themes/tabler/components/pagination/paginationAdmin.ftl`. GET requests are never filtered by the CSRF filter; add `securityTokenDisabled = true` only if the endpoint is called by POST without a form token.
+Used for AJAX pagination with the `paginationAjax` macro — the macro is in core `webapp/WEB-INF/templates/admin/themes/tabler/components/pagination/paginationAdmin.ftl`, and fetches its URL by GET. A read fetched by GET is a `@View` with `@ResponseBody` (supported on views too): a GET `@Action` falls under `lutece.mvc.action.getPolicy` and is refused without a token (`rules/web-bean.md` § CSRF Policy). The core writes the body in UTF-8 and ends the response (`rules/jsp-admin.md`).
 
 ## 6. @RequestBody
 
@@ -102,7 +102,7 @@ Policy and mechanism: `rules/web-bean.md` § CSRF Policy. Migration steps for a 
 2. Remove `SecurityTokenService.MARK_TOKEN` puts, `getSecurityTokenService().getToken()/validate()`, `_securityTokenService` injection and `SecurityTokenService.getInstance()`.
 3. Make sure each form view and its action share the same constant value (`VIEW_CREATE = ACTION_CREATE = "createItem"`), or set `@View(securityTokenAction = ACTION_X)`.
 4. Confirm dialogs: `@View(value = VIEW_CONFIRM_REMOVE, securityTokenAction = ACTION_REMOVE)` redirecting to `AdminMessageService.getMessageUrl(..., TYPE_CONFIRMATION)`; the remove `@Action` needs nothing.
-5. POST actions that cannot carry a form token (external clients, imports validated otherwise): `@Action(value = ACTION_X, securityTokenDisabled = true)`. GET requests are never filtered.
+5. POST actions that cannot carry a form token (external clients, imports validated otherwise): `@Action(value = ACTION_X, securityTokenDisabled = true)`. A GET on an `@Action` follows `lutece.mvc.action.getPolicy` (`rules/web-bean.md`).
 6. Templates: remove `<input type="hidden" name="token" ...>`; the core injects `_csrftoken` into every `<form>`.
 7. One screen, several forms posting different actions: a page carries the token of **one** name, its view's
    `securityTokenAction` or else the view name (`SecurityTokenHandler.handleToken`), and the filter checks a POST
@@ -201,63 +201,68 @@ What the port also fixes: the style column of `core_portlet` stops mattering, an
 longer need `PortletHome.getStylesList(...)`, which returns an empty list as soon as
 xmltransformer is absent.
 
-## 11. Portlet JspBean — the plugin carries its own CSRF token
+## 11. Portlet JspBean — CSRF token
 
-The automatic filter of §7 only sees MVC controllers. A `PortletJspBean` has no `@Controller`,
-no `@Action`, no `@View`, so nothing protects its mutations, and the core's own
-`create_portlet.html` / `modify_portlet.html` render a bare `<form>` with no token. Most v7
-portlet plugins therefore have none at all, and a bench proves it in one line: a GET on
-`DoCreatePortletXxx.jsp` with the right parameters creates the portlet.
+The automatic filter of §7 only sees MVC controllers; a `PortletJspBean` has no `@Controller`, no `@Action`, no `@View`.
 
-**The plugin can close it alone.** Its `create_specific` / `modify_specific` template is
-included *inside* the core form, and `getCreateTemplate( pageId, typeId, model )` /
-`getModifyTemplate( portlet, model )` take a model. Checked by `CS01`.
+**Creation and modification: the core checks the token** (`PortletJspBean`). `getCreateTemplate( pageId, typeId[, model] )`
+and `getModifyTemplate( portlet[, model] )` put `portlet_token` in the model, the core `create_portlet.html` /
+`modify_portlet.html` post it as `_csrftoken`, and `setPortletCommonData( request, portlet )` validates it and returns
+the URL of a STOP message when it is missing or invalid. The plugin's `doCreate` / `doModify` returns that URL
+(`if ( strErrorUrl != null ) return strErrorUrl;`) before writing anything. The `create_specific` / `modify_specific`
+template, included inside the core form, needs nothing. A portlet that renders its own form instead of
+`getCreateTemplate` / `getModifyTemplate` posts no such token: its creation and modification are refused.
+
+**Every other mutation carries its own token**: a row deletion, an order change, an action reached by a link or by a
+form of the specific part. `getModifyTemplate( portlet, model )` takes the model that carries it (CS01).
 
 ```java
-private static final String ACTION_CREATE_PORTLET = "myplugin.createPortlet";
-private static final String MESSAGE_INVALID_TOKEN = "myplugin.message.invalidToken";
+private static final String ACTION_REMOVE_ITEM = "myplugin.removePortletItem";
+private static final String MARK_TOKEN_REMOVE_ITEM = "token_remove_item";
 
-public String getCreate( HttpServletRequest request )
+public String getModify( HttpServletRequest request )
 {
-    model.put( SecurityTokenService.MARK_TOKEN, getSecurityTokenService( ).getToken( request, ACTION_CREATE_PORTLET ) );
+    Map<String, Object> model = new HashMap<>( );
+    model.put( MARK_TOKEN_REMOVE_ITEM, getSecurityTokenService( ).getToken( request, ACTION_REMOVE_ITEM ) );
     ...
+    return getModifyTemplate( portlet, model ).getHtml( );
 }
 
-public String doCreate( HttpServletRequest request )
+public String doRemoveItem( HttpServletRequest request )
 {
-    if ( !getSecurityTokenService( ).validate( request, ACTION_CREATE_PORTLET ) )
+    if ( !getSecurityTokenService( ).validate( request, ACTION_REMOVE_ITEM ) )
     {
-        return AdminMessageService.getMessageUrl( request, MESSAGE_INVALID_TOKEN, AdminMessage.TYPE_STOP );
+        return AdminMessageService.getMessageUrl( request, Messages.USER_ACCESS_DENIED, AdminMessage.TYPE_STOP );
     }
     ...
 }
 ```
 
 ```html
-<@input type='hidden' name='token' value='${token}' />
+<@input type='hidden' name='token' value='${token_remove_item}' />
 ```
 
-`getSecurityTokenService( )` is inherited from `AdminFeaturesPageJspBean`; never
-`SecurityTokenService.getInstance( )`. `doCreate` / `doModify` are abstract **without**
-`throws`, so report the refusal with an `AdminMessage`, not an `AccessDeniedException`.
+`getSecurityTokenService( )` is inherited from `AdminFeaturesPageJspBean`; never `SecurityTokenService.getInstance( )`.
+`doCreate` / `doModify` are abstract **without** `throws`, so a refusal is an `AdminMessage`, not an
+`AccessDeniedException`.
 
-Four traps:
+Traps:
 
-- **One action name per operation**, and the same one on both sides. A token is one-shot:
-  `validate` removes it from the session, so a page showing N rows needs N tokens for the same
-  action — that works, the session holds a set per action.
-- **Every mutation, not only creation.** A row deletion reached by `<@aButton href='…Do…?id=1'>`
-  is a GET that writes: it needs `&token=${token_x}` and its own `validate`. Give each its own
-  mark (`token_order`, `token_unselect`) so one template can carry several.
-- **A specific template that opens with `</form>`** (a v7 habit to nest its own forms) closes
-  the core form early: the hidden field must come *before* that tag, or it lands outside.
-- **The bench's own scenarios break.** Any scenario that drove a mutation by a forged URL now
-  gets refused, and one that only asserted "an error is shown" turns green for the wrong
-  reason. Rewrite them to submit the real form, which is the real user path anyway.
+- **One action name per operation**, and the same one on both sides. A token is one-shot: `validate` removes it from
+  the session, so a page showing N rows needs N tokens for the same action — that works, the session holds a set per
+  action. Give each operation its own mark (`token_order`, `token_unselect`) so one template can carry several.
+- **A specific template that opens with `</form>`** (a v7 habit to nest its own forms) closes the core form early: a
+  hidden field of the plugin must come *before* that tag, or it lands outside.
+- **The bench's own scenarios break.** Any scenario that drove a mutation by a forged URL now gets refused, and one that
+  only asserted "an error is shown" turns green for the wrong reason. Rewrite them to submit the real form, which is
+  the real user path anyway.
 
-**An unknown portlet id.** Core `PortletHome.findByPrimaryKey` dereferences the row it loads, so a
-missing id throws a `NullPointerException` (a core defect: report it, do not patch the core). Check that the
-row exists through the plugin's own home or DAO before calling it, and answer by the return type:
+Core 8.0.2: the common portlet form carries no token; the plugin generates one for its creation and its modification in
+the `create_specific` / `modify_specific` template and validates it in `doCreate` / `doModify`, as above.
+
+**An unknown portlet id.** Core `PortletHome.findByPrimaryKey` returns null for an id `core_portlet` does not hold,
+and throws a `NullPointerException` when only the plugin's row is missing and its DAO returns null (`p.copy( … )`). Check
+the result, or that the row exists through the plugin's own home or DAO, and answer by the return type:
 `getModify` returns HTML that the JSP prints, so it returns an error fragment rendered from a template (an
 `AdminMessage` URL would show as text); `doModify` returns a URL, so it returns
 `AdminMessageService.getMessageUrl( … )`. `gru-plugin-appointment` `AbstractPortletJspBean` guards the same way.
