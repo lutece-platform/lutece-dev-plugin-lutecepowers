@@ -82,7 +82,7 @@ library-freemarker), whatever its extension: `.html`, `.ftl`, `.txt`, `.xml` (a 
 | Attributes of a macro element | `params='data-x="1"'`, a captured block, a string variable (TM14: the rendering fails) | a map: `params={'data-x': '1', 'aria-label': label}` |
 | A class, a style, an event handler, a URL, an attribute the macro writes itself, on a macro element | `params={'class': …}`, `{'style': …}`, `{'onclick': …}`, `{'href'/'src'/'formaction': …}`, `{'id': …}` beside `id=` (TM15: refused) | `class=` of the macro; a theme class; the macro parameter; a raw element (`<span style="width:${w}%">`, `<button formaction="${url}">`), whose `${…}` is escaped |
 | A behaviour (`onclick`, `onchange`, `onerror`, `href="javascript:…"`) | an event handler attribute or a `javascript:` URL, in raw HTML or in `params` | `data-lutece-action`: `back`, `close`, `hide-parent`, `skip` on a link or a button, `submit` on a field (submits its form on change); `data-lutece-confirm="message"`; `data-lutece-fallback-src="url"` on an image (`themes/{admin,skin}/shared/js/util/lutece-actions.js`, loaded by both themes). Anything else: `addEventListener` in the page script |
-| A URL that comes from data (a site property, a stored link) | `href="${url}"`: escaping does not stop a `javascript:` URL | `href="${safeUrl(url)}"` (relative, http, https, mailto, tel; `'#'` otherwise, or `safeUrl(url, fallback)`); in CSS `url('${cssUrl(url)}')` |
+| A URL that comes from data (a site property, a stored link) | `href="${url}"`: escaping does not stop a `javascript:` URL (TM21) | `href="${safeUrl(url)}"` (relative, http, https, mailto, tel; `'#'` otherwise, or `safeUrl(url, fallback)`); in CSS `url('${cssUrl(url)}')` |
 | A conditional attribute | `cond?then('aria-current="true"', '')` | `cond?then({'aria-current': 'true'}, {})` |
 | HTML the application renders (a sub-template, a captcha, a list of rows) | `model.put( MARK_X, strHtml )` (AE01: shown as text); `<#noautoesc>` | `model.put( MARK_X, HtmlMarkup.of( strHtml ) )`, `HtmlMarkup.ofAll( list )`; in the template, `${x?no_esc}` (core `admin/features/assign_users_right.html`: `${attribute.getHtmlFormSearchAttribute( … )?no_esc}`) |
 | Rich text stored by a user or an admin (editor, BBCode rendered to HTML) | `${x?no_esc}` on a value nobody cleaned; `${page.htmlContent}` (TM19: the tags show as text) | `${richText(x!)}` (sanitized markup) in the template, or `HtmlMarkup.ofSanitized( x )` in Java |
@@ -90,6 +90,7 @@ library-freemarker), whatever its extension: `.html`, `.ftl`, `.txt`, `.xml` (a 
 | Read a captured block as text | `p?trim`, `p == ''`, `default_value=p` (TM16: fails) | `p?markup_string?trim`, `p?has_content`, or assign the string itself: `<#assign v = cond?then(a?c, '-1')>` |
 | Escape explicitly | `${x?html}`, `${x?esc}` (`?html` is a ParseException in the HTML output format) | `${x}` |
 | A value in JavaScript (string literal inside `<script>`) | `${x}` (HTML escaping is not JS escaping); `${x?js_string}` (HTML-escaped on top: the script reads `\&#39;`) | `${x?js_string?no_esc}`, inside a `<script>` only |
+| An i18n message inside `<script>` | `'#i18n{key}'` (TM20: replaced after the rendering, as is; an apostrophe of the translation ends the string) | `'${i18n('key')?js_string?no_esc}'`; `i18n('key', arg)` for a message with arguments |
 | A value in a `<textarea>` or an input being edited | `${x?no_esc}` | `${x}`: escaped is right there |
 | A special character in a string literal | `href='a?x=1&amp;y=2'`, `label='&#8722;'` (TM18: escaped once more, the page shows the entity) | the character itself: `href='a?x=1&y=2'`, `label='−'` |
 | A text turned to markup in Java (`HtmlMarkup.of`, `richText`) read by a string built-in | `x?contains('…')`, `x?replace(…)` (fails: markup) | `x?markup_string?contains('…')` |
@@ -115,4 +116,5 @@ check the rendered page, not the source.
 
 Auto-escaping is off by default and `htmlAttributes`, `HtmlMarkup`, `richText`, `safeUrl`, `cssUrl` and
 `data-lutece-action` do not exist: `params` is a string written as is (`params='data-x="1"'`) and `${x?url}` needs
-`${x?url('UTF-8')}`.
+`${x?url('UTF-8')}`. `?no_esc` does not parse there: a value in JavaScript is `${x?js_string}`, an i18n message
+`${i18n('key')?js_string}`.

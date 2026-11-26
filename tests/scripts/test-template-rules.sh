@@ -73,6 +73,18 @@ printf "<article>\${richText(page.htmlContent!)}</article><textarea>\${page.html
 expect "html-escaped: richText, a textarea, a macro argument, noautoesc and a plain property are fine" 0 "$(rule html-escaped "$A")"
 printf "<@offcanvas id='x' title='t'>body</@offcanvas>\n" > "$A"
 expect "offcanvas: flagged" 1 "$(rule offcanvas "$A")"
+printf "<script>\nvar m = '#i18n{x.label}';\n</script>\n" > "$A"
+expect "i18n-in-scripts: a message in a JavaScript string" 1 "$(rule i18n-in-scripts "$A")"
+printf "<#noparse><script>var a = '#i18n{x.a}';</script></#noparse><p>#i18n{x.b}</p>\n<script>\n<@m label='#i18n{x.c}' />\n</script>\n<script type=\"text/template\"><b>#i18n{x.d}</b></script>\n" > "$A"
+expect "i18n-in-scripts: noparse, outside a script, a macro argument, a non-JavaScript script" 0 "$(rule i18n-in-scripts "$A")"
+printf '%s\n' '<a href="${link.url}">a</a>' '<img src="${dskey('"'"'x.logo'"'"')}">' > "$A"
+expect "url-from-data: an object property and a datastore key" 1 "$(rule url-from-data "$A")"
+printf '%s\n' '<div style="background:url('"'"'${item.img}'"'"')"></div>' > "$A"
+expect "url-from-data: a CSS url( ) without cssUrl" 1 "$(rule url-from-data "$A")"
+printf '%s\n' '<a href="jsp/site/Portal.jsp?id=${link.id}">a</a><a href="#${item.id}">b</a><a href="${safeUrl(link.url)}">c</a>' \
+    '<a href="${base_url}jsp/x">d</a><link href="${theme.pathCss}/a.css"><a href="${link.code?url('"'"'UTF-8'"'"')}">e</a>' \
+    '<div style="background:url('"'"'${cssUrl(item.img)}'"'"')"></div><@cLink href=link.url />' '<script>var u = '"'"'<a href="${link.url}">'"'"';</script>' > "$A"
+expect "url-from-data: a literal start, safeUrl, a model value, a path, ?url, cssUrl, a macro, a script" 0 "$(rule url-from-data "$A")"
 
 W="$T/proj"
 J="$T/java"
@@ -347,5 +359,51 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-[ "$fail" -eq 0 ] && echo "PASS: template rules, template parse, TD06, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD73, TD46, TD47, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
+E="$T/escaping"; EX="$E/webapp/WEB-INF/templates/admin/plugins/x"; mkdir -p "$EX"
+POM81='<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>'
+POM80='<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>8.0.2</version></dependency></dependencies></project>'
+printf '%s\n' '<script>var m = '"'"'#i18n{x.label}'"'"';</script>' '<a href="${link.url}">a</a>' > "$EX/a.html"
+vme() { (cd "$E" && bash "$S/verify-migration.sh" . 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -c "$1"); }
+printf '%s\n' "$POM81" > "$E/pom.xml"
+expect "TM20: FAIL on 8.1 with the ?no_esc form" 1 "$(vme "FAIL \[TM20\].*js_string?no_esc")"
+expect "TM21: WARN on 8.1" 1 "$(vme "WARN \[TM21\]")"
+printf '%s\n' "$POM80" > "$E/pom.xml"
+expect "TM20: FAIL before 8.1 with the ?js_string form" 1 "$(vme "FAIL \[TM20\].*js_string} (fix")"
+expect "TM21: silent before 8.1" 0 "$(vme "\[TM21\]")"
+fx() { python3 "$S/fix-template-escaping.py" "$@" "$E"; }
+cat > "$EX/a.html" <<'EOF'
+<#assign u = 'Portal.jsp?page=x&amp;id=' + id><@cLink href='a?b=1&amp;c=2' label='&#8722;' title="&quot;q&quot;" />
+<script>var m = '#i18n{x.label}';</script>
+<#assign size><#if a & ( b > c )>big<#else>small</#if></#assign><#if size?trim == 'big'>x</#if>
+<#assign t><#if on>yes<#else>no</#if></#assign><#assign t = t?markup_string />
+EOF
+cat > "$EX/b.html" <<'EOF'
+<@cLink href='x' params='data-marker="&#36;&#123;${m.code}&#33;&#125;"' label='&#36;&#123;a&#125;' />
+<script>var n = "${'#i18n{x.other}'?js_string}"; var k = '#i18n{x.${kind}}';</script>
+<#assign k><b>${x}</b></#assign><#if k?trim?has_content>${k}</#if>
+EOF
+cp "$EX/a.html" "$T/a.saved"; cp "$EX/b.html" "$T/b.saved"
+printf '%s\n' "$POM81" > "$E/pom.xml"
+out=$(fx --dry-run)
+expect "fix-template-escaping --dry-run lists the changes and writes nothing" "6 same" "$(echo "$out" | grep -vc ' left: ') $(cmp -s "$EX/a.html" "$T/a.saved" && echo same)"
+expect "fix-template-escaping lists what it leaves" 4 "$(echo "$out" | grep -c ' left: ')"
+fx > /dev/null
+expect "fix-template-escaping: entities, i18n on 8.1, a capture with > in its condition" \
+    "<#assign u = 'Portal.jsp?page=x&id=' + id><@cLink href='a?b=1&c=2' label='−' title=\"\\\"q\\\"\" />|<script>var m = '\${i18n('x.label')?js_string?no_esc}';</script>|<#assign size = ( a & ( b > c ) )?then( 'big', 'small' ) /><#if size?trim == 'big'>x</#if>|<#assign t><#if on>yes<#else>no</#if></#assign><#assign t = t?markup_string />" \
+    "$(paste -sd'|' "$EX/a.html")"
+expect "fix-template-escaping leaves FreeMarker syntax entities, a message in an interpolation, a built key, a markup capture" 1 "$(cmp -s "$EX/b.html" "$T/b.saved" && echo 1)"
+expect "fix-template-escaping is idempotent" 0 "$(fx | grep -vc ' left: ')"
+expect "TM18 and TM20 silent on the fixed file" "0 0" "$(rule entities-in-literals "$EX/a.html") $(rule i18n-in-scripts "$EX/a.html")"
+expect "the fixed file parses" 0 "$(bash "$S/check-template-parse.sh" "$E" | grep -c "PARSE_ERROR.*a.html")"
+rm "$EX/b.html"; cp "$T/a.saved" "$EX/a.html"; printf '%s\n' "$POM80" > "$E/pom.xml"
+fx > /dev/null
+expect "fix-template-escaping: i18n before 8.1" 1 "$(grep -c "var m = '\${i18n('x.label')?js_string}';" "$EX/a.html")"
+if bash "$S/check-template-parse.sh" "$E" | grep -q '^FMPARSE files'; then
+    printf '%s\n' "$POM81" > "$E/pom.xml"
+    printf '%s\n' '<#ftl output_format="plainText">' '<script>var m = '"'"'#i18n{x.label}'"'"';</script>' > "$EX/a.html"
+    cp "$EX/a.html" "$T/a.saved"
+    expect "fix-template-escaping keeps a file its rewrite would not let parse" "1 1" "$(fx | grep -c 'no longer parses') $(cmp -s "$EX/a.html" "$T/a.saved" && echo 1)"
+fi
+
+[ "$fail" -eq 0 ] && echo "PASS: template rules, template parse, TD06, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD73, TD46, TD47, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, TM20, TM21, fix-button-colours, fix-template-escaping"
 exit $fail

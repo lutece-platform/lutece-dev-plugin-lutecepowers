@@ -4,12 +4,13 @@
 Usage: template_rules.py <rule> [project_root | template_file]
        rule: offcanvas | fo-forms | inline-forms | jquery | fo-upload | unsafe-messages | suggestpoi | fo-required-js
              | mvc-message | own-messages | params-string | params-refused | capture-as-string | macro-shadow
-             | entities-in-literals | html-escaped
+             | entities-in-literals | html-escaped | i18n-in-scripts | url-from-data
 
 Prints one line per breach, `path:line: excerpt`, and exits 1 when there is one. FreeMarker, HTML, JSP and script
 comments are ignored, and so are the macro libraries under templates/*/themes/ (only the core's for the rules
-reading project macros: params-*, capture-as-string, macro-shadow, entities-in-literals, html-escaped). Shared by
-verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template-design.py (TD48, TD49, TD50).
+reading project macros: params-*, capture-as-string, macro-shadow, entities-in-literals, html-escaped, i18n-in-scripts,
+url-from-data). Shared by verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM21), scan-template-design.py (TD48,
+TD49, TD50) and fix-template-escaping.py.
 
 - offcanvas     no @offcanvas / @cOffcanvas / offcanvas markup: the content of the page goes in a @modal (@cModal),
                 another page is reached by a plain link.
@@ -48,11 +49,19 @@ verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template
 - macro-shadow  a macro of the project with a parameter named like a macro it calls (icon=... and <@icon>): inside the
                 body the parameter hides the macro, the call fails at render time.
 - entities-in-literals an HTML entity (&amp;, &nbsp;, &#8722;) in a string literal of a directive, a macro call or
-                an interpolation: auto-escaping escapes it once more. An argument of a built-in searching a text is
-                left alone.
+                an interpolation: auto-escaping escapes it once more. A markup fragment (a tag, attributes written as
+                text: TM14) and an argument of a built-in searching a text are left alone.
 - html-escaped  ${o.p} where the property p of an object is named as HTML (htmlContent, htmlSubscription...), directly
                 or through a variable assigned from one: a getter returns a string, auto-escaping prints the tags as
                 text. Rich text goes through ${richText(x)}.
+- i18n-in-scripts #i18n{key} in a JavaScript <script> element, outside <#noparse> and the string arguments of a
+                directive or a macro call: it is replaced after the rendering, as is, so an apostrophe of a translation
+                ends the JavaScript string. i18n('key') is evaluated by the template and takes ?js_string.
+- url-from-data an interpolation starting a URL attribute value of a raw HTML element (href, src, action, formaction,
+                data, poster, background, cite, srcset, xlink:href) or a CSS url( ), reading data: a datastore key
+                (dskey) or a property of an object, not wrapped in safeUrl( ) / cssUrl( ). A top-level model value or
+                macro parameter (${url}, ${base_url}), a path (theme.pathCss), a paginator link, an image as base64
+                and a value ending in a built-in that cannot form a scheme (?url, ?c) are left alone.
 """
 import bisect
 import functools
@@ -75,18 +84,24 @@ OFFCANVAS = re.compile(r"""<@c?[Oo]ffcanvas\b[^>]*>|class=["'][^"']*\boffcanvas\
 FO_FORM = re.compile(r"<form\b|<@tform\b|\bfoValidation\s*=\s*false")
 
 
+def spaces(text):
+    """The text with every character but the line breaks turned to a space."""
+    return re.sub(r"[^\n]", " ", text)
+
+
+def blank(match):
+    """The text of a match turned to spaces, line breaks kept."""
+    return spaces(match.group(0))
+
+
 def blank_comments(text):
     """Blank FreeMarker and HTML comments, keeping offsets and line numbers."""
-    def blank(match):
-        return re.sub(r"[^\n]", " ", match.group(0))
     text = re.sub(r"<#--.*?-->", blank, text, flags=re.S)
     return re.sub(r"<!--.*?-->", blank, text, flags=re.S)
 
 
 def blank_scripts(text):
     """Blank JSP comments, /* */ comments and // comments that do not follow a colon or a quote, keeping offsets."""
-    def blank(match):
-        return re.sub(r"[^\n]", " ", match.group(0))
     text = re.sub(r"<%--.*?--%>", blank, text, flags=re.S)
     text = re.sub(r"/\*.*?\*/", blank, text, flags=re.S)
     return re.sub(r"(?<![:\"'\\\w])//[^\n]*", blank, text)
@@ -316,7 +331,7 @@ FORWARD = re.compile(r"\b(\w+)\s*=\s*\(?\s*(\w+)\b(?![?.(])")
 MAP_PARAMS_FALLBACK = {"params", "macroParams", "titleParams", "labelParams", "legendParams", "fieldsetParams", "headerParams",
                        "actionParams", "anchorsParams", "paramsIncrease", "paramsDecrease", "additionalParameters"}
 ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);")
-MARKUP = re.compile(r"<[#@/a-zA-Z]")
+MARKUP = re.compile(r"<[#@/a-zA-Z]|[\w-]\s*=\s*[\"']")
 OPEN_CALL = re.compile(r"\?(\w+)\([^()]*$")
 SEARCH_BUILTINS = {"replace", "contains", "starts_with", "ends_with", "index_of", "last_index_of", "keep_before", "keep_after",
                    "keep_before_last", "keep_after_last", "split", "matches", "remove_beginning", "remove_ending"}
@@ -402,10 +417,10 @@ def params_string(text, skin):
             or (m.group(4) and STRING_TERNARY.match(text, base + m.end()))]
 
 
-def entities_in_literals(text, skin):
-    """Lines of the HTML entities in a string literal of a directive, a macro call or an interpolation, markup
-    fragments and the arguments of a search built-in (?replace('&nbsp;', '')) aside."""
-    out = []
+def entity_literals(text):
+    """(start, end) of each string literal, quotes included, of a directive, a macro call or an interpolation holding
+    an HTML entity; markup fragments (a tag, attributes written as text) and the arguments of a search built-in
+    (?replace('&nbsp;', '')) aside."""
     for tag in TAG.finditer(text):
         body = tag.group(0)
         for lit in LITERAL.finditer(body):
@@ -415,8 +430,12 @@ def entities_in_literals(text, skin):
             call = OPEN_CALL.search(body, 0, lit.start())
             if call and call.group(1) in SEARCH_BUILTINS:
                 continue
-            out.append(line_of(text, tag.start() + lit.start()))
-    return sorted(set(out))
+            yield tag.start() + lit.start(), tag.start() + lit.end()
+
+
+def entities_in_literals(text, skin):
+    """Lines of the HTML entities in a string literal of a directive, a macro call or an interpolation."""
+    return sorted({line_of(text, start) for start, _ in entity_literals(text)})
 
 
 def map_keys(text, start):
@@ -464,24 +483,27 @@ def params_refused(text, skin):
     return out
 
 
-def capture_as_string(text, skin):
-    """Lines reading a captured block as a string: a string built-in, a comparison in a directive or an interpolation,
-    default_value= of a macro call."""
-    out = []
+def capture_string_reads(text):
+    """(offset, name) of each read of a captured block as a string: a string built-in, a comparison in a directive or an
+    interpolation, default_value= of a macro call."""
     names = {n for n in CAPTURE.findall(text) if not re.search(r"<#(?:assign|local)\s+%s\s*=\s*%s\?markup_string" % (n, n), text)}
     expressions = [(m.start(), m.group(0)) for m in re.finditer(r"<#(?:if|elseif)\b[^>]*>|\$\{[^}]*\}", text)]
     expressions += [(m.start(), m.group(0).split("=", 1)[-1]) for m in re.finditer(r"<#(?:assign|local)\b[^>]*>", text)]
     for name in names:
         n = re.escape(name)
         for m in re.finditer(r"(?<![\w.])%s\?(?:%s)\b" % (n, STRING_BUILTIN), text):
-            out.append(line_of(text, m.start()))
+            yield m.start(), name
         for m in re.finditer(r"\bdefault_value\s*=\s*%s\b" % n, text):
-            out.append(line_of(text, m.start()))
+            yield m.start(), name
         for start, expr in expressions:
             op = "==|!=|=" if expr.startswith(("<#if", "<#elseif", "${")) else "==|!="
             if re.search(r"(?<![\w.])%s\s*(?:%s)\s*['\"]|['\"]\s*(?:==|!=)\s*%s\b" % (n, op, n), expr):
-                out.append(line_of(text, start))
-    return sorted(set(out))
+                yield start, name
+
+
+def capture_as_string(text, skin):
+    """Lines reading a captured block as a string (TM16)."""
+    return sorted({line_of(text, start) for start, _ in capture_string_reads(text)})
 
 
 HTML_NAMED = re.compile(r"\w\.(?:html(?:[A-Z_]\w*)?|[a-z]\w*Html\w*)\b(?!\s*\()")
@@ -524,16 +546,118 @@ def macro_shadow(text, skin):
     return out
 
 
+NOPARSE = re.compile(r"<#noparse>.*?</#noparse>", re.S)
+SCRIPT_ELEMENT = re.compile(r"(<script\b([^>]*)>)(.*?)(</script\s*>)", re.S | re.I)
+SCRIPT_TYPE = re.compile(r"""\btype\s*=\s*['"]?([^'"\s>]+)""", re.I)
+JS_TYPES = {"text/javascript", "application/javascript", "text/ecmascript", "application/ecmascript", "module"}
+I18N_MARK = re.compile(r"#i18n\{((?:\$\{[^{}]*\}|[^{}])*)\}")
+HTML_TAG = re.compile(r"""<([a-zA-Z][\w:-]*)((?:[^<>"']|"[^"]*"|'[^']*'|</?#[^>]*>|\$\{[^}]*\})*)>""")
+URL_ATTR = re.compile(r"""(?<![\w:-])(?:href|src|action|formaction|data|poster|background|cite|srcset|xlink:href)\s*=\s*["']\s*(?=\$\{)""", re.I)
+STYLE_ATTR = re.compile(r"""(?<![\w:-])style\s*=\s*("[^"]*"|'[^']*')""", re.I)
+STYLE_ELEMENT = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
+CSS_URL = re.compile(r"""url\(\s*['"]?\s*(?=\$\{)""", re.I)
+URL_GUARD = re.compile(r"\b(?:safeUrl|cssUrl)\s*\(|\?(?:c|url|url_path|size|index|counter|has_content|string\.computer|iso\w*)(?:\([^()]*\))?\s*$")
+REFERENCE = re.compile(r"^[\s(]*([A-Za-z_]\w*(?:\s*(?:\.\s*[A-Za-z_]\w*|\(\s*\)))*)")
+SERVER_BUILT = re.compile(r"(?i)path|base64|paginator")
+
+
+def interpolation_end(text, start):
+    """End offset of the ${...} opening at start, braces balanced, string literals and escaped characters skipped; -1
+    when unclosed."""
+    depth, i, quote = 0, start + 1, None
+    while i < len(text):
+        c = text[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = None
+        elif c == "\\":
+            i += 1
+        elif c in "'\"":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def i18n_marks(text):
+    """(start, end, key) of each #i18n{key} written in a JavaScript <script> element (no type, or a JavaScript one),
+    outside <#noparse> blocks and the string arguments of a directive or a macro call."""
+    text = NOPARSE.sub(blank, text)
+    for script in SCRIPT_ELEMENT.finditer(text):
+        kind = SCRIPT_TYPE.search(script.group(2))
+        if kind and kind.group(1).lower() not in JS_TYPES:
+            continue
+        body = re.sub(DIRECTIVE_TAG, blank, script.group(3))
+        for m in I18N_MARK.finditer(body):
+            yield script.start(3) + m.start(), script.start(3) + m.end(), m.group(1)
+
+
+def i18n_in_scripts(text, skin):
+    """Lines of the #i18n{key} written in a script (TM20)."""
+    return sorted({line_of(text, start) for start, _, _ in i18n_marks(text)})
+
+
+def from_data(expr):
+    """True when an interpolated URL reads data: a datastore key, or a property of an object that is no path, paginator
+    link or base64 image the server builds; false when safeUrl, cssUrl or a built-in that cannot form a scheme wraps it."""
+    if URL_GUARD.search(expr):
+        return False
+    if re.search(r"\bdskey\s*\(", expr):
+        return True
+    ref = REFERENCE.match(expr)
+    return bool(ref) and "." in ref.group(1) and not SERVER_BUILT.search(ref.group(1))
+
+
+def url_from_data(text, skin):
+    """Lines of the interpolations starting a URL attribute value of a raw HTML element or a CSS url( ) with a value read
+    from data and not passed through safeUrl / cssUrl (TM21); script bodies and <#noparse> blocks aside."""
+    text = SCRIPT_ELEMENT.sub(lambda m: m.group(1) + spaces(m.group(3)) + m.group(4), NOPARSE.sub(blank, text))
+    starts = []
+    for tag in HTML_TAG.finditer(text):
+        starts += [tag.start(2) + a.end() for a in URL_ATTR.finditer(tag.group(2))]
+        for style in STYLE_ATTR.finditer(tag.group(2)):
+            starts += [tag.start(2) + style.start(1) + u.end() for u in CSS_URL.finditer(style.group(1))]
+    for style in STYLE_ELEMENT.finditer(text):
+        starts += [style.start(1) + u.end() for u in CSS_URL.finditer(style.group(1))]
+    out = set()
+    for start in starts:
+        end = interpolation_end(text, start)
+        if end > 0 and from_data(text[start + 2:end - 1]):
+            out.add(line_of(text, start))
+    return sorted(out)
+
+
 RULES = {"offcanvas": offcanvas, "fo-forms": fo_forms, "inline-forms": inline_forms, "jquery": jquery, "fo-upload": fo_upload,
          "unsafe-messages": unsafe_messages, "suggestpoi": suggestpoi, "fo-required-js": fo_required_js, "mvc-message": mvc_message, "own-messages": own_messages,
          "params-string": params_string, "params-refused": params_refused, "capture-as-string": capture_as_string,
-         "macro-shadow": macro_shadow, "entities-in-literals": entities_in_literals, "html-escaped": html_escaped}
+         "macro-shadow": macro_shadow, "entities-in-literals": entities_in_literals, "html-escaped": html_escaped,
+         "i18n-in-scripts": i18n_in_scripts, "url-from-data": url_from_data}
 SCOPES = {"jquery": (("webapp/WEB-INF/templates",), (".html", ".ftl", ".js")),
           "suggestpoi": (("webapp",), (".html", ".ftl", ".jsp"))}
 DEFAULT_SCOPE = (("webapp/WEB-INF/templates/admin", "webapp/WEB-INF/templates/skin"), (".html", ".ftl"))
 MACRO_LIBRARY = re.compile(r"/templates/(admin|skin)/themes/")
 CORE_MACROS = re.compile(r"/templates/(admin/themes/tabler|skin/themes/macros)/")
-PROJECT_MACRO_RULES = ("params-string", "params-refused", "capture-as-string", "macro-shadow", "entities-in-literals", "html-escaped")
+PROJECT_MACRO_RULES = ("params-string", "params-refused", "capture-as-string", "macro-shadow", "entities-in-literals", "html-escaped",
+                       "i18n-in-scripts", "url-from-data")
+
+
+def template_paths(root, name):
+    """The files rule name reads under a project root, sorted, the macro libraries it leaves alone aside."""
+    subs, exts = SCOPES.get(name, DEFAULT_SCOPE)
+    paths = []
+    for sub in subs:
+        for dirpath, dirs, files in os.walk(os.path.join(root, sub)):
+            dirs.sort()
+            paths += [os.path.join(dirpath, n) for n in sorted(files) if n.endswith(exts)]
+    library = CORE_MACROS if name in PROJECT_MACRO_RULES else MACRO_LIBRARY
+    return [p for p in paths if not library.search(os.path.abspath(p).replace(os.sep, "/"))]
 
 
 def main():
@@ -542,18 +666,11 @@ def main():
         print(__doc__, file=sys.stderr)
         return 2
     rule = RULES[sys.argv[1]]
-    subs, exts = SCOPES.get(sys.argv[1], DEFAULT_SCOPE)
     root = sys.argv[2] if len(sys.argv) > 2 else "."
     if os.path.isfile(root):
         paths, base = [root], os.path.dirname(root)
     else:
-        paths, base = [], root
-        for sub in subs:
-            for dirpath, dirs, files in os.walk(os.path.join(root, sub)):
-                dirs.sort()
-                paths += [os.path.join(dirpath, n) for n in sorted(files) if n.endswith(exts)]
-        library = CORE_MACROS if sys.argv[1] in PROJECT_MACRO_RULES else MACRO_LIBRARY
-        paths = [p for p in paths if not library.search(os.path.abspath(p).replace(os.sep, "/"))]
+        paths, base = template_paths(root, sys.argv[1]), root
     if sys.argv[1] in ("mvc-message", "own-messages"):
         OWN_MESSAGE_LISTS.update(own_message_lists(project_root(root)))
     found = 0

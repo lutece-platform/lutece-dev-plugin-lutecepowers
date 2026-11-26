@@ -2191,6 +2191,19 @@ TM19_MATCHES=$(template_rules html-escaped 2>/dev/null)
 COUNT=0; [ -n "$TM19_MATCHES" ] && COUNT=$(echo "$TM19_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM19" "PASS" "No HTML property printed escaped" 0
 else emit "TM19" "WARN" "HTML property (htmlContent...) printed with \${x}: auto-escaping shows the tags as text; print it with \${richText(x)}" "$COUNT" "$TM19_MATCHES"; fi
+# TM20: #i18n{key} in a script is replaced after the rendering, as is; FAIL at every level, i18n() exists on each.
+JS_I18N="\${i18n('key')?js_string}"; [ "$CORE81" = 1 ] && JS_I18N="\${i18n('key')?js_string?no_esc}"
+TM20_MATCHES=$(template_rules i18n-in-scripts 2>/dev/null)
+COUNT=0; [ -n "$TM20_MATCHES" ] && COUNT=$(echo "$TM20_MATCHES" | wc -l)
+if [ "$COUNT" -eq 0 ]; then emit "TM20" "PASS" "No #i18n{} in a script" 0
+else emit "TM20" "FAIL" "#i18n{key} in a <script>: replaced after the rendering as is, an apostrophe of a translation ends the JavaScript string; write $JS_I18N (fix-template-escaping.py)" "$COUNT" "$TM20_MATCHES"; fi
+# TM21: a URL attribute starting with a value read from data; safeUrl and cssUrl exist from lutece-core 8.1 only.
+if [ "$CORE81" = 1 ]; then
+    TM21_MATCHES=$(template_rules url-from-data 2>/dev/null)
+    COUNT=0; [ -n "$TM21_MATCHES" ] && COUNT=$(echo "$TM21_MATCHES" | wc -l)
+    if [ "$COUNT" -eq 0 ]; then emit "TM21" "PASS" "URLs read from data pass through safeUrl" 0
+    else emit "TM21" "WARN" "URL attribute starting with an object property or a datastore key: escaping does not stop a javascript: URL; \${safeUrl(x)} when the value can be stored by a user or an admin, url('\${cssUrl(x)}') in CSS" "$COUNT" "$TM21_MATCHES"; fi
+fi
 
 # TM02 to TM07: template rules read with FreeMarker, HTML, JSP and script comments blanked (template_rules.py).
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.
