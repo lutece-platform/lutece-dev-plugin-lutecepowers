@@ -253,6 +253,15 @@ jar(w4 / "WEB-INF/lib/mariadb-java-client-3.5.1.jar", {"org/mariadb/jdbc/Driver.
 rc, out = run("check", s3, "--war", w4, "--bom", BOM, "--m2", ROOT / "m2")
 expect("a Liberty variable named like a key of the site is reported (SI31)", "WARN [SI31]" in out and "a.base" in out, out)
 expect("a driver fileset matching no jar of the war is reported (SI25)", "FAIL [SI25]" in out and "mysql-connector" in out, out)
+expect("a server.xml without mpTelemetry is reported (SI33)", "WARN [SI33]" in out and "mpTelemetry-2.0" in out, out)
+s5 = site("s5", files={"src/main/liberty/config/server.xml": '<server><featureManager><feature>mpTelemetry-2.0</feature></featureManager>'
+                       '<mpTelemetry source="message, trace, ffdc"/></server>'})
+rc, out = run("check", s5, "--bom", BOM, "--m2", ROOT / "m2")
+expect("a server.xml exporting logs, traces and FFDC through mpTelemetry passes (SI33)", "SI33" not in out, out)
+s6 = site("s6", files={"src/main/liberty/config/server.xml": '<server><featureManager><feature>mpTelemetry-2.0</feature></featureManager>'
+                       '<mpTelemetry source="trace"/></server>'})
+rc, out = run("check", s6, "--bom", BOM, "--m2", ROOT / "m2")
+expect("an mpTelemetry source without message is reported (SI33)", "WARN [SI33]" in out and "message, trace, ffdc" in out, out)
 rc, out = run("plugins-dat", w4)
 expect("plugins-dat writes the descriptor names and their pools", out.split() == ["core_extensions.installed=1", "forms.installed=1", "forms.pool=portal"], out)
 dump, envf = ROOT / "dump.txt", ROOT / "env.txt"
