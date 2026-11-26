@@ -54,6 +54,7 @@ verify-migration.sh (TM02 to TM07, TM10 to TM12, TM14 to TM19) and scan-template
 """
 import bisect
 import functools
+import glob
 import os
 import re
 import sys
@@ -318,6 +319,11 @@ ALLOWED_FALLBACK = {"title", "name", "value", "id", "role", "tabindex", "hidden"
                     "required", "readonly", "disabled", "multiple", "min", "max", "step", "minlength", "maxlength", "size",
                     "accept", "target", "rel", "download", "alt", "width", "height", "loading", "form", "rows", "cols",
                     "selected", "checked", "autocomplete", "autofocus", "inputmode"}
+
+
+def tabler_css(themes):
+    """The tabler-icons.min.css under the shared css folder of a webapp's themes, wherever the core puts it; '' when none."""
+    return min(glob.glob(os.path.join(themes, "shared/css/**/tabler-icons.min.css"), recursive=True), default="")
 
 
 @functools.lru_cache(maxsize=None)

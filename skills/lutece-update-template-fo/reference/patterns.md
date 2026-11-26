@@ -64,7 +64,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### cIcon - Tabler icons
 - **Prefer `<@cIcon>`** over `<@cInline type='i' class='ti ti-xxx' />`; `@parisIcon` does not exist in the core
 - The `ti ti-` prefix is added automatically: `<@cIcon name='eye' />` → `<span class="ti ti-eye">`
-- `name` must be a Tabler name (`webapp/themes/shared/css/tabler-icons.min.css`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
+- `name` must be a Tabler name (the `tabler-icons.min.css` under `webapp/themes/shared/css/`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
 - `name` is the glyph, never a label: `<@cIcon name='#i18n{...}' />` is wrong
 - Vocabulary in use: submit `check`, send `mail`, search `search`, reset `refresh`, edit `edit`, view `eye`, delete `trash`, top `chevron-up`, back `arrow-left`, forward/login `arrow-right`
 - Extra classes via `class`: `<@cIcon name='settings' class='me-1' />`

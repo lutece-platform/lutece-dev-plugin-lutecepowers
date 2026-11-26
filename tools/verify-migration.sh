@@ -1878,6 +1878,7 @@ if [ -d webapp/WEB-INF/plugins ] || [ -d src/sql ]; then
 import glob, os, re, sys
 sys.path.insert(0, os.environ["SCRIPT_DIR"])
 from admin_rights import uncommented, updates
+from template_rules import tabler_css
 rows = {}
 for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
     if re.search(r"/upgrades?/", f):
@@ -1899,8 +1900,8 @@ for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
             row = rows.pop(fid)[2]
             row.update({k: v for k, v in sets.items() if k != "id_right"})
             rows[sets.get("id_right", fid)] = (f, line, row)
-css = os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")) + "/lutece-core/webapp/themes/shared/css/tabler-icons.min.css"
-icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, encoding="utf-8", errors="replace").read())) if os.path.isfile(css) else set()
+css = tabler_css(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")) + "/lutece-core/webapp/themes")
+icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, encoding="utf-8", errors="replace").read())) if css else set()
 def unknown(value):
     m = re.fullmatch(r"\s*ti\s+ti-([a-z0-9-]+)\s*", value or "")
     return icons and m and m.group(1) not in icons

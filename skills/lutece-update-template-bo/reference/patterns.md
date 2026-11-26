@@ -295,7 +295,7 @@ No `<@offcanvas>` (blocking: `verify-migration.sh` TM10, scanner TD48). Two repl
 
 ## Icon vocabulary
 
-Every name below exists in `webapp/themes/shared/css/tabler-icons.min.css` of the assembled webapp; check a new one
+Every name below exists in the `tabler-icons.min.css` under `webapp/themes/shared/css/` of the assembled webapp; check a new one
 there before using it, because an unknown name renders an empty glyph without an error.
 
 | Action | Icon |
