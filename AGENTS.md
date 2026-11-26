@@ -83,6 +83,7 @@ bash tests/scripts/test-site-force.sh
 bash tests/scripts/test-e2e-site-cache.sh
 bash tests/scripts/test-e2e-src-digest.sh
 bash tests/scripts/test-run-all-down.sh
+bash tests/scripts/test-ci-maven-retry.sh
 claude plugin validate .
 ```
 
