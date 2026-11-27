@@ -30,6 +30,30 @@ and scripts that check everything a machine can check. Claude Code, Codex, Curso
 | Grok Build | `grok plugin install https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers --trust` |
 | OpenCode | see [the OpenCode install](docs/how-it-works.md#opencode) |
 
+### Channels (Claude Code)
+
+| Channel | Lutece level | Marketplace | Branch |
+|---|---|---|---|
+| Stable (default) | Lutece 8.0 releases | `lutece-plugins` | `main` |
+| Early access | lutece-core develop (8.1) | `lutece-plugins-early` | `develop` |
+
+Switch to early access:
+
+```bash
+claude plugin marketplace add lutece-platform/lutece-dev-plugin-lutecepowers#develop
+claude plugin disable lutecepowers-v8@lutece-plugins
+claude plugin install lutecepowers-v8@lutece-plugins-early
+```
+
+Then turn on auto-update for `lutece-plugins-early` in `/plugin`. Back to stable:
+
+```bash
+claude plugin disable lutecepowers-v8@lutece-plugins-early
+claude plugin enable lutecepowers-v8@lutece-plugins
+```
+
+Keep one of the two enabled, never both.
+
 ## How it works
 
 - Open the agent **in your project** (plugin, module, library, site) and say what you want, in your own words.
