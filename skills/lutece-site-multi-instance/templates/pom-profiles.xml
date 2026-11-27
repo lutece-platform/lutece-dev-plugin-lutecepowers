@@ -35,12 +35,6 @@
                 <version>5.7.2</version>
                 <scope>runtime</scope>
             </dependency>
-            <!-- Size of the Lutece caches under Hazelcast (maxElementsInMemory), which JCache does not carry; version managed by lutece-bom -->
-            <dependency>
-                <groupId>fr.paris.lutece.plugins</groupId>
-                <artifactId>library-cache-hazelcast</artifactId>
-                <type>jar</type>
-            </dependency>
             <!-- Ehcache neutralised: same coordinates as the lutece-core dependency, scope provided -->
             <dependency>
                 <groupId>org.ehcache</groupId>

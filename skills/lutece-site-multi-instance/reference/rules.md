@@ -89,11 +89,6 @@ Each rule was observed on minikube or podman with two or three replicas behind i
   distinct addresses on minikube, 0 with `remoteIp`. Liberty reads `X-Forwarded-For` only from a proxy in the private ranges
   (default `proxies`); ingress-nginx replaces a client-supplied `X-Forwarded-For` by default, so a forged header changes
   nothing (verified). With a load balancer in front of the ingress, `use-forwarded-headers` must be set on ingress-nginx.
-- **Trusted proxies for Lutece** (`lutece.security.trustedProxies` in `conf/override/lutece.properties`: the addresses or
-  CIDR ranges of the ingress and load balancers). Lutece reads `X-Forwarded-For` itself, `SecurityUtil.getRealIp` of
-  library-core-utils, for the back office login lock (failures counted per address, `core_connections_log`); mylutece
-  uses the same method. Unset, the header is trusted from any sender and a forged one chooses the address the lock
-  counts; set, it is read only from those proxies. Core 8.0.2 has no such property.
 - **`hazelcast.cache.invalidation.batch.enabled: false`** on the member: otherwise near-cache invalidations are batched and a
   change takes seconds to be visible on the other replicas.
 - **Liquibase**: run migrations from one instance only. Disable at startup with `-Dliquibase.enabled.at.startup=false` in

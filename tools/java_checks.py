@@ -14,13 +14,12 @@ mv01  an admin MVC bean whose @Controller enables the security token, rendering 
 hm01  a Home in the v8 form: a plain Home is static and has no getInstance( ); a portlet home is an
       @ApplicationScoped, non-final bean with a public no-arg constructor (the core creates it by reflection) whose
       getInstance( ) returns CDI.current( ).select( X.class ).get( ).
-cs03  an MVC controller comparing the request method with POST: the core applies lutece.mvc.action.getPolicy to an
-      @Action requested by GET (default log: its token is checked, 403 without it; refuse: 405), the guard
-      duplicates it and overrides the site's choice.
+cs03  an MVC controller comparing the request method with POST: a guard around the core defect that runs an
+      @Action on GET without its token (the core owns the fix; the e2e scenario carries core_defect).
 wb10  a @RequestScoped admin bean calling the inherited getPlugin( ): PluginAdminPageJspBean.init sets the plugin
       from the plugin_name parameter only, so a fresh bean per request holds null on every request without it.
-wb11  a request parameter HTML-escaped by hand: the value is stored escaped, and FreeMarker auto-escaping escapes it
-      again where a template prints it (L&amp;#39;idée); since lutece-core 8.1 a parameter is stored as typed.
+wb11  a request parameter HTML-escaped by hand: the core XSS filter (sanitizeFilterMode, on by default for admin and
+      site) already escapes every parameter, so the value is stored escaped twice (&amp;amp;).
 da03  a DAO reading as a number (getInt, getLong) a column the create scripts declare as text (char, varchar, text),
       or comparing such a column with a number bound (setInt, setLong in a where clause): the driver throws on a
       non-numeric value read, the database casts every row on the comparison (no index, '' equals 0). A number
@@ -317,8 +316,8 @@ def hm02(root):
 
 
 def cs03(root):
-    """MVC controllers comparing the request method with POST: the core applies lutece.mvc.action.getPolicy to an
-    @Action requested by GET, the guard duplicates it."""
+    """MVC controllers comparing the request method with POST: a guard around the core defect that runs an @Action
+    on GET without its token; the core owns the fix, the e2e scenario carries core_defect."""
     out = []
     for path, raw in sorted(sources(root).items()):
         code = strip(raw)
@@ -328,8 +327,8 @@ def cs03(root):
         names = "|".join(['"POST"'] + [re.escape(c) for c in sorted(consts)])
         m = re.search(r"(?:%s)\s*\.\s*equals(?:IgnoreCase)?\s*\(\s*\w+\s*\.\s*getMethod|getMethod\s*\(\s*\)\s*\.\s*equals(?:IgnoreCase)?\s*\(\s*(?:%s)" % (names, names), raw)
         if m:
-            out.append("%s:%d: request method compared with POST in a @Controller: remove the guard, the core applies "
-                       "lutece.mvc.action.getPolicy to an @Action requested by GET (rules/web-bean.md)" % (os.path.relpath(path, root), raw[:m.start()].count("\n") + 1))
+            out.append("%s:%d: request method compared with POST in a @Controller: remove the guard, the core owns the GET "
+                       "defect (rules/web-bean.md), its e2e scenario carries core_defect" % (os.path.relpath(path, root), raw[:m.start()].count("\n") + 1))
     return out
 
 
@@ -384,7 +383,7 @@ AMP_REPLACE = r"%s\s*\.\s*replace(?:All)?\s*\(\s*\"&\"\s*,\s*\"&amp;\"\s*\)"
 
 def wb11(root):
     """Request parameters HTML-escaped by hand, in a bean served under /jsp/admin or /jsp/site (a JspBean, an XPage),
-    where FreeMarker auto-escaping escapes them again when they are printed."""
+    where the core XSS filter already escapes them; a servlet or a REST resource is outside the filter."""
     files = sources(root)
     info = types(files)
     served = {t["path"] for n, t in info.items() if _served_by_jsp(info, n)}
@@ -399,83 +398,8 @@ def wb11(root):
             for pattern in (ESCAPE_CALL, AMP_REPLACE):
                 for m in re.finditer(pattern % subject, raw):
                     out.append((path, raw[:m.start()].count("\n") + 1))
-    return ["%s:%d: request parameter escaped by hand: the templates escape it again where they print it, the value ends up escaped "
+    return ["%s:%d: request parameter escaped by hand: the core XSS filter already escapes it, the value ends up escaped "
             "twice; drop the escaping (rules/web-bean.md)" % (os.path.relpath(p, root), n) for p, n in sorted(set(out))]
-
-HTML_VALUE = re.compile(r"\bgetHtml\w*\s*\(|\bstr\w*(?:Html|Content)\w*\b(?!\s*\()|\b\w*Html\b(?!\s*\()|\b\w*(?:[Bb]uffer|Builder)\s*\.\s*toString\s*\(")
-
-
-TEMPLATE_CALL = re.compile(r"\b(?:getTemplate|getTemplateFromStringFtl|getPage|getXPage)\s*\(")
-MODEL_DECL = re.compile(r"\b\w*Map\s*<\s*String\s*,\s*Object\s*>\s+(\w+)")
-MARKUP_CALL = re.compile(r"\b\w*HtmlMarkup\w*\s*\(")
-STRING_CONSTANT = re.compile(r"\b(\w+)\s*=\s*\"([^\"\\]*)\"\s*;")
-
-
-def call_args(code, start):
-    """The text between the parenthesis opening at start - 1 and its match, the offset of the first top-level comma."""
-    depth, i, comma = 1, start, None
-    while i < len(code) and depth:
-        depth += code[i] == "("
-        depth -= code[i] == ")"
-        if code[i] == "," and depth == 1 and comma is None:
-            comma = i
-        i += 1
-    return code[start:i - 1], comma
-
-
-def joined_args(code, pattern):
-    """The arguments of every call pattern matches in code, joined."""
-    return " ".join(call_args(code, m.end())[0] for m in pattern.finditer(code))
-
-
-@functools.lru_cache(maxsize=None)
-def template_text(root):
-    """The text of every template of the project, joined."""
-    out = []
-    for path in glob.glob(os.path.join(root, "webapp/WEB-INF/templates/**/*"), recursive=True):
-        if os.path.isfile(path):
-            out.append(read_source(path))
-    return "\n".join(out)
-
-
-def ae01(root):
-    """HTML the project builds (a rendered template, a captcha code, a buffer of markup) put as a String in a template
-    model, a map passed to getTemplate / getPage / getXPage or declared Map<String, Object>: lutece-core 8.1
-    auto-escaping prints it as text; HtmlMarkup.of( ) hands it to the template as markup. A key the file wraps later
-    (withHtmlMarkup( model, KEY )) or the templates read with ?string or ?no_esc is left alone."""
-    files = sources(root)
-    constants = {}
-    for raw in files.values():
-        for name, value in STRING_CONSTANT.findall(raw):
-            constants.setdefault(name, set()).add(value)
-    out = []
-    for path, raw in sorted(files.items()):
-        code = strip(raw)
-        if "HtmlTemplate" not in code and "AppTemplateService" not in code:
-            continue
-        models = set(re.findall(r"\w+", joined_args(code, TEMPLATE_CALL))) | set(MODEL_DECL.findall(code))
-        wrapped = set(re.findall(r"\w+", joined_args(code, MARKUP_CALL)))
-        for m in re.finditer(r"\b(\w+)\s*\.\s*put\s*\(", code):
-            if m.group(1) not in models:
-                continue
-            args, comma = call_args(code, m.end())
-            if comma is None:
-                continue
-            value = args[comma - m.end() + 1:]
-            if "markup" in value.lower() or not HTML_VALUE.search(value):
-                continue
-            key = raw[m.end():comma].strip()
-            name = key.split(".")[-1]
-            if name in wrapped:
-                continue
-            literals = {key[1:-1]} if key.startswith('"') else constants.get(name, set())
-            if any(re.search(r"\b%s\b\s*\)?\s*\?\s*(?:string|no_esc)\b" % re.escape(k), template_text(root)) for k in literals if k):
-                continue
-            out.append((path, code[:m.start()].count("\n") + 1))
-    return ["%s:%d: HTML built by the project put in a template model as a String: printed as text under auto-escaping, "
-            "put HtmlMarkup.of( html ) (HtmlMarkup.ofSanitized for rich text a user typed)" % (os.path.relpath(p, root), n)
-            for p, n in sorted(set(out))]
-
 
 DAO_CALL = re.compile(r"\b\w+\s*\.\s*(get|set)(\w+)\s*\(\s*(\"\w+\"|\d+|\w+\s*\+\+)\s*[,)]|\b(?:int\s+)?(\w+)\s*=\s*(\d+)\s*;|\b(\w+)\s*\+\+")
 METHOD_DECL = re.compile(r"(?m)^[ \t]*(?:public|protected|private)\b[^;={]*\(")
@@ -1056,7 +980,7 @@ def pd03(root):
 
 CHECKS = {"dp01": dp01, "dp04": dp04, "dp05": dp05, "dp06": dp06, "pi01": pi01, "rl01": rl01, "pd02": pd02, "gi01": gi01,
           "cd05": cd05, "cd08": cd08, "mv08": mv08, "wg01": wg01, "pd03": pd03, "mv01": mv01, "st04": st04, "cs03": cs03,
-          "wb10": wb10, "wb11": wb11, "ae01": ae01, "da03": da03, "hm01": hm01, "hm02": hm02}
+          "wb10": wb10, "wb11": wb11, "da03": da03, "hm01": hm01, "hm02": hm02}
 
 
 def run_into(out_dir, root, names):

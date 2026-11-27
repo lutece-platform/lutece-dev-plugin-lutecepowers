@@ -99,8 +99,9 @@ Unit tests cover almost none of a plugin; the defects that hurt are on screen. D
 `lutece-e2e` skill on this project and follow it (it reuses an existing `e2e/`), fixing with `lpe2e watch` running;
 fix in the plugin or in `e2e/` what the bench proves, and report each fix", with the literal
 `${LUTECEPOWERS_ROOT}`. While it runs you edit nothing: the project has one writer at a time. Every red scenario is
-attributed, to the plugin or to the core, with the evidence; a core defect the plugin must not work around keeps its
-scenario with `core_defect:` and goes into the hand-over, never into a guard of the plugin. A fix the bench forced inside `e2e/` is a defect of `lutece-e2e`: report it.
+attributed, to the plugin or to the core, with the evidence; a core defect the plugin must not work around (an
+`@Action` run on GET without its token) keeps its scenario with `core_defect:` and goes into the hand-over, never into
+a guard of the plugin. A fix the bench forced inside `e2e/` is a defect of `lutece-e2e`: report it.
 
 ## PHASE G — Gate loop
 

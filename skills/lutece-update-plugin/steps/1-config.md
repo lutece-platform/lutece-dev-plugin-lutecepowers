@@ -12,9 +12,7 @@ Jakarta namespace of `web.xml` (WB01).
 - Parent: the latest released `lutece-global-pom` 8.x (PM06); `lutece-core`: an open range, `[8.0.0,)`, or `[X,)`
   when the code uses an API that core X brought; never a pinned version, the site or its BOM chooses it (PM14);
   version: the next major from a pre-v8 start (PV02), the same in the descriptor (PV01), `min-core-version` 8.0.0
-  (WB04). What each parent manages: `rules/dependency-convergence.md`. Open ranges belong to `develop`: a maintenance
-  branch `develop<X.Y>.x` bounds its Lutece ranges to its line, e.g. `[8.0.0,8.0.999)` (published poms of
-  plugin-document 6.0.1, module-workflow-unittree 3.0.2).
+  (WB04). What each parent manages: `rules/dependency-convergence.md`.
 - Lutece dependencies: the `v8Version` of each dependency in `.migration/scan.json`, else the version of
   `~/.lutece-references/<artifactId>/pom.xml`. `check-v8-floor.sh` proves the build resolves the supported core.
 - A bound's lower end must exist in the repository: most v8 plugins are published as SNAPSHOT only, and Maven orders

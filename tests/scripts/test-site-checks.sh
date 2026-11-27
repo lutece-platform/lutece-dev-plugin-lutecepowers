@@ -486,10 +486,9 @@ MEMBER = """hazelcast:
 CLIENT = "hazelcast-client:\n  cluster-name: s\n  network:\n    cluster-members:\n      - 127.0.0.1:5701\n  near-cache:\n    x: {}\n"
 QUARTZ = "<dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>plugin-quartz-scheduler</artifactId><type>lutece-plugin</type></dependency>\n"
 HZ = "<dependency><groupId>com.hazelcast</groupId><artifactId>hazelcast</artifactId><version>5.7.2</version></dependency>\n"
-HZ_CACHE = "<dependency><groupId>fr.paris.lutece.plugins</groupId><artifactId>library-cache-hazelcast</artifactId><type>jar</type></dependency>\n"
 cw = war("cluster-war", extra={"WEB-INF/conf/core.xml": "<core><daemons><daemon><daemon-id>mailSender</daemon-id></daemon><daemon><daemon-id>indexer</daemon-id></daemon></daemons></core>",
                                 "WEB-INF/plugins/workflow.xml": "<plug-in><name>workflow</name><daemons><daemon><daemon-id>automaticActionDaemon</daemon-id></daemon></daemons></plug-in>"})
-good = site("cluster-good", pom_extra=QUARTZ + HZ + HZ_CACHE, files={
+good = site("cluster-good", pom_extra=QUARTZ + HZ, files={
     "src/main/liberty/config/cluster.xml": CLUSTER_XML, "src/main/liberty/config/server.xml": SERVER_XML,
     "src/main/liberty/config/hazelcast-config-api-mode.yaml": MEMBER, "src/main/liberty/config/hazelcast-client-config-api-mode.yaml": CLIENT,
     "src/main/liberty/config/jvm.options": "-Dhazelcast.jcache.provider.type=member\n-Dhz.service-name=s-hazelcast\n--add-opens=java.base/java.lang=ALL-UNNAMED\n",
@@ -520,8 +519,7 @@ for code, what in (("FAIL [SI61] httpSessionCache: the session library", "a sess
                    ("FAIL [SI64]", "no member provider type"), ("WARN [SI65] server.xml: persistTimeout", "the default persistTimeout"),
                    ("WARN [SI65] server.xml: no <remoteIp/>", "no remoteIp"), ("FAIL [SI66] pom.xml: no plugin-quartz-scheduler", "no Quartz plugin"),
                    ("WARN [SI67] server.xml: cluster.xml is not included", "cluster.xml not included by variable"),
-                   ("WARN [SI67] Dockerfile", "a Dockerfile without configure.sh"),
-                   ("WARN [SI67] pom.xml: no fr.paris.lutece.plugins:library-cache-hazelcast", "Hazelcast without library-cache-hazelcast"), ("WARN [SI68]", "Forms without lock lease"),
+                   ("WARN [SI67] Dockerfile", "a Dockerfile without configure.sh"), ("WARN [SI68]", "Forms without lock lease"),
                    ("WARN [SI70] liveness on /health/ready", "a liveness on the database"), ("WARN [SI70] no preStop", "no preStop"),
                    ("WARN [SI71]", "no discovery Role"), ("FAIL [SI72] ingress affinity cookie named JSESSIONID", "the JSESSIONID cookie"),
                    ("FAIL [SI72] proxy-next-upstream replays", "non_idempotent replay")):

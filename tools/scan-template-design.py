@@ -72,9 +72,7 @@ Both sides
   TD58 WARN  a form spanning several @box whose submit button sits in the @boxFooter of one of them
   TD61 WARN  script or stylesheet (js/, css/, themes/, images/) the assembled webapp does not carry: a 404 on load
   TD63 WARN  text value (title, name, label, description, comment, message...) interpolated into a JS string literal
-             without ?js_string: an apostrophe ends the string, the script dies, and the value is injected; on a
-             project targeting lutece-core 8.1 (autoescape-target.py), also a ${x?js_string} of a script without
-             ?no_esc: auto-escaping HTML-escapes it a second time -> ${x?js_string?no_esc}
+             without ?js_string: an apostrophe ends the string, the script dies, and the value is injected
   TD65 WARN  default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 gives
              the right side of ! a very low precedence, the expression reads x!(1 == 1) and fails at render time
   TD66 WARN  ?url or ?url_path without a charset: Lutece sets no url_escaping_charset, the page fails at render time
@@ -85,17 +83,15 @@ Both sides
   TD70 WARN  a form (<form>, @tform, @cForm) opened inside another one: the browser drops the inner form and its fields
              post with the outer one
   TD71 WARN  back-office link to an @Action (href='…?action=…'): the plugin sends a mutation by GET, which carries no
-             token; the core refuses it (403, 405 under lutece.mvc.action.getPolicy=refuse) -> a confirmation view
-             (view=…) whose page posts the action
+             token; the core running it anyway is a core defect (core_defect), once fixed the link is refused -> a
+             confirmation view (view=…) whose page posts the action
   TD72 WARN  a core macro called without an argument whose default is an i18n key the core bundles do not carry
              (cStepGroup, cStepContent labelAddIteration/labelDelIteration: #i18n{portal.portal.theme.*}): the
              control renders without a label -> pass the label
-  TD73 WARN  the template's script looks up an id that only a back-office hidden @input without id carries, as its
-             name: the macro emits no id for a hidden field (an FO @cInput does), the lookup returns null -> id='name'
   TD67 WARN  an id the template's script looks up is emitted twice (explicit, or defaulted to the name by @cInput,
-             @cSelect, @input, @select; a back-office hidden @input gets none): getElementById returns the first one
-  TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name,
-             a back-office hidden @input excepted) with another control of the template: the picker binds every match
+             @cSelect, @input, @select): getElementById returns the first one, often a hidden field
+  TD64 WARN  a date/time @input shares its id (explicit, or its name: @input and @select default the id to the name)
+             with another control of the template: the picker binds every match, a ghost input appears
   TD60 WARN  form control or button inside an HTML comment: FreeMarker renders it, the browser hides it
   TD59 WARN  @initEditor on a template with no rich textarea (richtext=true, class richtext, or a macro/include
              rendering one): TinyMCE loads for nothing and the core init fails on an empty selection
@@ -105,9 +101,8 @@ Both sides
              defaults to primary, so it looks like the main action
   TD51 WARN  @button/@aButton color='default'/'secondary' (or @button cancel=true): the macro renders btn-default,
              which the assembled admin CSS does not define: an unstyled button -> color='light'
-  TD47 WARN  Bootstrap 3/4, Font Awesome or Bootstrap Icons class (bi bi-*: the core dropped Bootstrap Icons, ti ti-*
-             instead), or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5 nor the assembled theme CSS
-             defines: the style, the glyph or the behaviour is silently lost
+  TD47 WARN  Bootstrap 3/4 or Font Awesome class, or a data-toggle/-target/-dismiss attribute, that neither Bootstrap 5
+             nor the assembled theme CSS defines: the style or the behaviour is silently lost
   TD46 WARN  a copy of jQuery or of a jQuery plugin shipped by the project (a page loading its own jquery*.js, a file
              under webapp/ named jquery*.js or defining $.fn.x)
   TD45 WARN  jQuery-era upload widget (jQuery File Upload, SWFUpload, plupload, Dropzone, uploadify), in a template or
@@ -139,7 +134,7 @@ REFERENCES = os.path.expanduser("~/.lutece-references")
 CORE = os.path.join(REFERENCES, "lutece-core")
 BO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/admin/themes/tabler")
 FO_MACRO_DIR = os.path.join(CORE, "webapp/WEB-INF/templates/skin/themes/macros")
-TABLER_CSS = template_rules.tabler_css(os.path.join(CORE, "webapp/themes"))
+TABLER_CSS = os.path.join(CORE, "webapp/themes/shared/css/tabler-icons.min.css")
 
 EMAIL_MARKERS = ("cellpadding=", "<!--[if mso", "x-apple-disable-message-reformatting", "email-container", "darkmode-bg", "@portal_url@")
 INTERACTIVE = re.compile(r"<script\b|<form\b|<select\b|<input\b|<button\b", re.I)
@@ -210,23 +205,17 @@ def strip_scripts_js(text):
 
 
 PICKER_TYPES = re.compile(r"\btype='(date|time|datetime|daterange|datetimerange)'")
-INLINE_SCRIPT = re.compile(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", re.S | re.I)
-
-
-def bo_hidden(macro, attrs):
-    """True for a back-office @input type='hidden' without id: the core emits no id for it, its name is not one."""
-    return macro == "input" and re.search(r"\btype\s*=\s*'hidden'", attrs) and not re.search(r"\bid\s*=", attrs)
 
 
 def picker_id_clashes(text):
-    """(id, line) of each date/time @input whose id, explicit or defaulted from its name (a back-office hidden @input
-    aside), another @input or @select of the template also carries: flatpickr('#id') binds every match."""
+    """(id, line) of each date/time @input whose id, explicit or defaulted from its name, another @input or @select
+    of the template also carries: flatpickr('#id') binds every match."""
     seen = {}
     for m in re.finditer(r"<@(input|select)\b([^>]*)>", text):
         attrs = m.group(2)
         if re.search(r"\btype='(radio|checkbox)'", attrs) or re.search(r"\b(id|name)='[^']*[$#]", attrs):
             continue
-        ident = re.search(r"\bid='([^']+)'", attrs) or (None if bo_hidden(m.group(1), attrs) else re.search(r"\bname='([^']+)'", attrs))
+        ident = re.search(r"\bid='([^']+)'", attrs) or re.search(r"\bname='([^']+)'", attrs)
         if ident:
             seen.setdefault(ident.group(1), []).append((line_of(text, m.start()), bool(PICKER_TYPES.search(attrs))))
     return sorted(((ident, min(line for line, picker in hits if picker)) for ident, hits in seen.items()
@@ -256,13 +245,13 @@ def exclusive(path_a, path_b):
     return any(start in branches and branches[start] != index for start, index in path_b)
 
 
-def id_lookups(text):
-    """(id, line of the lookup, emissions, names of the back-office hidden @input without id) for each id an inline
-    script looks up by getElementById or querySelector('#id'); an emission is the branch path of an element carrying
-    the id, explicitly or through the id @cInput, @cSelect, @input and @select default to their name (a back-office
-    hidden @input has none). The id of a macro that only references an element (@noScriptMessage) is not one."""
+def looked_up_id_clashes(text):
+    """(id, line of the lookup) of each id an inline script looks up by getElementById or querySelector('#id') while
+    the template emits it twice in branches that render together, explicitly or through the id @cInput, @cSelect,
+    @input and @select default to their name: the lookup gets the first element, which is not the one the script
+    means. The id of a macro that only references an element (@noScriptMessage) is not an emission."""
     body = re.sub(r"<#--.*?-->", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text, flags=re.S)
-    emitted, hidden = {}, set()
+    emitted = {}
     for m in re.finditer(r"""<(@?)([\w.]+)\b([^>]*?)\bid\s*=\s*(["'])([A-Za-z_][\w-]*)\4""", body):
         if m.group(1) and m.group(2) in REFERENCE_ID_MACROS:
             continue
@@ -272,34 +261,16 @@ def id_lookups(text):
         if re.search(r"\bid\s*=", attrs) or re.search(r"\btype='(radio|checkbox)'", attrs):
             continue
         name = re.search(r"\bname\s*=\s*'([A-Za-z_][\w-]*)'", attrs)
-        if name and bo_hidden(m.group(1), attrs):
-            hidden.add(name.group(1))
-        elif name:
+        if name:
             emitted.setdefault(name.group(1), []).append(branch_path(body, m.start()))
-    for script in INLINE_SCRIPT.finditer(body):
+    hits = {}
+    for script in re.finditer(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", body, flags=re.S | re.I):
         for use in re.finditer(r"""(getElementById|querySelector)\s*\(\s*(["'])(#?)([A-Za-z_][\w-]*)\2""", script.group(1)):
             if use.group(1) == "querySelector" and not use.group(3):
                 continue
-            yield use.group(4), line_of(text, script.start(1) + use.start()), emitted.get(use.group(4), []), use.group(4) in hidden
-
-
-def looked_up_id_clashes(lookups):
-    """(id, line of the lookup) of each id an inline script looks up while the template emits it twice in branches
-    that render together: the lookup gets the first element, which is not the one the script means."""
-    hits = {}
-    for ident, line, paths, _ in lookups:
-        if any(not exclusive(paths[i], paths[j]) for i in range(len(paths)) for j in range(i + 1, len(paths))):
-            hits.setdefault(ident, line)
-    return sorted(hits.items(), key=lambda kv: kv[1])
-
-
-def looked_up_hidden_names(text, lookups):
-    """(name, line of the lookup) of each id an inline script looks up that only a back-office hidden @input without
-    id carries, as its name: the core emits no id for it, the lookup returns null."""
-    hits = {}
-    for ident, line, paths, is_hidden in lookups:
-        if is_hidden and not paths and not re.search(r"""\bid\s*=\s*["']%s["']""" % re.escape(ident), text):
-            hits.setdefault(ident, line)
+            paths = emitted.get(use.group(4), [])
+            if any(not exclusive(paths[i], paths[j]) for i in range(len(paths)) for j in range(i + 1, len(paths))):
+                hits.setdefault(use.group(4), line_of(text, script.start(1) + use.start()))
     return sorted(hits.items(), key=lambda kv: kv[1])
 
 
@@ -308,7 +279,7 @@ def unescaped_js_strings(text):
     ?js_string (or ?json_string, ?c, ?html, which turns the apostrophe into an entity): an apostrophe in the data ends
     the JS string."""
     out = {}
-    for block in INLINE_SCRIPT.finditer(text):
+    for block in re.finditer(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>", text, flags=re.S | re.I):
         code = block.group(1)
         for lit in re.finditer(r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", code):
             for expr in re.finditer(r"\$\{([^}]*)\}", lit.group(0)):
@@ -318,19 +289,6 @@ def unescaped_js_strings(text):
                 base = re.split(r"[!?(]", body.strip(), maxsplit=1)[0].strip()
                 if JS_TEXT_FIELD.search(base.split(".")[-1]):
                     out.setdefault(body.strip(), line_of(text, block.start(1) + lit.start() + expr.start()))
-    return sorted(out.items(), key=lambda kv: kv[1])
-
-
-def bare_js_strings(text):
-    """(expression, line) of each ${x?js_string} of an inline script outside a noautoesc block and not followed by
-    ?no_esc: under always-on auto-escaping (lutece-core 8.1) the JS-escaped value is HTML-escaped a second time."""
-    out = {}
-    blocks = [b.span() for b in re.finditer(r"<#noautoesc>.*?</#noautoesc>", text, flags=re.S)]
-    for block in INLINE_SCRIPT.finditer(text):
-        for expr in re.finditer(r"\$\{([^}]*)\}", block.group(1)):
-            pos = block.start(1) + expr.start()
-            if re.search(r"\?js_string\b(?!\s*\?\s*no_esc)", expr.group(1)) and not any(a <= pos < b for a, b in blocks):
-                out.setdefault(expr.group(1).strip(), line_of(text, pos))
     return sorted(out.items(), key=lambda kv: kv[1])
 
 
@@ -547,8 +505,8 @@ class Knowledge:
                 CORE, BO_MACRO_DIR, FO_MACRO_DIR, self.source = base, bo, fo, label
                 self.webapps = [base, os.path.join(root, "webapp")]
                 templates_root = os.path.join(base, "WEB-INF/templates")
-                css = template_rules.tabler_css(os.path.join(base, "themes"))
-                if css:
+                css = os.path.join(base, "themes/shared/css/tabler-icons.min.css")
+                if os.path.isfile(css):
                     TABLER_CSS = css
                 break
         self.available = os.path.isdir(BO_MACRO_DIR) and os.path.isdir(FO_MACRO_DIR)
@@ -581,8 +539,6 @@ class Knowledge:
         keys = core_bundle_keys() if self.available else set()
         self.dead_labels = {**dead_label_defaults(BO_MACRO_DIR, keys), **dead_label_defaults(FO_MACRO_DIR, keys)} if keys else {}
         self.switch_writes_empty_value = switch_always_writes_value(os.path.join(BO_MACRO_DIR, "forms/checkbox/checkBox.ftl")) if self.available else False
-        target = os.path.join(os.path.dirname(os.path.abspath(__file__)), "autoescape-target.py")
-        self.autoescape = subprocess.run([sys.executable, target, root], capture_output=True).returncode == 0
 
     def known(self, name):
         """Whether a macro name is defined somewhere reachable."""
@@ -718,7 +674,7 @@ def check_upload_widget(text, findings):
 JQUERY_PLUGIN = re.compile(r"(?:\$|jQuery)\.fn\.[A-Za-z_$][\w$]*\s*=|(?:\$|jQuery)\.fn\.extend\(")
 
 
-LEGACY_CLASS = re.compile(r"^(panel(-[a-z]+)?|well(-(sm|lg))?|glyphicon(-[a-z-]+)?|fa|fa-[a-z0-9-]+|bi-[a-z0-9-]+|btn-xs|btn-default|btn-block|col-xs-\d+|col-(xs|sm|md|lg)-(offset|push|pull)-\d+|"
+LEGACY_CLASS = re.compile(r"^(panel(-[a-z]+)?|well(-(sm|lg))?|glyphicon(-[a-z-]+)?|fa|fa-[a-z0-9-]+|btn-xs|btn-default|btn-block|col-xs-\d+|col-(xs|sm|md|lg)-(offset|push|pull)-\d+|"
                           r"label|label-(default|primary|success|info|warning|danger)|pull-(left|right)|hidden(-(xs|sm|md|lg))?|visible-(xs|sm|md|lg)(-[a-z]+)?|img-responsive|"
                           r"input-group-(addon|btn|append|prepend)|table-condensed|form-group|form-row|form-inline|custom-(select|control|checkbox|radio|switch|file|range)(-[a-z]+)?|"
                           r"sr-only(-focusable)?|badge-(primary|secondary|success|danger|warning|info|light|dark|pill)|[mp][lr]-(\d|auto|sm-\d|md-\d|lg-\d)|"
@@ -760,10 +716,7 @@ def check_legacy_markup(text, findings, know, kind):
     for match in LEGACY_DATA.finditer(text):
         hits.setdefault("data-" + match.group(1), line_of(text, match.start()))
     for token, line in sorted(hits.items(), key=lambda kv: kv[1]):
-        if token.startswith("bi-"):
-            add(findings, "TD47", "WARN", line, "'bi %s' is a Bootstrap Icons class: the core no longer ships Bootstrap Icons, the glyph renders empty -> the Tabler icon (ti ti-<name>, or the @icon / @cIcon macro)" % token)
-        else:
-            add(findings, "TD47", "WARN", line, "'%s' is Bootstrap 3/4 or Font Awesome markup that Bootstrap 5 and the theme CSS do not define: use the v8 macro or its Bootstrap 5 / Tabler equivalent" % token)
+        add(findings, "TD47", "WARN", line, "'%s' is Bootstrap 3/4 or Font Awesome markup that Bootstrap 5 and the theme CSS do not define: use the v8 macro or its Bootstrap 5 / Tabler equivalent" % token)
 
 
 def jquery_plugin(text):
@@ -1006,17 +959,14 @@ def check_common(text, findings, kind, know):
     if know.css_classes:
         check_legacy_markup(text, findings, know, kind)
     for ident, line in picker_id_clashes(text):
-        add(findings, "TD64", "WARN", line, "date/time field '%s' shares its id with another control of the template (@input and @select default the id to the name, a hidden @input excepted): the picker binds both and a ghost input appears -> give each control its own id" % ident)
+        add(findings, "TD64", "WARN", line, "date/time field '%s' shares its id with another control of the template (@input and @select default the id to the name): the picker binds both and a ghost input appears -> give each control its own id" % ident)
     add_grouped(findings, "TD65", "WARN", default_precedence(text), "default value followed by an operator without parentheses (x!1 == 1, a && x!0 > 1): FreeMarker 2.3 reads x!(1 == 1), the condition gets a number and the page fails with NonBooleanException -> (x!1) == 1, or <#assign> the value first")
     hits = [] if re.search(r"<#setting\s+url_escaping_charset", text) else [line_of(text, m.start()) for m in re.finditer(r"\?url(?:_path)?\b(?!\s*\()", re.sub(r"<#--.*?-->", lambda c: re.sub(r"[^\n]", " ", c.group(0)), text, flags=re.S))]
     add_grouped(findings, "TD66", "WARN", hits, "?url without a charset: Lutece's FreeMarker configuration sets no url_escaping_charset, so the built-in throws and the page fails -> ?url('UTF-8')")
     pickers = {ident for ident, _ in picker_id_clashes(text)}
-    lookups = list(id_lookups(text))
-    for ident, line in looked_up_id_clashes(lookups):
+    for ident, line in looked_up_id_clashes(text):
         if ident not in pickers:
-            add(findings, "TD67", "WARN", line, "the script looks up '%s', which the template emits twice (an explicit id, or the id @cInput/@cSelect/@input/@select default to the name; a back-office hidden @input gets none): the lookup gets the first one -> give each control its own id" % ident)
-    for ident, line in looked_up_hidden_names(text, lookups):
-        add(findings, "TD73", "WARN", line, "the script looks up '%s', the name of a back-office hidden @input without id: the macro emits no id for a hidden field, the lookup returns null -> give the field id='%s'" % (ident, ident))
+            add(findings, "TD67", "WARN", line, "the script looks up '%s', which the template emits twice (an explicit id, or the id @cInput/@cSelect/@input/@select default to the name, hidden fields included): the lookup gets the first one -> give each control its own id" % ident)
     for line in nested_forms(text):
         add(findings, "TD70", "WARN", line, "form opened inside another form: the browser drops the inner <form> and its fields post with the outer one (another action, another token) -> close the outer form first, or post both through one action")
     for ident, line in fixed_ids_in_loops(text):
@@ -1029,10 +979,7 @@ def check_common(text, findings, kind, know):
                 if re.search(r"(?<![\w.])%s\s*=\s*['\"]" % param, call):
                     add(findings, "TD68", "WARN", line_of(text, offset), "@%s %s= passed as a quoted string: the macro compares %s to a number, FreeMarker cannot compare a string with a number and the page fails -> %s=value?number, or a bare number" % (name, param, param, param))
     for expr, line in unescaped_js_strings(text):
-        add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string%s}" % (expr, expr, "?no_esc" if know.autoescape else ""))
-    if know.autoescape:
-        for expr, line in bare_js_strings(text):
-            add(findings, "TD63", "WARN", line, "${%s} in a script without ?no_esc: lutece-core 8.1 auto-escaping HTML-escapes the JS-escaped value a second time (an apostrophe shows as &#39;) -> ${%s?no_esc}" % (expr, expr))
+        add(findings, "TD63", "WARN", line, "${%s} inside a JS string without ?js_string: an apostrophe in the data ends the string, the script dies there and the value is injected -> ${%s?js_string}" % (expr, expr))
     for name, line in conditional_selectors(text):
         add(findings, "TD43", "WARN", line, "the script looks up '%s' unconditionally while the template only emits it inside a condition: the lookup returns null and the whole script block dies there" % name)
     if know.source.startswith("assembled"):
@@ -1042,9 +989,8 @@ def check_common(text, findings, kind, know):
             add(findings, "TD61", "WARN", line, "script or stylesheet %s, which the assembled webapp does not carry: 404, and what it defines is missing from the page (an asset moved to themes/shared/plugins/<plugin>/ in v8)" % asset)
     hits = [line_of(text, m.start()) for m in re.finditer(r"<#(if|elseif)\b[^>]*&(gt|lt);", text)]
     add_grouped(findings, "TD26", "INFO", hits, "&gt;/&lt; inside a FreeMarker condition: write gt / lt")
-    ftl = [m.span() for m in re.finditer(r"<[#@](?:'[^']*'|\"[^\"]*\"|[^>'\"])*>", text)]
-    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text) if not any(a <= m.start() < b for a, b in ftl)]
-    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an HTML href/action attribute: &amp; (a FreeMarker literal keeps the & itself, TM18)")
+    hits = [line_of(text, m.start()) for m in re.finditer(RAW_AMP, text)]
+    add_grouped(findings, "TD06", "INFO", hits, "raw & between URL parameters in an href/action attribute: &amp;")
 
 
 def nested_forms(text):
@@ -1214,7 +1160,7 @@ def scan_file(root, rel, scope, iframe_targets, know, jquery_declared=False):
         check_admin(text, findings, kind, os.path.basename(rel).rsplit(".", 1)[0] in iframe_targets, know)
         check_common(text, findings, kind, know)
         for m in GET_ACTION.finditer(text):
-            add(findings, "TD71", "WARN", line_of(text, m.start()), "link to the action '%s': the plugin sends a mutation by GET, with no token: the core refuses it (403, or 405 under lutece.mvc.action.getPolicy=refuse) -> link a confirmation view (view=…) whose page posts the action" % m.group(1))
+            add(findings, "TD71", "WARN", line_of(text, m.start()), "link to the action '%s': the plugin sends a mutation by GET, with no token; the core running it anyway is a core defect, once fixed this link is refused -> link a confirmation view (view=…) whose page posts the action" % m.group(1))
         check_jquery(text, findings, jquery_declared)
         check_upload_widget(text, findings)
     findings.sort(key=lambda item: (item["line"], item["code"]))

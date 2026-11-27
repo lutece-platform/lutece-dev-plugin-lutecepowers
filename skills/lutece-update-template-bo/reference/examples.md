@@ -18,7 +18,7 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 <@pageContainer>
 	<@pageColumn>
 		<@pageHeader title='#i18n{plugin.manage_items.title}'>
-			<@button type='button' title='#i18n{plugin.create_item.title}' buttonIcon='plus' color='primary' params={'data-bs-toggle': 'modal', 'data-bs-target': '#createModal'} />
+			<@button type='button' title='#i18n{plugin.create_item.title}' buttonIcon='plus' color='primary' params='data-bs-toggle="modal" data-bs-target="#createModal"' />
 		</@pageHeader>
 		<@modal id='createModal'>
 			<@modalHeader modalTitle='#i18n{plugin.create_item.title}' />
@@ -30,7 +30,7 @@ Complete templates to copy from. Each one is a real page shape, not a fragment.
 				</@tform>
 			</@modalBody>
 			<@modalFooter>
-				<@button type='button' title='#i18n{portal.util.labelCancel}' color='light' params={'data-bs-dismiss': 'modal'} />
+				<@button type='button' title='#i18n{portal.util.labelCancel}' color='light' params='data-bs-dismiss="modal"' />
 				<@button type='submit' formId='create_item' name='action_createItem' buttonIcon='check' title='#i18n{portal.admin.message.buttonValidate}' color='primary' />
 			</@modalFooter>
 		</@modal>
@@ -176,7 +176,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 	<@pageColumn>
 		<@pageHeader title='#i18n{plugin.manage_items.title}'>
 			<#if item_list?has_content && item_list?size gt 1>
-				<@button type='button' title='#i18n{plugin.manage_items.search}' buttonIcon='search' class='me-1' hideTitle=['xs'] params={'data-bs-toggle': 'modal', 'data-bs-target': '#searchModal'} />
+				<@button type='button' title='#i18n{plugin.manage_items.search}' buttonIcon='search' class='me-1' hideTitle=['xs'] params='data-bs-toggle="modal" data-bs-target="#searchModal"' />
 			</#if>
 			<#if permission_create>
 				<@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' buttonIcon='plus' color='primary' title='#i18n{plugin.manage_items.buttonAdd}' hideTitle=['xs'] />
@@ -281,7 +281,7 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 						<@button class='me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save' name='action_save' hideTitle=['xs','sm', 'md', 'lg'] />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=confirmRemoveItem&amp;id=${item.id}' color='danger' title='#i18n{portal.util.labelDelete}' buttonIcon='trash' hideTitle=['xs','sm', 'md', 'lg'] size='' />
 						<@aButton class='me-1' href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=previewItem&id=${item.id}' title='#i18n{plugin.modify_item.labelPreview}' hideTitle=['xs','sm', 'md', 'lg'] color='light' size='' buttonIcon='eye' />
-						<@button type='button' class='me-1' title='#i18n{plugin.modify_item.labelProperties}' buttonIcon='cog me-2' hideTitle=['xs','sm', 'md', 'lg'] params={'data-bs-toggle': 'modal', 'data-bs-target': '#item-properties'} />
+						<@button type='button' class='me-1' title='#i18n{plugin.modify_item.labelProperties}' buttonIcon='cog me-2' hideTitle=['xs','sm', 'md', 'lg'] params='data-bs-toggle="modal" data-bs-target="#item-properties"' />
 					</@columns>
 				</@row>
 			</@pageHeader>
@@ -324,15 +324,15 @@ Tabs that navigate to JSPs: `href='jsp/admin/...'` (no `#`, no `@tabPanel`).
 			<@messages errors=errors![] />
 			<@formGroup labelFor='title' labelKey='#i18n{plugin.create_item.labelTitle}' hideLabel=['all'] rows=2>
 				<@input name='title' id='title' value='${item.title!?trim}' class='visually-hidden' />
-				<@div id='div_title' class='content-head font-bold main-color lutece-charcounter' params={'data-lutece-counter-max': '75', 'contenteditable': 'true'}>${item.title!?trim}</@div>
+				<@div id='div_title' class='content-head font-bold main-color lutece-charcounter' params='data-lutece-counter-max="75" contenteditable="true"'>${item.title!?trim}</@div>
 			</@formGroup>
 			<@formGroup labelFor='description' labelKey='#i18n{plugin.create_item.labelDescription}' hideLabel=['all'] rows=2>
 				<@input name='description' id='description' value='${item.description!}' class='visually-hidden' />
-				<@div id='div_description' class='content-desc lutece-charcounter' params={'data-lutece-counter-max': '300', 'contenteditable': 'true'}>${item.description!}</@div>
+				<@div id='div_description' class='content-desc lutece-charcounter' params='data-lutece-counter-max="300" contenteditable="true"'>${item.description!}</@div>
 			</@formGroup>
 			<@formGroup labelFor='html_content' labelKey='#i18n{plugin.create_item.labelContent}' hideLabel=['all'] rows=2>
 				<@input type='textarea' name='html_content' id='html_content' value='${item.htmlContent!}' class='visually-hidden' />
-				<@div id='div_html_content' class='content-body' params={'contenteditable': 'true'}>${richText(item.htmlContent!)}</@div>
+				<@div id='div_html_content' class='content-body' params='contenteditable="true"'>${item.htmlContent!}</@div>
 				<@button class='my-3 me-1 action' type='submit' size='' buttonIcon='check me-2' title='#i18n{plugin.modify_item.labelSave}' id='action_save_bottom' name='action_save' hideTitle=['xs','sm'] />
 			</@formGroup>
 		</@tform>

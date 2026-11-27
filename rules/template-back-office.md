@@ -16,6 +16,7 @@ Read the `.ftl` signature before using a macro parameter. Frequent mistakes: `@a
 
 ## Back-office macro bugs to work around (report upstream, do not copy the workaround into the FO)
 
+- **`@input pattern=` and `accept=` are emitted unquoted and with no leading space**: `forms/input/input.ftl` contains `<#if pattern!=''>pattern=${pattern}</#if>` and `<#if accept!='' && type='file'>accept=${accept}</#if>`, so the attribute is glued to the previous one and cannot carry a space, `"`, `'`, `` ` ``, `=` or `>`. A pattern with a space-bearing quantifier or any `accept` list breaks the tag. Pass them through `params='pattern="…"'` until the core is fixed. The front-office twin `skin/themes/macros/forms/inputs/cInput.ftl` emits ` pattern="${pattern}"` correctly.
 - **The neutral back-office button is `color='light'`, not `color='secondary'`**: `components/button/aButton.ftl` and `button.ftl` map `color='secondary'`, `color='default'`, `color='btn-secondary'` **and `cancel=true`** to the class `btn-default`, which no admin stylesheet defines — `.btn-default` exists only in the *site* theme (`themes/skin/lutece/css/themes/dark-theme.css`), while `tabler.min.css` and `bootstrap.min.css` define `.btn-secondary` and `.btn-light`. A back or cancel button written `color='secondary'` renders with no colour variant.
 - **The parameter is `placeHolder`, not `placeholder`** (the emitted attribute is lowercase; the macro parameter is camelCase).
 
@@ -27,18 +28,16 @@ BS5 (CSS + JS) and Tabler Icons are globally loaded by the admin theme. Do NOT a
 
 Every admin template MUST use: `@pageContainer` > `@pageColumn` > `@pageHeader`. `@row` / `@columns` only inside `@pageColumn`.
 
-Headings: `@pageHeader` writes the `h1` of the page, `@boxHeader` an `h2` by default, the alert titles of `@messages` an `h2` styled as `h4`. Never force `titleLevel='h3'` or `'h4'` on them: a heading level would be skipped.
-
 ## List Layout — `@manageFeature` by default, `@table` for tabular data
 
-- **Entity lists with CRUD actions** (manage pages): `@manageFeature` > `@manageFeatureItem` > `@manageFeatureItemColumn`. This is the layout of every core manage page (`rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and of the forms manage pages (`manage_forms.html`, `manage_categories.html`, `manage_steps.html`). Items render as cards, so no `@box` around the list. Copy them whole: their create and modify screens are pages, their `@empty` sits in a `@card`.
+- **Entity lists with CRUD actions** (manage pages): `@manageFeature` > `@manageFeatureItem` > `@manageFeatureItemColumn`. This is the layout of every core manage page (`rbac/manage_roles.html`, `mailinglist/manage_mailinglists.html`) and of the forms manage pages (`manage_forms.html`, `manage_categories.html`, `manage_steps.html`). Items render as cards, so no `@box` around the list. Copy their item layout, not their `@offcanvas` nor their `@box` around `@empty`.
 - **Tabular data** (several data columns per row, reports, grids, child-entity tables): `@table` with `<tr>/<th>/<td>`. Never replace an existing well-formed `@table` "systematically": switch to `@manageFeature` only when the rows are entities with edit/delete actions.
 - **Empty state**: test the list before iterating and render `@empty` otherwise.
 - **Pagination**: `@paginationAdmin paginator=paginator combo=1` after the list (server-side, `IPager`). `@paginationAjax` (JSON endpoint + `@ResponseBody`, macro in core `webapp/WEB-INF/templates/admin/themes/tabler/components/pagination/paginationAdmin.ftl`) is an option for large datasets.
 
 ## Navigation, dialogs and forms (blocking)
 
-- **No offcanvas** (`verify-migration.sh` TM10, `scan-template-design.py` TD48). Content written in the page (search, a short creation form, editor properties) goes in `@modal` > `@modalHeader modalTitle` / `@modalBody` / `@modalFooter`, opened by `<@button type='button' params={'data-bs-toggle': 'modal', 'data-bs-target': '#id'} />`. Another page (create, modify, properties screen) is a plain link `<@aButton href>` (`<@link class='dropdown-item' href>` in a dropdown) to a full page with its own back link. A view that was the body of an offcanvas becomes that full page: `@pageContainer` > `@pageColumn` > `@pageHeader` with its title and a back button to the list, the `getPage( title, template )` of its controller, no `target="_top"` left on its links and forms, and none of the offcanvas markup (`data-bs-dismiss="offcanvas"`, `offcanvas-*` classes) left in the calling page.
+- **No offcanvas** (`verify-migration.sh` TM10, `scan-template-design.py` TD48). Content written in the page (search, a short creation form, editor properties) goes in `@modal` > `@modalHeader modalTitle` / `@modalBody` / `@modalFooter`, opened by `<@button type='button' params='data-bs-toggle="modal" data-bs-target="#id"' />`. Another page (create, modify, properties screen) is a plain link `<@aButton href>` (`<@link class='dropdown-item' href>` in a dropdown) to a full page with its own back link. A view that was the body of an offcanvas becomes that full page: `@pageContainer` > `@pageColumn` > `@pageHeader` with its title and a back button to the list, the `getPage( title, template )` of its controller, no `target="_top"` left on its links and forms, and none of the offcanvas markup (`data-bs-dismiss="offcanvas"`, `offcanvas-*` classes) left in the calling page.
 - **Required fields carry `mandatory=true`**: the BO `@tform` loads no validation module (the `@cForm` rule, TM11 / TD49, is front office only).
 - **No inline form** (TM12, TD50): never three fields or more side by side: no `@tform type='inline'` / `'flex'`, `form-inline` / `d-flex` on a form holding three fields, no two `formStyle='inline'` fields in a form, no `@row` with three `@columns` or more that each carry a text field (X/Y/width/height in a row). Two columns are fine (fields and an image, first and last name); a grid of checkboxes or switches is allowed. A hidden form with a single submit button (Import, Export) may keep `type='inline'`.
 
@@ -61,6 +60,7 @@ Render model messages with the core macro, once per page, right after `@pageHead
 
 ## i18n Format
 `#i18n{prefix.key.subkey}` — always reuse existing portal i18n utility keys instead of creating new ones whenever possible. Existing keys (`lutece-core/.../portal/resources/util_messages.properties`): `portal.util.labelActions`, `labelModify`, `labelDelete`, `labelCreate`, `labelBack`, `labelValidate`, `labelCancel`, `labelClose`, `labelYes`, `labelNo`, `labelEnabled`, `labelDisabled`, `labelSearch`, `labelNoItem`. Keys that do NOT exist: `portal.util.labelActive`, `labelInactive`, `labelSave`, `labelAdd` (use `labelEnabled`/`labelDisabled`/`labelValidate`/`labelCreate`).
+
 
 **`#i18n{}`, the CSRF token and the datastore keys are resolved on the rendered output**, not during FreeMarker: `AppTemplateService` calls `I18nService.localize( template.getHtml( ), locale )`, then `SecurityTokenHandler.addSecurityToken( template.getHtml( ), model )`, then `DatastoreService.replaceKeys( template.getHtml( ) )`. Two consequences:
 - **A dynamic key works**: `#i18n{myplugin.label.${item.code}}` resolves, so N near-identical fields become one `<#list>` over a `<#assign>` descriptor sequence instead of N copied blocks. The core does exactly this in `commons_site.html` (`#i18n{${column.titleKey}}`).
@@ -178,50 +178,29 @@ No `_csrftoken` hidden field: with `securityTokenEnabled = true` on the `@Contro
 - **NEVER** use CDN links. All third-party JS/CSS must be downloaded and placed locally.
 - JS files go in `webapp/js/{pluginName}/`
 - CSS files go in `webapp/css/{pluginName}/`
-- The admin theme loads Bootstrap inside `tabler.min.js` (`commons_bs5_tabler.html`), the Tabler icons from `themes/shared/css/vendor/tabler/` and slimselect from `themes/shared/lib/slimselect/`. It does not ship Bootstrap Icons (`bi bi-*`: use Tabler `ti ti-*`), bootstrap-table (`themes/admin/shared/js/lib/table`), toastr, bootstrap-colorpicker, a separate `bootstrap.bundle.min.js` nor Popper. A plugin that needs one ships it in its own webapp or uses a core equivalent.
 
-## Auto-escaping (always on)
+## Auto-escaping — write templates that render the same in both modes
 
-Every template renders with the HTML output format and auto-escaping (`AbstractFreeMarkerTemplateService` of
-library-freemarker), whatever its extension: `.html`, `.ftl`, `.txt`, `.xml` (a text mail, a CSV) alike. Only `.js`,
-`.json` and `.css` templates get their own output format and escape their values themselves (`?js_string`,
-`?json_string`). A template whose output is not HTML starts with `<#ftl output_format="plainText">` (core
-`admin/user/export/export_csv.ftl`). `service.freemarker.templateAutoEscape=false` is ignored with an error in the log
-(`FreeMarkerTemplateService`). Back office and skin alike: `${x}` prints `x` escaped.
+The core reads `service.freemarker.templateAutoEscape` (default `false`, `FreeMarkerTemplateService`). A plugin
+template has to render the same with the property at `true` and at `false`, and four built-ins do not: `?html` and `?xhtml` are a **ParseException** when the property is `true`,
+`?no_esc` and `?esc` when it is `false` — the template does not load at all.
 
 | Goal | Do not write | Write |
 |---|---|---|
-| Attributes of a macro element | `params='data-x="1"'`, a captured block, a string variable (TM14: the rendering fails) | a map: `params={'data-x': '1', 'aria-label': label}` |
-| A class, a style, an event handler, a URL, an attribute the macro writes itself, on a macro element | `params={'class': …}`, `{'style': …}`, `{'onclick': …}`, `{'href'/'src'/'formaction': …}`, `{'id': …}` beside `id=` (TM15: refused) | `class=` of the macro; a theme class; the macro parameter; a raw element (`<span style="width:${w}%">`, `<button formaction="${url}">`), whose `${…}` is escaped |
-| A behaviour (`onclick`, `onchange`, `onerror`, `href="javascript:…"`) | an event handler attribute or a `javascript:` URL, in raw HTML or in `params` | `data-lutece-action`: `back`, `close`, `hide-parent`, `skip` on a link or a button, `submit` on a field (submits its form on change); `data-lutece-confirm="message"`; `data-lutece-fallback-src="url"` on an image (`themes/{admin,skin}/shared/js/util/lutece-actions.js`, loaded by both themes). Anything else: `addEventListener` in the page script |
-| A URL that comes from data (a site property, a stored link) | `href="${url}"`: escaping does not stop a `javascript:` URL (TM21) | `href="${safeUrl(url)}"` (relative, http, https, mailto, tel; `'#'` otherwise, or `safeUrl(url, fallback)`); in CSS `url('${cssUrl(url)}')` |
-| A conditional attribute | `cond?then('aria-current="true"', '')` | `cond?then({'aria-current': 'true'}, {})` |
-| HTML the application renders (a sub-template, a captcha, a list of rows) | `model.put( MARK_X, strHtml )` (AE01: shown as text); `<#noautoesc>` | `model.put( MARK_X, HtmlMarkup.of( strHtml ) )`, `HtmlMarkup.ofAll( list )`; in the template, `${x?no_esc}` (core `admin/features/assign_users_right.html`: `${attribute.getHtmlFormSearchAttribute( … )?no_esc}`) |
-| Rich text stored by a user or an admin (editor, BBCode rendered to HTML) | `${x?no_esc}` on a value nobody cleaned; `${page.htmlContent}` (TM19: the tags show as text) | `${richText(x!)}` (sanitized markup) in the template, or `HtmlMarkup.ofSanitized( x )` in Java |
-| Print markup a template captured | `${p?no_esc}` | `${p}`: a capture is markup already |
-| Read a captured block as text | `p?trim`, `p == ''`, `default_value=p` (TM16: fails) | `p?markup_string?trim`, `p?has_content`, or assign the string itself: `<#assign v = cond?then(a?c, '-1')>` |
-| Escape explicitly | `${x?html}`, `${x?esc}` (`?html` is a ParseException in the HTML output format) | `${x}` |
-| A value in JavaScript (string literal inside `<script>`) | `${x}` (HTML escaping is not JS escaping); `${x?js_string}` (HTML-escaped on top: the script reads `\&#39;`) | `${x?js_string?no_esc}`, inside a `<script>` only |
-| An i18n message inside `<script>` | `'#i18n{key}'` (TM20: replaced after the rendering, as is; an apostrophe of the translation ends the string) | `'${i18n('key')?js_string?no_esc}'`; `i18n('key', arg)` for a message with arguments |
-| A value in a `<textarea>` or an input being edited | `${x?no_esc}` | `${x}`: escaped is right there |
-| A special character in a string literal | `href='a?x=1&amp;y=2'`, `label='&#8722;'` (TM18: escaped once more, the page shows the entity) | the character itself: `href='a?x=1&y=2'`, `label='−'` |
-| A text turned to markup in Java (`HtmlMarkup.of`, `richText`) read by a string built-in | `x?contains('…')`, `x?replace(…)` (fails: markup) | `x?markup_string?contains('…')` |
+| Print HTML unescaped | `${x?no_esc}` | `<#noautoesc>${x}</#noautoesc>` |
+| Escape explicitly | `${x?html}`, `${x?esc}` | `<#outputformat "HTML">${x}</#outputformat>` |
+| Escape inside a macro argument (a directive cannot sit in a string) | `params='title="${x?html}"'` | capture first: `<#assign p><#outputformat "HTML">title="${x}"</#outputformat></#assign>` then `params=p` |
+| URL-encode a value | `${x?url}` — **throws at render time**: the Lutece FreeMarker configuration sets no `url_escaping_charset` nor `output_encoding` (`AbstractFreeMarkerTemplateService` calls `setNumberFormat`, `setOutputFormat`, `setAutoEscapingPolicy`… and neither of those two) | `${x?url('UTF-8')}` |
+| Interpolate a value into JavaScript (string literal or identifier inside `<script>`) | `${x}` — HTML escaping does not protect a JS context | `${x?js_string}` |
+| Test a captured block | `c != ''`, `c = ''` | `c?has_content`, `!c?has_content` |
+| Pass a bundle of attributes to a macro | `<#assign p = 'title="x"'>` | `<#assign p>title="x"</#assign>` |
 
-A refused attribute is left out with a warning in the log under `portal.template.params.strict=false` (the default of
-the core `config.properties`), and fails the rendering under `true`, the value the core gives its own tests
-(`%test.portal.template.params.strict=true`) and recommends for continuous integration. A page that looks right may
-have lost an attribute: read the log.
+Why the capture: under auto-escaping a block capture is *markup* (already-safe HTML) and a string literal is
+not — a string holding HTML gets escaped a second time when a macro prints it. Escaping through a captured
+`<#outputformat "HTML">` block is what `?html` did, and it parses under both settings.
 
-A parameter of a project macro never takes the name of a macro its body calls (`icon=` beside `<@icon>`): inside the
-body the parameter hides the macro (TM17). A macro parameter is not the attribute it sounds like: read the macro
-(the `role` of `cForm` writes `aria-label`; a real `role` goes in `params={'role': 'search'}`). After a template change
-on a running bench, the template cache keeps the old version for `service.freemarker.templateUpdateDelay` seconds:
-check the rendered page, not the source.
+HTML built on the Java side cannot be told apart from text by the template. Skin templates run with an undefined
+output format and print the value as it is — do not add `?no_esc` there, it is refused.
 
-## A project on core 8.0.2
-
-Auto-escaping is off by default and `htmlAttributes`, `HtmlMarkup`, `richText`, `safeUrl`, `cssUrl` and
-`data-lutece-action` do not exist: `params` is a string written as is
-(`params='data-bs-toggle="modal" data-bs-target="#id"'`), `${x?url}` needs `${x?url('UTF-8')}`, and `@input` writes
-`pattern=` and `accept=` unquoted: pass them through `params='pattern="…"'`. `?no_esc` does not parse there: a value
-in JavaScript is `${x?js_string}`, an i18n message `${i18n('key')?js_string}`.
+Do **not** put `<#ftl output_format="HTML" auto_esc=true>` at the top of plugin templates as a migration
+vehicle: a non-migrated caller feeding a migrated macro double-escapes, and nothing catches it.

@@ -26,7 +26,6 @@ EXPLODED_RC=0; EXPLODED_OUT=""
 if [ -d "webapp/WEB-INF/templates" ]; then
     EXPLODED_OUT=$(bash "$SCRIPT_DIR/ensure-exploded.sh" . 2>&1) || EXPLODED_RC=$?
 fi
-CORE81=0; python3 "$SCRIPT_DIR/autoescape-target.py" . && CORE81=1
 
 # The slowest checks are functions started in the background here, each writing its output, errors and status to
 # files the check reads at its turn (fetched); the report keeps its order.
@@ -198,7 +197,7 @@ js07_scan() {
 }
 
 JC_PIDS=()
-for checks in "wg01 cd08 cd05" "dp01 dp04 dp05 dp06 pi01 rl01 pd02 gi01 mv08 pd03 mv01 st04 cs03 wb10 wb11 ae01 da03 hm01 hm02"; do
+for checks in "wg01 cd08 cd05" "dp01 dp04 dp05 dp06 pi01 rl01 pd02 gi01 mv08 pd03 mv01 st04 cs03 wb10 wb11 da03 hm01 hm02"; do
     "$LP_PYTHON" "$SCRIPT_DIR/java_checks.py" --into "$BG_DIR" . $checks >/dev/null 2>&1 &
     JC_PIDS+=("$!")
 done
@@ -968,7 +967,7 @@ for dirpath, _, files in os.walk("webapp/WEB-INF/templates"):
             for m in re.finditer(r"\$\{\s*token\b", block.group(1)):
                 lines.add(line_of(text, block.start(1) + m.start()))
         for i in sorted(lines):
-            print("%s:%d: the token rides a GET link to an action or a script: move that mutation to a POST form first (TD71), never drop the manual check while the action is reachable by GET: under lutece.mvc.action.getPolicy=allow the core runs it without the framework token" % (path, i))
+            print("%s:%d: the token rides a GET link to an action or a script: move that mutation to a POST form first (TD71), never drop the manual check while the action is reachable by GET: the core runs an @Action on GET without its token" % (path, i))
 PY
 )
     fi
@@ -1062,12 +1061,12 @@ COUNT=0; [ -n "$ST04_MATCHES" ] && COUNT=$(echo "$ST04_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "ST04" "PASS" "Every project type CDI resolves has a bean" 0
 else emit "ST04" "FAIL" "Project type resolved by CDI with no bean: the lookup is unsatisfied at deployment (give it a scope or a producer)" "$COUNT" "$ST04_MATCHES"; fi
 
-# CS03: a @Controller comparing the request method with POST duplicates the core, which applies
-# lutece.mvc.action.getPolicy to an @Action requested by GET (java_checks.py).
+# CS03: a @Controller comparing the request method with POST works around the core defect that runs an @Action on GET
+# without its token; the core owns the fix, the e2e scenario carries core_defect (java_checks.py).
 CS03_MATCHES=$(jc cs03)
 COUNT=0; [ -n "$CS03_MATCHES" ] && COUNT=$(echo "$CS03_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "CS03" "PASS" "No plugin guard on the request method of an @Action" 0
-else emit "CS03" "WARN" "Request method guard in a @Controller: the core applies lutece.mvc.action.getPolicy to an @Action requested by GET (403 without its token, 405 under refuse); remove the guard" "$COUNT" "$CS03_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "CS03" "PASS" "No plugin guard around the core GET token defect" 0
+else emit "CS03" "WARN" "Request method guard in a @Controller: the core runs an @Action on GET without its token, a core defect to report, not to work around; remove the guard, keep the e2e scenario with core_defect" "$COUNT" "$CS03_MATCHES"; fi
 
 # WB10: PluginAdminPageJspBean.init sets the plugin from the plugin_name parameter only; a @RequestScoped bean is new on
 # every request, so its inherited getPlugin( ) is null on each request that does not carry it (java_checks.py wb10).
@@ -1076,19 +1075,12 @@ COUNT=0; [ -n "$WB10_MATCHES" ] && COUNT=$(echo "$WB10_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "WB10" "PASS" "No @RequestScoped bean relying on the inherited getPlugin( )" 0
 else emit "WB10" "FAIL" "Inherited getPlugin( ) in a @RequestScoped bean: null on a request without plugin_name; override it with PluginService.getPlugin( PLUGIN_NAME )" "$COUNT" "$WB10_MATCHES"; fi
 
-# AE01: HTML the project builds put in a template model as a String; lutece-core 8.1 auto-escaping prints it as text
-# (java_checks.py ae01). HtmlMarkup.of( ) for HTML the application rendered, HtmlMarkup.ofSanitized( ) for rich text.
-AE01_MATCHES=$(jc ae01)
-COUNT=0; [ -n "$AE01_MATCHES" ] && COUNT=$(echo "$AE01_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "AE01" "PASS" "HTML built by the project reaches the templates as markup" 0
-else emit "AE01" "WARN" "HTML built by the project put in a model as a String: printed as text under auto-escaping; HtmlMarkup.of( html )" "$COUNT" "$AE01_MATCHES"; fi
-
-# WB11: a JspBean or an XPage escaping a request parameter stores it escaped, and FreeMarker auto-escaping escapes it
-# again where it is printed (java_checks.py wb11); since lutece-core 8.1 a parameter is stored as typed.
+# WB11: the core XSS filter (sanitizeFilterMode) escapes every parameter under /jsp/admin and /jsp/site; a JspBean or an
+# XPage escaping one again stores it escaped twice (java_checks.py wb11).
 WB11_MATCHES=$(jc wb11)
 COUNT=0; [ -n "$WB11_MATCHES" ] && COUNT=$(echo "$WB11_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "WB11" "PASS" "No request parameter escaped by hand" 0
-else emit "WB11" "WARN" "Request parameter HTML-escaped by hand: the templates escape it again where they print it; store it as typed" "$COUNT" "$WB11_MATCHES"; fi
+if [ "$COUNT" -eq 0 ]; then emit "WB11" "PASS" "No request parameter escaped on top of the core XSS filter" 0
+else emit "WB11" "WARN" "Request parameter HTML-escaped by hand: the core XSS filter already escapes it, the value is stored escaped twice; drop the escaping" "$COUNT" "$WB11_MATCHES"; fi
 
 # DA03: a DAO reading or binding as a number a column its create scripts declare as text (java_checks.py da03).
 DA03_MATCHES=$(jc da03)
@@ -1393,12 +1385,10 @@ else emit "TL01" "FAIL" "ThreadLocal not cleared with remove()" "$COUNT" "$TL01_
 # template is included INSIDE the core form and getCreateTemplate/getModifyTemplate take a model.
 # Pattern: model.put( SecurityTokenService.MARK_TOKEN, getSecurityTokenService( ).getToken( request, ACTION ) )
 # in getCreate/getModify, a hidden input in the specific template, validate( request, ACTION ) in every do*.
-# On lutece-core 8.1 (autoescape-target.py) the common form posts a token that setPortletCommonData checks: a do*
-# using its result (directly or through a method of the class) is guarded.
 CS01_MATCHES=""
 if [ -d "src/" ]; then
-    CS01_MATCHES=$(CS01_CORE_TOKEN=$CORE81 python3 - <<'PY'
-import glob, os, re
+    CS01_MATCHES=$(python3 - <<'PY'
+import glob, re
 def body(text, start):
     depth, i = 1, start
     while depth and i < len(text):
@@ -1418,16 +1408,15 @@ for f, text in files.items():
 def portlet_bean(cls, seen=()):
     up = parent.get(cls, (None,))[0]
     return up == "PortletJspBean" or (up in parent and up not in seen and portlet_bean(up, seen + (cls,)))
-guard = r"\.validate\s*\(\s*request" + (r"|(?:=|\(|return)\s*setPortletCommonData\s*\(" if os.environ.get("CS01_CORE_TOKEN") == "1" else "")
 for cls, (up, f) in sorted(parent.items(), key=lambda x: x[1][1]):
     if not portlet_bean(cls):
         continue
     text = files[f]
     methods = {m.group(1): body(text, m.end()) for m in re.finditer(r"\b(\w+)\s*\([^)]*\)[^{;]*\{", text) if m.group(1) not in ("if", "for", "while", "switch", "catch", "synchronized")}
-    guards = {n for n, b in methods.items() if re.search(guard, b)}
+    guards = {n for n, b in methods.items() if re.search(r"\.validate\s*\(\s*request", b)}
     for m in re.finditer(r"public\s+String\s+(do\w+)\s*\([^)]*\)[^{]*\{", text):
         b = body(text, m.end())
-        if not re.search(guard, b) and not any(re.search(r"\b%s\s*\(" % g, b) for g in guards):
+        if not re.search(r"\.validate\s*\(\s*request", b) and not any(re.search(r"\b%s\s*\(" % g, b) for g in guards):
             print("%s:%d: %s() is public and validates no token (reachable or not, a public do* is a mutation entry)" % (f, text[:m.start()].count("\n") + 1, m.group(1)))
 PY
 )
@@ -1882,7 +1871,6 @@ if [ -d webapp/WEB-INF/plugins ] || [ -d src/sql ]; then
 import glob, os, re, sys
 sys.path.insert(0, os.environ["SCRIPT_DIR"])
 from admin_rights import uncommented, updates
-from template_rules import tabler_css
 rows = {}
 for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
     if re.search(r"/upgrades?/", f):
@@ -1904,8 +1892,8 @@ for f in sorted(glob.glob("src/sql/**/*.sql", recursive=True)):
             row = rows.pop(fid)[2]
             row.update({k: v for k, v in sets.items() if k != "id_right"})
             rows[sets.get("id_right", fid)] = (f, line, row)
-css = tabler_css(os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")) + "/lutece-core/webapp/themes")
-icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, encoding="utf-8", errors="replace").read())) if css else set()
+css = os.path.expanduser(os.environ.get("LUTECE_REFERENCES", "~/.lutece-references")) + "/lutece-core/webapp/themes/shared/css/tabler-icons.min.css"
+icons = set(re.findall(r"\.ti-([a-z0-9-]+):before", open(css, encoding="utf-8", errors="replace").read())) if os.path.isfile(css) else set()
 def unknown(value):
     m = re.fullmatch(r"\s*ti\s+ti-([a-z0-9-]+)\s*", value or "")
     return icons and m and m.group(1) not in icons
@@ -2161,49 +2149,6 @@ TM12_MATCHES=$(template_rules inline-forms 2>/dev/null)
 COUNT=0; [ -n "$TM12_MATCHES" ] && COUNT=$(echo "$TM12_MATCHES" | wc -l)
 if [ "$COUNT" -eq 0 ]; then emit "TM12" "PASS" "No inline form" 0
 else emit "TM12" "FAIL" "Inline form (fields side by side): one field per row, the standard form layout" "$COUNT" "$TM12_MATCHES"; fi
-
-# TM14 to TM18: the always-on HTML auto-escaping and the params maps of lutece-core 8.1 (template_rules.py). Each one
-# answers 500 at render time on an 8.1 core: FAIL when the project targets 8.1 (autoescape-target.py), WARN before, as
-# the breach waits for the move to 8.1.
-AE_SEV=WARN; [ "$CORE81" = 1 ] && AE_SEV=FAIL
-TM14_MATCHES=$(template_rules params-string 2>/dev/null)
-COUNT=0; [ -n "$TM14_MATCHES" ] && COUNT=$(echo "$TM14_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM14" "PASS" "Macro params given as maps" 0
-else emit "TM14" "$AE_SEV" "params given as a string or a capture: write a map, params={'aria-label': label} (lutece-core 8.1 refuses anything else)" "$COUNT" "$TM14_MATCHES"; fi
-TM15_MATCHES=$(template_rules params-refused 2>/dev/null)
-COUNT=0; [ -n "$TM15_MATCHES" ] && COUNT=$(echo "$TM15_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM15" "PASS" "params maps hold only allowed attributes" 0
-else emit "TM15" "$AE_SEV" "params key htmlAttributes refuses (class, style, event handler, URL): class= of the macro, a theme class, a raw element for a computed style or a URL" "$COUNT" "$TM15_MATCHES"; fi
-TM16_MATCHES=$(template_rules capture-as-string 2>/dev/null)
-COUNT=0; [ -n "$TM16_MATCHES" ] && COUNT=$(echo "$TM16_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM16" "PASS" "Captured blocks never read as strings" 0
-else emit "TM16" "$AE_SEV" "Captured block read as a string (?trim, comparison, default_value): it is markup under auto-escaping; x?markup_string, or assign the string itself" "$COUNT" "$TM16_MATCHES"; fi
-TM17_MATCHES=$(template_rules macro-shadow 2>/dev/null)
-COUNT=0; [ -n "$TM17_MATCHES" ] && COUNT=$(echo "$TM17_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM17" "PASS" "No macro parameter hides a macro" 0
-else emit "TM17" "FAIL" "Macro parameter named like a macro its body calls (icon= and <@icon>): rename the parameter" "$COUNT" "$TM17_MATCHES"; fi
-TM18_MATCHES=$(template_rules entities-in-literals 2>/dev/null)
-COUNT=0; [ -n "$TM18_MATCHES" ] && COUNT=$(echo "$TM18_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM18" "PASS" "No HTML entity in a FreeMarker string literal" 0
-else emit "TM18" "$AE_SEV" "HTML entity in a string literal (href='a?x=1&amp;y=2'): escaped once more under auto-escaping; write the character itself (&)" "$COUNT" "$TM18_MATCHES"; fi
-# TM19: an HTML property printed with ${x} shows its tags as text; WARN, read from names.
-TM19_MATCHES=$(template_rules html-escaped 2>/dev/null)
-COUNT=0; [ -n "$TM19_MATCHES" ] && COUNT=$(echo "$TM19_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM19" "PASS" "No HTML property printed escaped" 0
-else emit "TM19" "WARN" "HTML property (htmlContent...) printed with \${x}: auto-escaping shows the tags as text; print it with \${richText(x)}" "$COUNT" "$TM19_MATCHES"; fi
-# TM20: #i18n{key} in a script is replaced after the rendering, as is; FAIL at every level, i18n() exists on each.
-JS_I18N="\${i18n('key')?js_string}"; [ "$CORE81" = 1 ] && JS_I18N="\${i18n('key')?js_string?no_esc}"
-TM20_MATCHES=$(template_rules i18n-in-scripts 2>/dev/null)
-COUNT=0; [ -n "$TM20_MATCHES" ] && COUNT=$(echo "$TM20_MATCHES" | wc -l)
-if [ "$COUNT" -eq 0 ]; then emit "TM20" "PASS" "No #i18n{} in a script" 0
-else emit "TM20" "FAIL" "#i18n{key} in a <script>: replaced after the rendering as is, an apostrophe of a translation ends the JavaScript string; write $JS_I18N (fix-template-escaping.py)" "$COUNT" "$TM20_MATCHES"; fi
-# TM21: a URL attribute starting with a value read from data; safeUrl and cssUrl exist from lutece-core 8.1 only.
-if [ "$CORE81" = 1 ]; then
-    TM21_MATCHES=$(template_rules url-from-data 2>/dev/null)
-    COUNT=0; [ -n "$TM21_MATCHES" ] && COUNT=$(echo "$TM21_MATCHES" | wc -l)
-    if [ "$COUNT" -eq 0 ]; then emit "TM21" "PASS" "URLs read from data pass through safeUrl" 0
-    else emit "TM21" "WARN" "URL attribute starting with an object property or a datastore key: escaping does not stop a javascript: URL; \${safeUrl(x)} when the value can be stored by a user or an admin, url('\${cssUrl(x)}') in CSS" "$COUNT" "$TM21_MATCHES"; fi
-fi
 
 # TM02 to TM07: template rules read with FreeMarker, HTML, JSP and script comments blanked (template_rules.py).
 # TM02: no theme loads jQuery unless the pom declares library-theme-jquery: without it the calls fail at runtime.

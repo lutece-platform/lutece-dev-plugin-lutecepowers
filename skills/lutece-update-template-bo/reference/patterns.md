@@ -102,9 +102,9 @@ template are in SKILL.md.
 
 ### Actions dropdown in lists (manageFeature, adminDashboardWidget)
 - In a `<@manageFeature>` or a `<@adminDashboardWidget>`, when a list item has **more than 2 action buttons**, group the actions in a dropdown menu
-- Use `<@button dropdownMenu=true>` (`data-bs-toggle="dropdown"`, menu id `<id>-content`): with items wrapped in `<@li>` the menu is a `<ul>` named by the button, with bare links a `<div>`. `<@aButton dropdownMenu=true>` writes the same toggle on a link and always a `<div class="dropdown-menu">` with the id `<id>-menu`: its items are bare `@link`, never `<@li>`
+- Use `<@button dropdownMenu=true>`: native Bootstrap 5, the menu gets the id `<id>-content`. Wrap each `@link` in `<@li>`: core 8.0.2-beta-04 always writes a `<ul>`, later cores pick `<ul>` or `<div>` from the items. Not `<@aButton dropdownMenu=true>`: it writes the same `id` on the link and on the menu, and Bootstrap 4 `data-toggle` that only `webapp/themes/admin/tabler/js/admin.js` shims
 - Convert each action `<@aButton>` into a `<@link>` with `class='dropdown-item'`
-- A selection checkbox in a row: `<@checkBox orientation='switch' value='${item.id}' labelKey=<entity label> labelClass='visually-hidden' />`: the hidden label names it
+- A selection checkbox in a row: `<@checkBox orientation='switch' value='${item.id}' labelKey=<entity label> labelClass='visually-hidden' />`; `checkBox.ftl` copies `params` on both the `<label>` and the `<input>`, so `params='aria-label="..."'` would be emitted twice
 - A hierarchy of entities (parents and children in one list): one flat `<@manageFeature>`, each item showing its depth with an indent class on the first `<@manageFeatureItemColumn>` (`class='ps-3'`, `'ps-5'`...), never a `<@table>` or a `<@manageFeature>` nested in an item
 - Reorder arrows (up, down, in, out) are not actions for the dropdown: keep them visible in a `<@btnGroup size='sm' ariaLabel='#i18n{portal.util.labelActions}'>`, the dropdown takes modify, copy, export and, last with `text-danger`, delete
 - When converting to `<@link>`: remove the `buttonIcon`, `color`, `size` and `hideTitle` parameters (not applicable to dropdown links)
@@ -134,7 +134,7 @@ template are in SKILL.md.
   ```freemarker
   <@pageHeader title='#i18n{...title}'>
       <#if list?has_content && list?size gt 1>
-          <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' class='me-1' params={'data-bs-toggle': 'modal', 'data-bs-target': '#searchModal'} />
+          <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' class='me-1' params='data-bs-toggle="modal" data-bs-target="#searchModal"' />
       </#if>
   </@pageHeader>
   <#if list?has_content && list?size gt 1>
@@ -227,7 +227,7 @@ The primary button (creation) stays visually the rightmost. The secondary button
         <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=manageProperties' title='...' buttonIcon='cog' color='' class='me-1' />
     </#if>
     <#if list?has_content && list?size gt 1>
-        <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' class='me-1' params={'data-bs-toggle': 'modal', 'data-bs-target': '#item-search'} />
+        <@button type='button' title='#i18n{portal.util.labelSearch}' buttonIcon='search' class='me-1' params='data-bs-toggle="modal" data-bs-target="#item-search"' />
     </#if>
     <#if creation_allowed>
         <@aButton href='jsp/admin/plugins/myplugin/ManageItems.jsp?view=createItem' title='...' buttonIcon='plus' color='primary' />
@@ -254,7 +254,7 @@ The primary button (creation) stays visually the rightmost. The secondary button
                   <@row id='toolbar-wrapper'>
                       <@columns id='toolbar' class='d-flex justify-content-end align-items-center'>
                           <@button class='me-1 action' type='submit' buttonIcon='check me-2' title='#i18n{...save}' hideTitle=['xs','sm', 'md', 'lg'] />
-                          <@button type='button' class='me-1' buttonIcon='cog me-2' title='#i18n{...properties}' hideTitle=['xs','sm', 'md', 'lg'] params={'data-bs-toggle': 'modal', 'data-bs-target': '#properties'} />
+                          <@button type='button' class='me-1' buttonIcon='cog me-2' title='#i18n{...properties}' hideTitle=['xs','sm', 'md', 'lg'] params='data-bs-toggle="modal" data-bs-target="#properties"' />
                       </@columns>
                   </@row>
               </@pageHeader>
@@ -278,7 +278,7 @@ No `<@offcanvas>` (blocking: `verify-migration.sh` TM10, scanner TD48). Two repl
 
 - **Content written in the page** (search, filters, a short creation form, editor properties) → a `<@modal>` with
   `<@modalHeader>`, `<@modalBody>`, `<@modalFooter>`, opened by
-  `<@button type='button' params={'data-bs-toggle': 'modal', 'data-bs-target': '#id'} />`. The `id` is unique per page,
+  `<@button type='button' params='data-bs-toggle="modal" data-bs-target="#id"' />`. The `id` is unique per page,
   suffixed with the entity identifier inside a list. A collapse button (`buttonTargetId='#...'`) that shows a
   search form becomes the same search modal.
 - **Another page** (a create, modify, manage or properties screen) → a plain link to that page:
@@ -295,8 +295,8 @@ No `<@offcanvas>` (blocking: `verify-migration.sh` TM10, scanner TD48). Two repl
 
 ## Icon vocabulary
 
-Every name below exists in `webapp/themes/shared/css/vendor/tabler/tabler-icons.min.css` of the assembled webapp; check a new
-one there before using it, because an unknown name renders an empty glyph without an error.
+Every name below exists in `webapp/themes/shared/css/tabler-icons.min.css` of the assembled webapp; check a new one
+there before using it, because an unknown name renders an empty glyph without an error.
 
 | Action | Icon |
 |---|---|
@@ -327,7 +327,7 @@ element"). Pass a contextual subtitle, or `subtitle=' '` to show none.
 ## Recursive trees
 
 A tree of entities is `<@div id='tree' class='lutece-tree'>` > `<@ul>` > `<@li class='lutece-tree-node'
-params={'data-tree-icon': '...'}>`, driven by `webapp/themes/shared/modules/luteceTree.js`. Select the current node
+params='data-tree-icon="..."'>`, driven by `webapp/themes/shared/modules/luteceTree.js`. Select the current node
 with `selectTreeNode('#node-${id}')`, and guard the script with `if (tree)` so a page without the tree does not
 throw.
 
@@ -347,7 +347,8 @@ Put it in `<@boxFooter>`, not in the body.
 
 ## Models to copy
 
-For the `@manageFeature` item layout and the whole page: forms `admin/plugins/forms/manage_forms.html`, core
-`admin/rbac/manage_roles.html`, `admin/role/manage_roles.html`, `admin/mailinglist/manage_mailinglists.html`,
-`admin/user/manage_users.html` (search in a `@modal`) and `admin/system/manage_plugins.html` (list filter
-`luteceSearchList.js`). They open their create and modify screens as pages and show `@empty` in a `@card`.
+For the `@manageFeature` item layout: forms `admin/plugins/forms/manage_forms.html`, core `admin/rbac/manage_roles.html`,
+`admin/role/manage_roles.html`, `admin/user/manage_users.html` and, after 8.0.2-beta-04, `admin/system/manage_plugins.html`
+(detail as a page, `@card` > `@empty`, list filter `luteceSearchList.js`). The core pages still open
+their create and modify screens in an `@offcanvas` and wrap `@empty` in `@box`: those two parts are not copied, the
+rules above win.

@@ -33,58 +33,8 @@ printf "<@tform type='inline' action='x'><@input name='a' /><@input name='b' /><
 expect "inline-forms: type inline with three fields" 1 "$(rule inline-forms "$A")"
 printf "<@tform type='inline' action='x'><@input type='hidden' name='id' /><@button type='submit' title='Export' /></@tform>\n" > "$A"
 expect "inline-forms: hidden form with one submit" 0 "$(rule inline-forms "$A")"
-printf "<@button title='x' params='data-bs-toggle=\"modal\"' />\n" > "$A"
-expect "params-string: a string literal" 1 "$(rule params-string "$A")"
-printf "<#assign p>aria-hidden=\"true\"</#assign><@span params=p />\n" > "$A"
-expect "params-string: a capture given as params" 1 "$(rule params-string "$A")"
-printf "<#assign p = on?then({'aria-current': 'true'}, {})><@cLink href='x' params=p /><@button params={'data-bs-toggle': 'modal', 'aria-label': label} />\n" > "$A"
-expect "params-string: maps are fine" 0 "$(rule params-string "$A")"
-printf "<#assign bp = {\"data-id\": (step??)?then(\"\${step.id}\", \"0\")} /><@row params=bp><@span params='' /><@cMainNav searchParams='<input name=\"q\">' /><@input name='d' dateParams=[] /></@row>\n" > "$A"
-expect "params-string: a map with a string ternary inside, '', a string or list parameter that is not params" 0 "$(rule params-string "$A")"
-printf "<#macro myBox boxParams={}><@box params=boxParams><#nested></@box></#macro><@myBox boxParams='title=\"x\"' />\n" > "$A"
-expect "params-string: a string given to a project macro forwarding it to params" 1 "$(rule params-string "$A")"
-printf "<@div params={'style': 'width:1px', 'role': 'img'} />\n" > "$A"
-expect "params-refused: style" 1 "$(rule params-refused "$A")"
-printf "<@button params={'formaction': url} /><@cBtn params={'class': 'x'} />\n" > "$A"
-expect "params-refused: formaction and class" 1 "$(rule params-refused "$A")"
-printf "<@row params={\"data-masonry\": \"{\\\\\"percentPosition\\\\\": true }\", 'aria-label': 'x', 'tabindex': '-1'} />\n" > "$A"
-expect "params-refused: allowed keys, a quoted value holding a colon" 0 "$(rule params-refused "$A")"
-printf "<#local chips><#nested></#local><#if chips?trim?has_content>\${chips}</#if>\n" > "$A"
-expect "capture-as-string: ?trim on a capture" 1 "$(rule capture-as-string "$A")"
-printf "<#assign v><#if a>1<#else>-1</#if></#assign><@select name='x' items=l default_value=v />\n" > "$A"
-expect "capture-as-string: default_value of a capture" 1 "$(rule capture-as-string "$A")"
-printf "<#local chips><#nested></#local><#if chips?markup_string?trim?has_content>\${chips}</#if><#assign t>x</#assign><@button title=t /><#assign t = '' />\n" > "$A"
-expect "capture-as-string: markup_string, a macro argument and a reassignment are fine" 0 "$(rule capture-as-string "$A")"
-printf "<#macro rowAction url icon=''><button><@icon style=icon /></button></#macro>\n" > "$A"
-expect "macro-shadow: icon parameter and <@icon>" 1 "$(rule macro-shadow "$A")"
-printf "<#macro rowAction url buttonIcon=''><button><@icon style=buttonIcon /></button></#macro>\n" > "$A"
-expect "macro-shadow: distinct names are fine" 0 "$(rule macro-shadow "$A")"
-printf "<@button title='x' params=on?then('aria-current=\"true\"', '') />\n" > "$A"
-expect "params-string: a string ternary" 1 "$(rule params-string "$A")"
-printf "<#assign u = 'Portal.jsp?page=x&amp;id=' + id><@cLink href='a?b=1&amp;c=2' label='&#8722;' />\n" > "$A"
-expect "entities-in-literals: entities in URLs and a label" 1 "$(rule entities-in-literals "$A")"
-printf "<#if (t!'')?replace('&nbsp;', '')?trim?has_content><@cLink href='a?b=1&c=2' label='−' /></#if><#assign h = '<span>&nbsp;</span>'>\n" > "$A"
-expect "entities-in-literals: a search argument, plain characters and a fragment are fine" 0 "$(rule entities-in-literals "$A")"
-printf "<a href=\"\${u!'Portal.jsp?page=x&amp;id=1'}\">x</a>\n" > "$A"
-expect "entities-in-literals: an entity in an interpolation" 1 "$(rule entities-in-literals "$A")"
-printf "<#assign c = (page.htmlContent!'')?trim><article>\${c}</article><div>\${s.htmlSubscription!}</div>\n" > "$A"
-expect "html-escaped: an HTML property, directly and through a variable" 1 "$(rule html-escaped "$A")"
-printf "<article>\${richText(page.htmlContent!)}</article><textarea>\${page.htmlContent}</textarea><@input type='textarea' name='h' value='\${page.htmlContent}' /><#noautoesc>\${s.htmlSubscription}</#noautoesc><h1>\${htmlpage.description}</h1>\n" > "$A"
-expect "html-escaped: richText, a textarea, a macro argument, noautoesc and a plain property are fine" 0 "$(rule html-escaped "$A")"
 printf "<@offcanvas id='x' title='t'>body</@offcanvas>\n" > "$A"
 expect "offcanvas: flagged" 1 "$(rule offcanvas "$A")"
-printf "<script>\nvar m = '#i18n{x.label}';\n</script>\n" > "$A"
-expect "i18n-in-scripts: a message in a JavaScript string" 1 "$(rule i18n-in-scripts "$A")"
-printf "<#noparse><script>var a = '#i18n{x.a}';</script></#noparse><p>#i18n{x.b}</p>\n<script>\n<@m label='#i18n{x.c}' />\n</script>\n<script type=\"text/template\"><b>#i18n{x.d}</b></script>\n" > "$A"
-expect "i18n-in-scripts: noparse, outside a script, a macro argument, a non-JavaScript script" 0 "$(rule i18n-in-scripts "$A")"
-printf '%s\n' '<a href="${link.url}">a</a>' '<img src="${dskey('"'"'x.logo'"'"')}">' > "$A"
-expect "url-from-data: an object property and a datastore key" 1 "$(rule url-from-data "$A")"
-printf '%s\n' '<div style="background:url('"'"'${item.img}'"'"')"></div>' > "$A"
-expect "url-from-data: a CSS url( ) without cssUrl" 1 "$(rule url-from-data "$A")"
-printf '%s\n' '<a href="jsp/site/Portal.jsp?id=${link.id}">a</a><a href="#${item.id}">b</a><a href="${safeUrl(link.url)}">c</a>' \
-    '<a href="${base_url}jsp/x">d</a><link href="${theme.pathCss}/a.css"><a href="${link.code?url('"'"'UTF-8'"'"')}">e</a>' \
-    '<div style="background:url('"'"'${cssUrl(item.img)}'"'"')"></div><@cLink href=link.url />' '<script>var u = '"'"'<a href="${link.url}">'"'"';</script>' > "$A"
-expect "url-from-data: a literal start, safeUrl, a model value, a path, ?url, cssUrl, a macro, a script" 0 "$(rule url-from-data "$A")"
 
 W="$T/proj"
 J="$T/java"
@@ -98,21 +48,6 @@ printf "<@pageContainer><#if l?has_content>x<#else><@empty title='a' /></#if></@
 expect "TD55: empty state without subtitle, no create action" 1 "$(td TD55)"
 printf "<@pageContainer><@aButton href='jsp/admin/plugins/x/ManageX.jsp?view=createX' buttonIcon='plus' title='a' /><@empty /></@pageContainer>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD55: page with a create action" 0 "$(td TD55)"
-printf "<a href='jsp/admin/plugins/x/ManageX.jsp?view=a&id=1'>a</a>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
-expect "TD06: raw & in an HTML href" 1 "$(td TD06)"
-printf "<@aButton href='jsp/admin/plugins/x/ManageX.jsp?view=a&id=1' title='a' />\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
-expect "TD06: a FreeMarker literal keeps the &" 0 "$(td TD06)"
-P="$T/parse"
-mkdir -p "$P/webapp/WEB-INF/templates/skin/plugins/x"
-printf '\${t?no_esc}\n' > "$P/webapp/WEB-INF/templates/skin/plugins/x/a.html"
-printf '<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>\n' > "$P/pom.xml"
-expect "parse: ?no_esc reads in the HTML output format of lutece-core 8.1" 0 "$(bash "$S/check-template-parse.sh" "$P" | grep -c '^PARSE_ERROR')"
-printf '<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>8.0.2</version></dependency></dependencies></project>\n' > "$P/pom.xml"
-expect "parse: ?no_esc fails before 8.1" 1 "$(bash "$S/check-template-parse.sh" "$P" | grep -c '^PARSE_ERROR')"
-printf '<project><properties><lutece.core.version>[8.1.0-beta-01,)</lutece.core.version></properties><dependencies><dependency><artifactId>lutece-core</artifactId><type>lutece-core</type><version>${lutece.core.version}</version></dependency></dependencies></project>\n' > "$P/pom.xml"
-expect "autoescape-target: a version from a pom property, <type> before <version>" 0 "$(python3 "$S/autoescape-target.py" "$P"; echo $?)"
-sed -i 's/\[8.1.0-beta-01,)/8.0.2/' "$P/pom.xml"
-expect "autoescape-target: a property naming an 8.0 core" 1 "$(python3 "$S/autoescape-target.py" "$P"; echo $?)"
 
 printf "<@tform action='x'><@box><@boxBody>a</@boxBody><@boxFooter><@button type='submit' title='ok' /></@boxFooter></@box><@box><@boxBody>b</@boxBody></@box></@tform>\n" > "$W/webapp/WEB-INF/templates/admin/plugins/x/a.html"
 expect "TD58: submit in one box footer of a two-box form" 1 "$(td TD58)"
@@ -135,26 +70,15 @@ printf "<@tform action='x'><@input name='a' /><!-- <@button type='submit' title=
 expect "TD60: submit button inside an HTML comment" 1 "$(td TD60)"
 printf "<@tform action='x'><@input name='a' /><#-- <@button type='submit' title='ok' /> --><!-- a note --></@tform>\n" > "$X/a.html"
 expect "TD60: FreeMarker comment and plain HTML comment" 0 "$(td TD60)"
-B="$T/assembled"; mkdir -p "$B/webapp/WEB-INF/templates/admin/plugins/x" "$B/target/lutece/WEB-INF/templates/admin/themes/tabler" "$B/target/lutece/WEB-INF/templates/skin/themes/macros" "$B/target/lutece/themes/admin"
-printf '.btn{} .ti{}\n' > "$B/target/lutece/themes/admin/a.css"
-printf "<span class='bi bi-trash'></span><span class='ti ti-trash'></span>\n" > "$B/webapp/WEB-INF/templates/admin/plugins/x/a.html"
-expect "TD47: a Bootstrap Icons class, once per element; Tabler is fine" 1 "$( (cd "$B" && python3 "$S/scan-template-design.py" . --flat --no-exploded 2>/dev/null) | grep -c ' TD47 ')"
 printf "<@pageContainer>x</@pageContainer>\n<script>\nvar t = '\${form.title}';\nvar i = '\${form.idForm}';\nvar n = '\${idComment}';\n</script>\n" > "$X/a.html"
 expect "TD63: title in a JS string without js_string" 1 "$(td TD63)"
 printf "<@pageContainer>x</@pageContainer>\n<script>\nvar t = '\${form.title?js_string}';\nvar h = '\${form.title?html}';\nvar c = '\${context}';\n</script>\n<script src=\"js/x.js\"></script>\n" > "$X/a.html"
 expect "TD63: escaped values, ids and non-text names" 0 "$(td TD63)"
-printf "<script>\nvar t = '\${form.title?js_string}';\nvar d = '\${form.description?js_string?no_esc}';\n</script>\n<#noautoesc><script>var n = '\${form.name?js_string}';</script></#noautoesc>\n" > "$X/a.html"
-expect "TD63: ?js_string without ?no_esc is left alone before 8.1" 0 "$(td TD63)"
-printf '<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>\n' > "$W/pom.xml"
-expect "TD63: on 8.1, ?js_string without ?no_esc in a script (noautoesc block aside)" 1 "$(td TD63)"
-rm -f "$W/pom.xml"
 rm -f "$X/a.html"; printf '%s\n' "<#macro picker cuid=''>" "<script>const c = { cuid: '\${cuid}' };</script>" "</#macro>" > "$X/picker.ftl"
 expect "TD63: a macro file (.ftl) is scanned, a customer id counts as text" 1 "$(td TD63)"
 rm -f "$X/picker.ftl"
-printf "<@tform id='q'><@select name='startDate' items=l /></@tform>\n<@tform id='a'><@input type='date' name='startDate' id='startDate' value='' /></@tform>\n" > "$X/a.html"
-expect "TD64: select defaulting to the id of a date picker" 1 "$(td TD64)"
 printf "<@tform id='q'><@input type='hidden' name='startDate' value='' /></@tform>\n<@tform id='a'><@input type='date' name='startDate' id='startDate' value='' /></@tform>\n" > "$X/a.html"
-expect "TD64: a BO hidden @input without id gets no id" 0 "$(td TD64)"
+expect "TD64: hidden field defaulting to the id of a date picker" 1 "$(td TD64)"
 printf "<@tform id='q'><@input type='hidden' name='startDate' id='quick_startDate' value='' /><@input type='hidden' name='id_form' value='1' /></@tform>\n<@tform id='a'><@input type='date' name='startDate' id='startDate' value='' /><@input type='hidden' name='id_form' value='1' /></@tform>\n" > "$X/a.html"
 expect "TD64: distinct ids, repeated hidden fields" 0 "$(td TD64)"
 printf "<#assign k = ( i == 1 && n!1 == 1 )?then( 'a', 'b' )>\n" > "$X/a.html"
@@ -171,11 +95,6 @@ printf '%s\n' "<@cInput type='hidden' name='to_date' value='' />" "<@cInput name
 expect "TD67: looked-up id also defaulted by a hidden @cInput" 1 "$(td TD67)"
 printf '%s\n' "<#if a><@cInput type='hidden' name='c' id='c' value='' /><#else><@cInput name='c' id='c' value='' /></#if>" "<@noScriptMessage id='f' />" "<form id='f'></form>" "<script>document.getElementById( 'c' ); document.querySelector( '#f' );</script>" > "$X/a.html"
 expect "TD67: exclusive branches and a referencing macro" 0 "$(td TD67)"
-printf '%s\n' "<@input type='hidden' name='to_date' value='' />" "<@input type='date' name='to_date' id='to_date' value='' />" "<script>flatpickr( document.getElementById( 'to_date' ) );</script>" > "$X/a.html"
-expect "TD67: a BO hidden @input without id does not take its name as id" 0 "$(td TD67)"
-expect "TD73: silent when another element carries the id" 0 "$(td TD73)"
-printf '%s\n' "<@input type='hidden' name='id_task' value='1' />" "<script>document.getElementById( 'id_task' ).value = 2;</script>" > "$X/a.html"
-expect "TD73: lookup of the name of a BO hidden @input without id" 1 "$(td TD73)"
 printf '%s\n' "<#list clouds as c>" "<@chList id='tagcloud'><#list c as t><li>\${t}</li></#list></@chList>" "</#list>" > "$X/a.html"
 expect "TD69: literal id inside a list" 1 "$(td TD69)"
 printf '%s\n' "<ul id=\"cloud\"><#list tags as t><li id=\"tag-\${t?index}\">\${t}</li><#else><li id=\"empty\">none</li></#list></ul>" > "$X/a.html"
@@ -359,51 +278,5 @@ printf 'class C {\n    private static final String MESSAGE_A = "module.wf.x.task
 expect "I18N02: a module checks its module.<plugin>.<module> keys only" 1 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -A3 '\[I18N02\]' | grep -c '^ *module.wf.x.task.missing:')"
 expect "I18N02: the plugin's own keys are left to it" 0 "$(cd "$M" && bash "$S/verify-migration.sh" . 2>/dev/null | grep -c 'x.owned.by.plugin.x')"
 
-E="$T/escaping"; EX="$E/webapp/WEB-INF/templates/admin/plugins/x"; mkdir -p "$EX"
-POM81='<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>'
-POM80='<project><dependencies><dependency><artifactId>lutece-core</artifactId><version>8.0.2</version></dependency></dependencies></project>'
-printf '%s\n' '<script>var m = '"'"'#i18n{x.label}'"'"';</script>' '<a href="${link.url}">a</a>' > "$EX/a.html"
-vme() { (cd "$E" && bash "$S/verify-migration.sh" . 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -c "$1"); }
-printf '%s\n' "$POM81" > "$E/pom.xml"
-expect "TM20: FAIL on 8.1 with the ?no_esc form" 1 "$(vme "FAIL \[TM20\].*js_string?no_esc")"
-expect "TM21: WARN on 8.1" 1 "$(vme "WARN \[TM21\]")"
-printf '%s\n' "$POM80" > "$E/pom.xml"
-expect "TM20: FAIL before 8.1 with the ?js_string form" 1 "$(vme "FAIL \[TM20\].*js_string} (fix")"
-expect "TM21: silent before 8.1" 0 "$(vme "\[TM21\]")"
-fx() { python3 "$S/fix-template-escaping.py" "$@" "$E"; }
-cat > "$EX/a.html" <<'EOF'
-<#assign u = 'Portal.jsp?page=x&amp;id=' + id><@cLink href='a?b=1&amp;c=2' label='&#8722;' title="&quot;q&quot;" />
-<script>var m = '#i18n{x.label}';</script>
-<#assign size><#if a & ( b > c )>big<#else>small</#if></#assign><#if size?trim == 'big'>x</#if>
-<#assign t><#if on>yes<#else>no</#if></#assign><#assign t = t?markup_string />
-EOF
-cat > "$EX/b.html" <<'EOF'
-<@cLink href='x' params='data-marker="&#36;&#123;${m.code}&#33;&#125;"' label='&#36;&#123;a&#125;' />
-<script>var n = "${'#i18n{x.other}'?js_string}"; var k = '#i18n{x.${kind}}';</script>
-<#assign k><b>${x}</b></#assign><#if k?trim?has_content>${k}</#if>
-EOF
-cp "$EX/a.html" "$T/a.saved"; cp "$EX/b.html" "$T/b.saved"
-printf '%s\n' "$POM81" > "$E/pom.xml"
-out=$(fx --dry-run)
-expect "fix-template-escaping --dry-run lists the changes and writes nothing" "6 same" "$(echo "$out" | grep -vc ' left: ') $(cmp -s "$EX/a.html" "$T/a.saved" && echo same)"
-expect "fix-template-escaping lists what it leaves" 4 "$(echo "$out" | grep -c ' left: ')"
-fx > /dev/null
-expect "fix-template-escaping: entities, i18n on 8.1, a capture with > in its condition" \
-    "<#assign u = 'Portal.jsp?page=x&id=' + id><@cLink href='a?b=1&c=2' label='−' title=\"\\\"q\\\"\" />|<script>var m = '\${i18n('x.label')?js_string?no_esc}';</script>|<#assign size = ( a & ( b > c ) )?then( 'big', 'small' ) /><#if size?trim == 'big'>x</#if>|<#assign t><#if on>yes<#else>no</#if></#assign><#assign t = t?markup_string />" \
-    "$(paste -sd'|' "$EX/a.html")"
-expect "fix-template-escaping leaves FreeMarker syntax entities, a message in an interpolation, a built key, a markup capture" 1 "$(cmp -s "$EX/b.html" "$T/b.saved" && echo 1)"
-expect "fix-template-escaping is idempotent" 0 "$(fx | grep -vc ' left: ')"
-expect "TM18 and TM20 silent on the fixed file" "0 0" "$(rule entities-in-literals "$EX/a.html") $(rule i18n-in-scripts "$EX/a.html")"
-expect "the fixed file parses" 0 "$(bash "$S/check-template-parse.sh" "$E" | grep -c "PARSE_ERROR.*a.html")"
-rm "$EX/b.html"; cp "$T/a.saved" "$EX/a.html"; printf '%s\n' "$POM80" > "$E/pom.xml"
-fx > /dev/null
-expect "fix-template-escaping: i18n before 8.1" 1 "$(grep -c "var m = '\${i18n('x.label')?js_string}';" "$EX/a.html")"
-if bash "$S/check-template-parse.sh" "$E" | grep -q '^FMPARSE files'; then
-    printf '%s\n' "$POM81" > "$E/pom.xml"
-    printf '%s\n' '<#ftl output_format="plainText">' '<script>var m = '"'"'#i18n{x.label}'"'"';</script>' > "$EX/a.html"
-    cp "$EX/a.html" "$T/a.saved"
-    expect "fix-template-escaping keeps a file its rewrite would not let parse" "1 1" "$(fx | grep -c 'no longer parses') $(cmp -s "$EX/a.html" "$T/a.saved" && echo 1)"
-fi
-
-[ "$fail" -eq 0 ] && echo "PASS: template rules, template parse, TD06, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD73, TD46, TD47, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, TM20, TM21, fix-button-colours, fix-template-escaping"
+[ "$fail" -eq 0 ] && echo "PASS: template rules, TD55, TD56, TD57, TD58, TD59, TD60, TD61, TD62, TD63, TD64, TD65, TD66, TD67, TD68, TD69, TD70, TD71, TD72, TD46, TM01, DA02, I18N02, I18N07, I18N10, TL01, MV05, MV06, MV07, WB08, JX10, CD06, CD07, JS04, JS07, fix-button-colours"
 exit $fail

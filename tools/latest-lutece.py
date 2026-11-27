@@ -14,10 +14,14 @@ parent is not lutece-global-pom (a parent pom, a BOM), by their own major N.
 
 N is the Lutece line, 8 by default (7 for an artefact a Lutece 7 site runs).
 
+The line 8 stays on Lutece 8.0 and on releases: lutece-core, lutece-global-pom and lutece-site-pom are read among their
+8.0.x versions, any other artefact among the versions whose pom does not ask for a lutece-core above 8.0.x, and the
+snapshot asked is the release when the line has one.
+
 Prints one line per artefact: groupId:artifactId:version[:build], the build being the timestamp-number of the last
 snapshot deployed (e.g. 20261002.102953-285), for a BOM the lutece-core it manages. The repository's own <latest> is
 the last version deployed, not the highest: a v7 maintenance snapshot deployed after the v8 one would win, hence the
-check of each candidate's parent. The answers are cached an hour in ~/.cache/lutecepowers/latest-lutece-2.json. An
+check of each candidate's parent. The answers are cached an hour in ~/.cache/lutecepowers/latest-lutece-2-8.0.json. An
 artefact the Lutece repository does not know (a private one) is read in the local Maven repository, not cached. A
 repository that cannot be read, even for one file, means unreachable: the local Maven repository answers instead (a
 version with its pom downloaded), with a warning on stderr, never cached. Exit 1 when an artefact has no version of the
@@ -38,10 +42,12 @@ import urllib.request
 SNAPSHOTS = os.environ.get("LUTECE_SNAPSHOT_REPO", "https://dev.lutece.paris.fr/snapshot_repository")
 RELEASES = os.environ.get("LUTECE_RELEASE_REPO", "https://dev.lutece.paris.fr/maven_repository")
 M2 = pathlib.Path(os.environ.get("M2_REPO", pathlib.Path.home() / ".m2" / "repository"))
-CACHE = pathlib.Path(os.environ.get("LUTECE_LATEST_CACHE", pathlib.Path.home() / ".cache" / "lutecepowers" / "latest-lutece-2.json"))
+CACHE = pathlib.Path(os.environ.get("LUTECE_LATEST_CACHE", pathlib.Path.home() / ".cache" / "lutecepowers" / "latest-lutece-2-8.0.json"))
 TTL = 3600
 TIMEOUT = 10
 LINE = "8"
+MINOR = "8.0"
+KEPT = ("fr.paris.lutece:lutece-core", "fr.paris.lutece.tools:lutece-global-pom", "fr.paris.lutece.tools:lutece-site-pom")
 
 
 QUALIFIERS = {"alpha": 0, "a": 0, "beta": 1, "b": 1, "milestone": 2, "m": 2, "rc": 3, "cr": 3}
@@ -103,11 +109,22 @@ def parent_major(pom):
     return None
 
 
+def on_minor(pom):
+    """True unless the pom depends on, or manages, a lutece-core whose version or range lower bound is not 8.0.x."""
+    bound = re.match(r"[\[(]?\s*([^,\])\s]*)", managed_core(pom) or "").group(1)
+    return not bound or bound.startswith(MINOR + ".")
+
+
 def in_line(ga, version, read_pom):
     """True when this version belongs to the Lutece line asked: by the lutece-global-pom parent of its pom (read_pom()
-    returns it), lutece-core and an artefact without that parent by their own major."""
-    major = None if ga.endswith(":lutece-core") else parent_major(read_pom())
-    return (major or version.split(".")[0]) == LINE
+    returns it), lutece-core and an artefact without that parent by their own major. On the line 8, lutece-core and the
+    parent poms (KEPT) by their 8.0.x versions only, any other artefact unless its pom asks for a later lutece-core."""
+    pom = None if ga.endswith(":lutece-core") else read_pom()
+    if (parent_major(pom) or version.split(".")[0]) != LINE:
+        return False
+    if LINE != "8":
+        return True
+    return version.startswith(MINOR + ".") if ga in KEPT else on_minor(pom)
 
 
 def remote_snapshot(ga):
@@ -192,6 +209,23 @@ def local(ga, kind):
     return "", ""
 
 
+def newest(ga, kind, read):
+    """(version, build) read(ga, kind) answers; on the line 8 the snapshot asked is the release when there is one."""
+    if kind == "snapshot" and LINE == "8":
+        try:
+            r, _ = read(ga, "release")
+        except Absent:
+            r = ""
+        if r:
+            return r, ""
+    return read(ga, kind)
+
+
+def remote(ga, kind):
+    """(version, build) of the kind asked in the Lutece repositories."""
+    return {"snapshot": remote_snapshot, "release": remote_release, "bom": remote_bom}[kind](ga)
+
+
 def main():
     """Entry point."""
     global LINE
@@ -215,15 +249,15 @@ def main():
             v, build = hit["v"], hit["b"]
         else:
             try:
-                v, build = {"snapshot": remote_snapshot, "release": remote_release, "bom": remote_bom}[kind](ga)
+                v, build = newest(ga, kind, remote)
                 cache[key] = {"v": v, "b": build, "t": time.time()}
             except Unreachable as e:
                 print("latest-lutece: %s unreachable, %s from the local Maven repository" % (e, ga), file=sys.stderr)
-                v, build = local(ga, kind)
+                v, build = newest(ga, kind, local)
                 from_local = True
             except Absent:
                 print("latest-lutece: %s is not in the Lutece repository, read in the local Maven repository" % ga, file=sys.stderr)
-                v, build = local(ga, kind)
+                v, build = newest(ga, kind, local)
         if not v:
             print("latest-lutece: no Lutece %s %s of %s" % (LINE, kind, ga), file=sys.stderr)
             missing = True

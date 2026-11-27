@@ -21,7 +21,7 @@ Every page the core ships (`skin/site/page_template1.html`, `page_home.html`) an
 <@cContainer>
     <@cRow>
         <@cCol cols='12 col-md-9'>
-            <@cTitle level=1>#i18n{myplugin.xpage.title}</@cTitle>
+            <@cTitle level=2>#i18n{myplugin.xpage.title}</@cTitle>
             <#-- content -->
         </@cCol>
         <@cCol cols='12 col-md-3'>
@@ -44,8 +44,7 @@ another template (portlet body, component) has no `cTpl` and no `cContainer`.
 ```freemarker
 <#include "minimal_header.html" />
 <@cTpl>
-<#assign errorText>#i18n{portal.theme.error500.text}<br><small>(code: ${.now?long?c})</small></#assign>
-<@cErrorMessage title='#i18n{portal.theme.error500.title}' text=errorText linkUrl=footerLinkContact linkLabelUrl='#i18n{portal.theme.labelContact}' >
+<@cErrorMessage title='#i18n{portal.theme.error500.title}' text='#i18n{portal.theme.error500.text}<br><small>(code: ${.now?long})</small>' linkUrl=footerLinkContact linkLabelUrl='#i18n{portal.theme.labelContact}' >
 <#if error_cause??><@cAccordion id='expert' title='#i18n{portal.theme.error500.more}' class='alert alert-outline alert-warning' state=false>${error_cause!}</@cAccordion></#if>
 </@cErrorMessage>
 </@cTpl>
@@ -61,7 +60,7 @@ another template (portlet body, component) has no `cTpl` and no `cContainer`.
 <@cContainer>
 <@cRow>
     <@cCol>
-        <@cTitle level=1>#i18n{mylutece.xpage.create_account.pageTitle}</@cTitle>
+        <@cTitle level=2>#i18n{mylutece.xpage.create_account.pageTitle}</@cTitle>
         <#if list_authentications?has_content>
             <@cText>#i18n{mylutece.xpage.create_account.contentMessage}</@cText>
             <@chList class='list-group'>
@@ -92,7 +91,7 @@ field has `for=` and `required=true`; the size of a column is `cols`, the class 
 <@cContainer>
 <@cRow class='justify-content-center'>
     <@cCol cols='12 col-md-6'>
-        <@cTitle level=1>#i18n{...pageTitle}</@cTitle>
+        <@cTitle level=2>#i18n{...pageTitle}</@cTitle>
         <#if error_code?has_content>
             <@cAlert type='danger' title='#i18n{...errorMessage}' />
         </#if>
@@ -130,8 +129,8 @@ replaced by keys; a template never carries literal copy):
 <@cContainer>
 <@cRow>
     <@cCol cols='12 col-md-6'>
-        <@cTitle level=1>#i18n{mylutece.xpage.login_form.pageTitle}</@cTitle>
-        <@cForm method='post' action='${url_dologin}' class='login-form' params={'autocomplete': 'on'}>
+        <@cTitle level=2>#i18n{mylutece.xpage.login_form.pageTitle}</@cTitle>
+        <@cForm method='post' action='${url_dologin}' class='login-form' params='autocomplete="on"'>
             <@cInput type='hidden' name='page' value='mylutece' class='' />
             <@cInput type='hidden' name='action' value='doLogin' class='' />
             <@cInput type='hidden' name='token' value='${token}' class='' />
@@ -169,7 +168,7 @@ replaced by keys; a template never carries literal copy):
         <@chItem>#i18n{...labelDate} ${appointment.dateOfTheAppointment}</@chItem>
     </@chList>
 </@cStepDone>
-<@cStepDone step='3' title='#i18n{...stepThreeTitle}' idx=2 actionHref='jsp/site/Portal.jsp?page=appointment&view=getViewAppointmentForm&id_form=${form.idForm}' actionLabel='#i18n{portal.util.labelModify}'>
+<@cStepDone step='3' title='#i18n{...stepThreeTitle}' idx=2 actionHref='javascript:history.back()' actionLabel='#i18n{portal.util.labelModify}'>
     <@chList>
         <@chItem>${formMessages.fieldLastNameTitle!} : ${appointment.lastName}</@chItem>
         <@chItem>${formMessages.fieldFirstNameTitle!} : ${appointment.firstName}</@chItem>
@@ -231,12 +230,12 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                             <@cInline>·</@cInline>
                             <#if blog.updateDate??>
                                 <#assign dateIso = blog.updateDate?string('yyyy-MM-dd')>
-                                <@cInline type='time' params={'datetime': dateIso}>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
+                                <@cInline type='time' params='datetime="${dateIso}"'>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
                             </#if>
                             <@cInline>·</@cInline>
-                            <@cInline class='reading-time' params={'data-reading-time-label': readingTimeLabel}></@cInline>
+                            <@cInline class='reading-time' params='data-reading-time-label="${readingTimeLabel}"'></@cInline>
                         </@cBlock>
-                        <@cTitle level=1 class='hero__title'>${blog.contentLabel}</@cTitle>
+                        <@cTitle level=2 class='hero__title'>${blog.contentLabel}</@cTitle>
                         <@cText class='hero__lede'>${blog.description!}</@cText>
                     </@cBlock>
                     <#if blog.docContent?? && blog.docContent?size != 0>
@@ -261,7 +260,7 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                         </@cBlock>
                     </#if>
                     <@cBlock class='article-content'>
-                        ${richText(blog.htmlContent!)}
+                        ${blog.htmlContent}
                     </@cBlock>
                 </@cBlock>
             </@cArticle>
@@ -274,7 +273,7 @@ Recommended pattern for an article detail page (blog, news, etc.) with:
                             <#assign relUrl>jsp/site/Portal.jsp?page=myplugin&id=${relBlog.id}<#if blog.attachedPortletId gt 0>&portlet_id=${blog.attachedPortletId}</#if></#assign>
                             <@cLink href=relUrl class='card' label=''>
                                 <@cBlock class='card__body'>
-                                    <@cTitle level=2>${relBlog.contentLabel}</@cTitle>
+                                    <@cTitle level=3>${relBlog.contentLabel}</@cTitle>
                                     <@cText>${relBlog.description!}</@cText>
                                 </@cBlock>
                             </@cLink>

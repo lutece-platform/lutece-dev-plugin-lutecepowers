@@ -781,8 +781,8 @@ def test_scenario(bo, browser, request, record, sc):
     try:
         _play(bo, sc, vars_, record)
     except AssertionError as e:
-        # A defect of the core the plugin must not work around: the scenario proves it, the report lists it as a core
-        # defect not handled, and the run stays green.
+        # A defect of the core the plugin must not work around (an @Action run on GET without its token): the
+        # scenario proves it, the report lists it as a core defect not handled, and the run stays green.
         if not sc.get("core_defect"):
             raise
         record["core_defect"] = "%s | %s" % (sc["core_defect"], str(e)[:300])

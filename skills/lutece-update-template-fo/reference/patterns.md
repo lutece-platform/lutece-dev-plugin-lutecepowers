@@ -64,7 +64,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### cIcon - Tabler icons
 - **Prefer `<@cIcon>`** over `<@cInline type='i' class='ti ti-xxx' />`; `@parisIcon` does not exist in the core
 - The `ti ti-` prefix is added automatically: `<@cIcon name='eye' />` → `<span class="ti ti-eye">`
-- `name` must be a Tabler name (`webapp/themes/shared/css/vendor/tabler/tabler-icons.min.css`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
+- `name` must be a Tabler name (`webapp/themes/shared/css/tabler-icons.min.css`): `cIcon` has no alias table, unlike the BO `@icon`. Not Tabler: `envelope`, `times`, `agenda`, `cog`, `eye-slash`, `comment`, `close`, `save`
 - `name` is the glyph, never a label: `<@cIcon name='#i18n{...}' />` is wrong
 - Vocabulary in use: submit `check`, send `mail`, search `search`, reset `refresh`, edit `edit`, view `eye`, delete `trash`, top `chevron-up`, back `arrow-left`, forward/login `arrow-right`
 - Extra classes via `class`: `<@cIcon name='settings' class='me-1' />`
@@ -108,7 +108,7 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - `progressId`: ID of the bar (used by JS for DOM manipulation)
 - `color`: Bootstrap color (`'primary'`, `'danger'`, `'warning'`, etc.)
 - `value`: initial value (0 by default)
-- Not for password strength: `cInputPassword passwordMeter=true` carries its own
+- Not for password strength any more: `cInputPassword passwordMeter=true` carries its own
 
 ### cBtn - Buttons
 - The class is prefixed automatically with `btn btn-`: `class='primary'` → `class="btn btn-primary"`
@@ -178,15 +178,15 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - **`min`** and **`max`**: native parameters for `type='number'` — do not put them in `params`
   ```freemarker
   <#-- INCORRECT -->
-  <@cInput type='number' params={'min': '1', 'max': nbplaces} />
+  <@cInput type='number' params='min="1" max="${nbplaces}"' />
 
   <#-- CORRECT -->
   <@cInput type='number' min=1 max=nbplaces />
   ```
-- Other attributes not covered go in the `params` map; an event handler goes in the page script (`addEventListener`), never in `params`
+- Other attributes not covered (e.g. `onkeypress`) stay in `params`
 
 ### cInput - Extra HTML attributes
-- Use `params` (a map) for attributes not covered by the macro parameters: `params={'inputmode': 'numeric'}`. An event handler is refused (TM15): add the listener in the page script, `el.addEventListener( 'keypress', fn )`.
+- Use `params` for attributes not covered by the macro parameters: `params='onkeypress="return fn(event);"'`
 - Dynamic validation classes: **always include `form-control`**: `class='form-control ${classPassword!}'`
 
 ### Macro parameters - Complex dynamic values
@@ -208,13 +208,13 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
   <#else>
       <#assign btnTitle = btnTitle + '#i18n{label.never}'>
   </#if>
-  <@cBtn params={'title': btnTitle} ... />
+  <@cBtn params='title="${btnTitle}"' ... />
   ```
 - This avoids quote-escaping problems (`&apos;`) and ParseExceptions
 
 ### cImg - Images
 - `class='img-fluid'` is applied by default, no need to specify it
-- Extra HTML attributes via `params`: `params={'width': '72'}`
+- Extra HTML attributes via `params`: `params='width="72"'`
 
 ### chList / chItem - Styled lists
 - For Bootstrap lists: `<@chList class='list-group'>` + `<@chItem class='list-group-item'>`
@@ -223,13 +223,16 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 ### cCheckbox - Checkboxes
 - Main params: `name` (required), `label` (required), `value`, `id`, `checked` (boolean), `inline` (boolean), `required` (boolean), `disabled` (boolean), `params`
 - `label` is **required**: if the field has no visible title, keep the real text and hide it with `labelClass='visually-hidden'` (`cFormCheck.ftl` handles that class), never `label='&nbsp;'`
-- **No `title` parameter**: pass the title in `params`: `params={'title': 'my tooltip'}`
+- **No `title` parameter**: pass the title in `params`: `params='title="my tooltip"'`
 - **Pre-build dynamic values** with `<#assign>` before calling the macro:
   ```freemarker
   <#assign isChecked = false>
   <#if someCondition><#assign isChecked = true></#if>
-  <#assign cbParams = field.comment?has_content?then({'title': field.comment}, {})>
-  <#assign cbLabelClass = field.noDisplayTitle?then('visually-hidden', '')>
+  <#assign cbParams = ''>
+  <#if field.comment?? && field.comment != ''>
+      <#assign cbParams = 'title="${field.comment}"'>
+  </#if>
+  <#assign cbLabelClass><#if field.noDisplayTitle>visually-hidden</#if></#assign>
   <@cCheckbox name='myField' id='myField_${field.id}' value='${field.id}' checked=isChecked label=field.title labelClass=cbLabelClass params=cbParams inline=isInline />
   ```
 - For checkboxes grouped in a vertical list, do not wrap them in a `<@cBlock class='checkbox'>` — the macro handles its own container
@@ -372,8 +375,8 @@ Rules that apply to one macro or one situation. The cross-cutting rules are in S
 - `type` selects the tag (`span` default, `em`, `strong`, `small`, `time`, `i`…); extra attributes go in `params`
 - FreeMarker accepts `<@cInline ... />` for an empty element, no closing tag required:
   ```freemarker
-  <@cInline class='bl-marker' params={'data-id': '1'} />
-  <@cInline type='time' params={'datetime': updateDateIso}>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
+  <@cInline class='bl-marker' params='data-id="1"' />
+  <@cInline type='time' params='datetime="${updateDateIso}"'>${blog.updateDate?string('d MMMM yyyy')}</@cInline>
   ```
 
 ### cFigure - Figures with caption

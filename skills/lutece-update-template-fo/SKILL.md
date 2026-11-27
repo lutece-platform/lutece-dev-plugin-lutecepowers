@@ -59,7 +59,7 @@ If the clone is missing, the theme also ships in any assembled site under
 ### Global structure
 - **Always** wrap a page template in `<@cTpl>...</@cTpl>`: it is the theme override hook (`skin/themes/<code>/tpl/<same path>`, `global_theme_commons.ftl`). Page-local `<#macro>` and `<#assign>` live inside it; FreeMarker hoists macro definitions, their position is style
 - A page is `<@cTpl>` → `<@cContainer>` → `<@cRow>` → `<@cCol cols=...>` → content: the shape of every core `skin/site/*.html` (examples.md § Page skeleton). Only a fragment included by another template (portlet body, component) skips `cTpl` and `cContainer`
-- Titles: `level=1` for the page title of an XPage (core `skin/site/site_map.html`, `skin/search/search_results.html`), `level=2` below. The frameset writes an `h1` only in `cMainBanner`, when a banner title is set
+- Titles: `level=2` for the page title (the `h1` belongs to the frameset), `level=3` below
 - Forms: `<@cForm>` → `<@cField for= required=true>` → input → a `<@cRow>` of `<@cBtn>` at the end. No `<@cFieldset>` around a whole form
 - Models to copy: `~/.lutece-references/lutece-core/webapp/WEB-INF/templates/skin/site/*.html` and `skin/search/search_results.html`
 - The theme ships component CSS under `webapp/themes/skin/lutece/css/{components,layout}` and `themes/skin/shared/css` (`bl-*`, `search-*`, `tile*`, `lutece-ds-empty`): target those classes through `class=`, never inline styles
@@ -88,7 +88,7 @@ If the clone is missing, the theme also ships in any assembled site under
 - For boolean expressions, put the condition in parentheses if necessary: `(x != '')?then('a', 'b')`
 
 ### cForm - Forms
-- Attributes not covered by the parameters via `params`: `params={'name': 'createAccount'}`
+- Attributes not covered by the parameters via `params`: `params='name="createAccount"'`
 
 ### i18n
 - All displayed text must use `#i18n{plugin.key}`
@@ -117,14 +117,14 @@ If the clone is missing, the theme also ships in any assembled site under
 
 ### style attribute on macros
 - **Do not use `style='...'`** directly as a macro parameter — it is not a valid parameter of `<@cCol>`, `<@cTitle>`, `<@cTd>`, etc.
-- `params` refuses `style` (TM15): use a CSS class; a computed style (a width, a colour) goes on a raw element, `<span style="width:${w}%">`:
+- Use `params='style="..."'` if absolutely necessary, or **prefer a CSS class**:
   ```freemarker
   <#-- INCORRECT -->
-  <@cTitle level=1 style='margin-bottom:30px'>
+  <@cTitle level=2 style='margin-bottom:30px'>
   <@cTd style='vertical-align: middle'>
 
   <#-- CORRECT -->
-  <@cTitle level=1 class='mb-4'>
+  <@cTitle level=2 class='mb-4'>
   <@cTd class='align-middle'>
   ```
 
@@ -188,12 +188,12 @@ If the clone is missing, the theme also ships in any assembled site under
 - **Do not leave raw HTML tags** (`<br>`, `<hr>`, `<b>`, `<i>`, etc.) when a macro exists or when they are unnecessary — remove formatting `<br>`
 - **Do not use `<@cCol cols='xs-12'>`** — simply use `<@cCol>` (full-width column by default)
 - **Do not use `&nbsp;`** — replace with a normal space or remove if unnecessary; a required `label` with no visible title keeps its real text with `labelClass='visually-hidden'`
-- **Do not use `style='...'`** on macros — use `class` with Bootstrap utilities; a computed style goes on a raw element
+- **Do not use `style='...'`** on macros — use `class` with Bootstrap utilities or `params='style="..."'` as a last resort
 - **Do not mix BO and FO macros** — check that all the macros used exist in the skin/FO context
 - **Do not use `&gt;` / `&lt;`** in FreeMarker conditions — use `gt` / `lt`
 - **Do not self-close `<@cInline>`** — always `</@cInline>`, even when the content is empty
 - **Do not inline FreeMarker in the `class` parameter of a macro** — pre-build the string with `<#assign>` (also applies to `href`, `id`, etc.)
-- **`params` is a map** (`params={'datetime': dateIso}`): a string, a capture or a string variable fails the rendering (TM14). Pre-build a computed value with `<#assign>` and pass the variable.
+- **Do not inline `?string('yyyy-MM-dd')` directly in `params='datetime="..."'`** — nested quotes break the FreeMarker parser. Pre-build with `<#assign>`.
 - **Do not keep a separate `<figcaption>`** — use the `caption` parameter of `<@cFigure>`
 - **Do not use `<@cBtn>` for clickable cards** — use `<@cLink class='ma-card' label=''>` when it is a clickable area not styled as a button
 - **Do not keep duplicated/dead code** during the migration — re-read the result to spot buggy copy-paste and unnecessary `<!-- ... -->` comments

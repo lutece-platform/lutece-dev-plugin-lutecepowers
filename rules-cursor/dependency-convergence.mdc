@@ -33,21 +33,18 @@ https://dev.lutece.paris.fr/maven_repository/fr/paris/lutece/tools/lutece-global
 ## What the Parent Manages
 
 Declare these with coordinates and scope only. A local `<version>` re-creates the divergence the parent exists to prevent.
-Their versions are those of the published global pom (`.../lutece-global-pom/<version>/lutece-global-pom-<version>.pom`,
-`<properties>` and `<dependencyManagement>`), never copied here.
 
-Managed for tests: `library-lutece-unit-testing`, `hibernate-validator`, `jaxb-runtime`, the EL implementation,
-`jboss-logging`, `jakarta.el-api`, `jakarta.annotation-api`.
+| Managed for tests | Version |
+|---|---|
+| `library-lutece-unit-testing` | 5.0.2 |
+| `hibernate-validator` | 8.0.5.Final |
+| `jaxb-runtime` | 4.0.9 |
+| EL implementation | `org.glassfish.expressly:expressly` 5.0.0 |
+| `jboss-logging` | 3.6.3.Final |
+| `jakarta.el-api` | 5.0.1 |
+| `jakarta.annotation-api` | 2.1.1 |
 
 The EL implementation is `org.glassfish.expressly:expressly`, declared without version. `org.glassfish:jakarta.el` is not managed: declaring it yields a dependency without version and the build fails.
-
-## Never redeclare what the core pins
-
-A library the core (or the parent) declares with a fixed version (`library-workflow-core`, `library-freemarker`,
-`library-core-utils`…, core `pom.xml`) comes transitively: do not declare it. A declaration in the plugin is nearer than
-the core's pin and wins, and an open range `[4.0.0,)` resolves the highest version the repositories list, a SNAPSHOT
-whose jar is not published included: plugin-workflow declared `library-workflow-core` `[4.0.0,)`, and the modules
-depending on it resolved such a SNAPSHOT and failed to build (LUT-35124).
 
 ## Enforcer
 

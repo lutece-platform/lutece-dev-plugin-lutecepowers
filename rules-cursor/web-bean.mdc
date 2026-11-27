@@ -106,7 +106,7 @@ Set `securityTokenEnabled = true` on every `@Controller` (JspBean and XPage). Th
 
 What the core does (`SecurityTokenHandler`, `SecurityTokenFilterAdmin`, `SecurityTokenFilterSite`, `AppTemplateService`):
 - **Generation**: on each `@View` (and default view) a token is generated for the action named by `@View.securityTokenAction`, or by the view value when the attribute is empty. `getPage()`/`getXPage()` put it in the model under `_csrftoken` and `AppTemplateService` injects `<input type="hidden" name="_csrftoken">` into every `<form ...>` of the rendered template. Templates need NOTHING.
-- **Validation**: the filter validates the token of every `@Action` of the controller, and of a GET/HEAD one as the policy below says. A missing or invalid token answers 403 (`sendError`), with a WARN of the logger `lutece.security` naming the action, the controller and the referer, and the page `skin/site/page_error403.html`.
+- **Validation**: the filter validates the token of every POST `@Action` of the controller. GET/HEAD requests are never filtered, so state-changing actions MUST be POST forms. Invalid token → `AccessDeniedException`.
 - **Confirm dialogs**: `@View( value = VIEW_CONFIRM_REMOVE, securityTokenAction = ACTION_REMOVE )` generates the token for the remove action; `AdminMessageService` / `SiteMessageService` confirmation pages pick it up from the session.
 - **Opt-out per action**: `@Action( value = ACTION_X, securityTokenDisabled = true )` — only for actions that do not change state (AJAX reads, imports validated otherwise).
 
@@ -129,13 +129,12 @@ public String doRemoveTask( HttpServletRequest request )
 
 **Blind spots of the automatic token**: write the controller around them and
 cover each one with a negative e2e scenario:
-- **An `@Action` requested by GET or HEAD** (a link, an `<img>`, a GET fetch) follows `lutece.mvc.action.getPolicy`
-  (core `lutece.properties`, `SecurityTokenHandler`): `log` by default, the action runs only with a valid token, as a
-  POST, and a WARN of `lutece.security` names it; `token` the same without the WARN; `refuse` answers 405 with
-  `Allow: POST`; `allow` runs it unchecked. `lutece.mvc.action.getPolicy.allowed` lists `controller:action` entries
-  served as `allow`. A `@View` is never concerned. Every mutation stays a POST form (a link goes to a confirmation
-  `@View`, never to the action), with no method check in the plugin; the negative e2e scenario that forges the GET
-  without token expects the refusal (403, 405 under `refuse`).
+- **An `@Action` also runs on GET, unvalidated: a core defect.** `SecurityTokenHandler` exempts GET, HEAD, TRACE and
+  OPTIONS (`ALLOWED_METHODS`) while `processController` dispatches the action whatever the method, so
+  `ManageX.jsp?action=removeX&id=1` in a link or an `<img>` deletes. The core owns the fix: never add a GET guard or a
+  method check in the plugin. Every mutation stays a POST form (a link goes to a confirmation `@View`, never to the
+  action), the negative e2e scenario that forges the GET carries `core_defect:`, and the hand-over lists it as a core
+  defect not handled.
 - **A `@View` never calls a `do*` `@Action` of its bean** (MV05): a view is a GET, the filter checks only the action
   the request names, so the write runs unvalidated, and a crawler or a link preview triggers it. A view with nothing
   to show (an entry type without creation screen, a workflow action without form) redirects to an
@@ -146,27 +145,29 @@ cover each one with a negative e2e scenario:
 - **The token is injected into every `<form>`, GET ones included** (pagination selects, search forms): it then lands
   in URLs and access logs. Keep search and pagination forms out of pages that issue a mutation token, or accept and
   say so.
+- **A multipart form drops the query string**: the admin multipart handler builds the parameters from the body only,
+  so `action=`/`view=` must be hidden fields of the form, not in its `action` URL, and one token exists per view:
+  one form, one action; a secondary button goes through a confirmation view.
 
 Forbidden with `securityTokenEnabled = true`: `SecurityTokenService.MARK_TOKEN` in the model, `getToken()`, `validate()`, `@Inject SecurityTokenService` in the bean. Keep them ONLY in non-MVC beans (no `@Controller`), where `getSecurityTokenService()` (inherited from `AdminFeaturesPageJspBean`) is the accessor.
 
-Core 8.0.2: an invalid token throws `AccessDeniedException` (back office: `AdminTokenAccessDeniedException`) instead of
-the 403, and a multipart request drops its query string (`action=` / `view=` go in hidden fields of the form).
+## Request parameters arrive sanitized
 
-## Request parameters arrive raw (lutece-core 8.1)
+The core `SafeRequestFilter` (`/jsp/admin/*` and `/jsp/site/*`, `lutece.safe.request.*.sanitizeFilterMode=true` by
+default) passes every request parameter through `XSSSanitizerService.sanitize`, whose v8 implementation is
+`OwaspXSSSanitizer` (OWASP policy FORMATTING, LINKS, BLOCKS, IMAGES, STYLES, TABLES). What
+`request.getParameter( )` returns:
 
-lutece-core 8.1 no longer rewrites the request parameters: the sanitize mode of `SafeRequestFilter` is removed
-(`lutece.properties`, LUT-34109); only a rejection mode remains, off by default. `request.getParameter( )` returns
-the text as typed, and FreeMarker auto-escaping escapes it where a template prints it.
+- text characters as entities: `&` → `&amp;`, `=` → `&#61;`, `'` → `&#39;`, `"` → `&#34;`, `` ` `` → `&#96;`
+  (`@` and `+` kept);
+- allowed tags kept (`<b>`, `<a href>`, `<table>`…), other tags removed with their content (`<script>`), an unclosed
+  one closed (`a<b` → `a<b></b>`).
 
-- Store the value as typed. Never escape it in Java before storing (`replace( "&", "&amp;" )`,
-  `StringEscapeUtils.escapeHtml*`, an own escaping helper, a multipart special case): the template escapes it a
-  second time and the page shows `L&amp;#39;idée` (WB11).
-- Rich text a user or an administrator typed (an editor, BBCode rendered to HTML) is stored as typed and printed
-  through `${richText(x)}` or `HtmlMarkup.ofSanitized( x )`, never `?no_esc`.
-- A project that stored escaped text before 8.1 (the core filter wrote `&#39;`, `&#34;`, `&#61;`, `&amp;`… into
-  every parameter of `/jsp/admin/*` and `/jsp/site/*`) decodes its plain text columns once, in an upgrade changeset,
-  as `update_db_lutece_core-8.0.2-8.1.0.sql` (rev3) does for the core: a `REPLACE` chain per column, `WHERE col LIKE
-  '%&%;%'`, columns holding HTML left out.
+Never escape a parameter again in Java (a v7 `replace( "&", "&amp;" )` or `StringEscapeUtils.escapeHtml*` encodes
+twice: `&amp;amp;` in the database, a broken link on screen) (WB11), and do not add `?html` in the template for a
+value that came from a request. A field that must hold the raw text (a URL, a pattern, code) reads
+`StringEscapeUtils.unescapeHtml4( request.getParameter( … ) )`, as core `SecurityHeaderJspBean` does. A servlet or a
+REST resource is outside the filter and receives raw parameters.
 
 ## Errors from a view
 
@@ -176,12 +177,6 @@ alert-message handler). From a `@View` the message is lost: the next page shows 
 AdminMessageService.getMessageUrl( request, key, AdminMessage.TYPE_STOP ) )`); an action that refuses its input
 uses `addError` + `redirectView` back to the form.
 
-A message whose button returns to the screen the user came from (core 8.1):
-`AdminMessageService.getMessageUrlReturningTo( request, key, args, type, strReturnUrl )`. The browser goes back in its
-history (what was typed is kept); with no previous page (a new tab) the button opens `strReturnUrl`. Build that URL
-on the server (`getViewFullUrl( VIEW_X )`, ids), never from a request parameter or the `Referer`: the button accepts
-any http(s) URL, so a URL read from the request is an open redirect.
-
 ## Pagination (list views)
 
-Use `@Inject @Pager IPager` for CDI-managed pagination (recommended). The `@Pager` qualifier configures paginator name, list bookmark, default items per page, and base URL. Call `_pager.withListItem(list).populateModels(request, model, getLocale())`. For AJAX tables, add a `@View` `@ResponseBody` endpoint (the macro fetches it by GET) and use the `paginationAjax` macro. Full example: core `web/style/PortletTemplateJspBean.java`; `defaultItemsPerPage` names a property, not a number, declared in the plugin's properties (MV08: an undeclared key pages by 50 whatever is configured).
+Use `@Inject @Pager IPager` for CDI-managed pagination (recommended). The `@Pager` qualifier configures paginator name, list bookmark, default items per page, and base URL. Call `_pager.withListItem(list).populateModels(request, model, getLocale())`. For AJAX tables, add a `@ResponseBody` endpoint and use the `paginationAjax` macro. Full example: core `web/style/PortletTemplateJspBean.java`; `defaultItemsPerPage` names a property, not a number, declared in the plugin's properties (MV08: an undeclared key pages by 50 whatever is configured).

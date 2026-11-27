@@ -4,9 +4,7 @@ After step 2: the JSP need the `@Named` of each bean and whether it is a `@Contr
 
 `lutece-check.sh`, `verify-file.sh` and `scan-template-design.py` report what a script can see, each finding with what
 to do: the back-office upload macros (TM03, TM06), `errors` / `infos` / `warnings` (TM04, TM07), the button colours
-(TD51, TD56: `bash ${LUTECEPOWERS_ROOT}/tools/py.sh ${LUTECEPOWERS_ROOT}/tools/fix-button-colours.py <project>` sets them all). Before any hand edit of the templates, run
-`bash ${LUTECEPOWERS_ROOT}/tools/py.sh ${LUTECEPOWERS_ROOT}/tools/fix-template-escaping.py <project>`, then fix by hand
-what it lists as left. Canonical rules: `rules/jsp-admin.md`, `rules/template-back-office.md`, `rules/template-front-office.md`.
+(TD51, TD56: `bash ${LUTECEPOWERS_ROOT}/tools/py.sh ${LUTECEPOWERS_ROOT}/tools/fix-button-colours.py <project>` sets them all). Canonical rules: `rules/jsp-admin.md`, `rules/template-back-office.md`, `rules/template-front-office.md`.
 
 ## 1. JSP
 
