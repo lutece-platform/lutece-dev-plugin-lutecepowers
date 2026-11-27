@@ -51,7 +51,7 @@ command -v git >/dev/null 2>&1 || exit 0
 mkdir -p "$TARGET" || exit 0
 [ -n "$(find "$STAMP" -mmin -60 2>/dev/null)" ] && exit 0
 
-# Pulls one repository if present, otherwise clones it shallowly, then refreshes every v7 branch it has upstream and,
+# Pulls one repository on its v8 branch if present, otherwise clones it shallowly, then refreshes every v7 branch it has upstream and,
 # for lutece-core, its Lutece 8 release tags.
 # Args: target dir, "name" or "org/name", v8 branch, default org.
 sync_one() {
@@ -59,6 +59,7 @@ sync_one() {
   case "$entry" in */*) org="${entry%%/*}"; name="${entry##*/}" ;; *) name="$entry" ;; esac
   dir="$1/$name"
   if [ -d "$dir/.git" ]; then
+    git -C "$dir" checkout -q "$3" 2>/dev/null
     git -C "$dir" pull -q --ff-only 2>/dev/null
   else
     rm -rf "$dir" 2>/dev/null
