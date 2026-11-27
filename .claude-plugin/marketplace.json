@@ -1,7 +1,7 @@
 {
   "$schema": "https://code.claude.com/schemas/marketplace.json",
-  "name": "lutece-plugins",
-  "description": "Marketplace for Lutece coding-agent plugins",
+  "name": "lutece-plugins-early",
+  "description": "Early access to the Lutece coding-agent plugins",
   "owner": {
     "name": "Lutece",
     "url": "https://github.com/lutece-platform"
@@ -10,11 +10,7 @@
     {
       "name": "lutecepowers-v8",
       "description": "Lutece 8 development toolkit for coding agents: skills, path-scoped rules, reference sources, migration and review workflows.",
-      "source": {
-        "source": "url",
-        "url": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers.git",
-        "ref": "stable"
-      },
+      "source": "./",
       "category": "development",
       "keywords": [
         "lutece",

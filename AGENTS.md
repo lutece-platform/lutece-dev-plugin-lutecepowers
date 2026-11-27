@@ -22,6 +22,18 @@ This repository is a plugin for coding agents (Claude Code, Codex, Cursor, Grok 
 - English, minimal, present tense. No history prose. Scripts: one doc comment above each function, no comments inside.
 - Skills never commit; a project has one writer at a time.
 
+## Channels
+
+| Channel | Branch | Marketplace | Lutece level |
+|---|---|---|---|
+| stable | `main` | `lutece-plugins` | 8.0 releases |
+| early access | `develop` | `lutece-plugins-early` (`claude plugin marketplace add lutece-platform/lutece-dev-plugin-lutecepowers#develop`) | lutece-core develop |
+
+- Work lands on `develop`. A fix of the stable channel lands on `main` and is cherry-picked to `develop`.
+- `.claude-plugin/marketplace.json` keeps its own `name` on each branch.
+- Users receive a change only when the version changes: bump at every delivery.
+- Promotion: `main` takes the tree of `develop` (`git merge --no-commit develop && git read-tree -u --reset develop`), then restores its marketplace `name`.
+
 ## Before finishing
 
 ```bash
