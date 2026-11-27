@@ -11,8 +11,8 @@
       "name": "lutecepowers-v8",
       "description": "Lutece 8 development toolkit for coding agents: skills, path-scoped rules, reference sources, migration and review workflows.",
       "source": {
-        "source": "github",
-        "repo": "lutece-platform/lutece-dev-plugin-lutecepowers",
+        "source": "url",
+        "url": "https://github.com/lutece-platform/lutece-dev-plugin-lutecepowers.git",
         "ref": "stable"
       },
       "category": "development",
