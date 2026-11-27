@@ -2,8 +2,9 @@
 # Clones or updates the Lutece v8 reference repositories into ~/.lutece-references.
 # Each clone also fetches the v7 branches that exist upstream (develop_core7, master_core7, and
 # develop7.x / master7.x for lutece-core) under their real names, so a migrated pattern can be
-# compared with its v7 version. lutece-core also fetches its lutece-core-8.* release tags, the published cores
-# java_checks.py dp06 compares the develop with. Entries are "name" (lutece-platform) or "org/name".
+# compared with its v7 version. lutece-core also fetches its lutece-core-8.* release tags and is checked out on its
+# latest lutece-core-8.0.x release, the Lutece 8.0 core the projects build on. Entries are "name" (lutece-platform) or
+# "org/name".
 # Runs in the background, silently, six repositories at a time. A stamp file written after a successful
 # pass throttles the sync to once per hour; a failed pass leaves no stamp so the next session retries.
 
@@ -52,10 +53,10 @@ mkdir -p "$TARGET" || exit 0
 [ -n "$(find "$STAMP" -mmin -60 2>/dev/null)" ] && exit 0
 
 # Pulls one repository if present, otherwise clones it shallowly, then refreshes every v7 branch it has upstream and,
-# for lutece-core, its Lutece 8 release tags.
+# for lutece-core, its Lutece 8 release tags, then checks lutece-core out on its latest 8.0.x release.
 # Args: target dir, "name" or "org/name", v8 branch, default org.
 sync_one() {
-  local entry="$2" org="$4" name dir
+  local entry="$2" org="$4" name dir tag
   case "$entry" in */*) org="${entry%%/*}"; name="${entry##*/}" ;; *) name="$entry" ;; esac
   dir="$1/$name"
   if [ -d "$dir/.git" ]; then
@@ -68,7 +69,11 @@ sync_one() {
   for v7 in develop_core7 master_core7 develop7.x master7.x; do
     git -C "$dir" fetch -q --depth 1 origin "+refs/heads/$v7:refs/remotes/origin/$v7" 2>/dev/null
   done
-  [ "$name" = lutece-core ] && git -C "$dir" fetch -q --depth 1 origin '+refs/tags/lutece-core-8.*:refs/tags/lutece-core-8.*' 2>/dev/null
+  if [ "$name" = lutece-core ]; then
+    git -C "$dir" fetch -q --depth 1 origin '+refs/tags/lutece-core-8.*:refs/tags/lutece-core-8.*' 2>/dev/null
+    tag=$(git -C "$dir" -c versionsort.suffix=- tag --list 'lutece-core-8.0.*' --sort=-v:refname | head -1)
+    [ -n "$tag" ] && git -C "$dir" checkout -q --detach "$tag" 2>/dev/null
+  fi
   return 0
 }
 export -f sync_one

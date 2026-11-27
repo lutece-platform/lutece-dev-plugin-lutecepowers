@@ -26,8 +26,8 @@ the idioms live in `templates/scenarios-example.yaml` and `templates/scenarios-n
 The agent writes only `e2e.conf`, the YAML scenarios and the bench's own seeds. Everything else is shipped here.
 
 Every Lutece artefact of the bench site (the core, plugin-liquibase, mylutece, the extra plugins) is the **latest
-Lutece 8 snapshot** of the repositories, read at build time (`tools/latest-lutece.py`); a new snapshot published since
-the last run reassembles the site. `e2e.conf` pins a version only to reproduce a case.
+Lutece 8.0 release** of the repositories, its latest snapshot when it has no release, read at build time
+(`tools/latest-lutece.py`); a new version published since the last run reassembles the site. `e2e.conf` pins a version only to reproduce a case.
 
 **`e2e/` is never committed.** It is a local test tool, not a deliverable of the plugin: `init-e2e.sh` adds it
 to the project's `.gitignore`. Hand over what it produced (`summary.md`, `review.md`) as

@@ -38,12 +38,33 @@ check "a published beta is a release, beta-10 above beta-04" "$(run release fr.p
 printf '<metadata><versioning><versions><version>8.0.2</version><version>8.0.1</version><version>8.0.2-beta-10</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/lutece-core/maven-metadata.xml"
 rm -f "$T/cache.json"
 check "a release above its betas" "$(run release fr.paris.lutece:lutece-core)" "fr.paris.lutece:lutece-core:8.0.2"
+rm -f "$T/cache.json"
+check "the snapshot of lutece-core is its release when above every 8.0.x snapshot" "$(run snapshot fr.paris.lutece:lutece-core)" "fr.paris.lutece:lutece-core:8.0.2"
+printf '<metadata><versioning><versions><version>8.0.2</version><version>8.1.0-beta-01</version><version>8.1.0</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/lutece-core/maven-metadata.xml"
+printf '<metadata><versioning><versions><version>8.0.2-SNAPSHOT</version><version>8.1.0-SNAPSHOT</version></versions></versioning></metadata>\n' > "$S/fr/paris/lutece/lutece-core/maven-metadata.xml"
+printf '<metadata><versioning><versions><version>8.0.2</version><version>8.1.0</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml"
+rm -f "$T/cache.json"
+check "lutece-core stays on Lutece 8.0 when an 8.1 is published" "$(run release fr.paris.lutece:lutece-core; run snapshot fr.paris.lutece:lutece-core)" $'fr.paris.lutece:lutece-core:8.0.2\nfr.paris.lutece:lutece-core:8.0.2'
+check "lutece-global-pom stays on Lutece 8.0 when an 8.1 is published" "$(run release fr.paris.lutece.tools:lutece-global-pom)" "fr.paris.lutece.tools:lutece-global-pom:8.0.2"
+printf '<metadata><versioning><versions><version>8.0.2</version><version>8.0.1</version><version>8.0.2-beta-10</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/lutece-core/maven-metadata.xml"
+printf '<metadata><versioning><versions><version>7.1.10-SNAPSHOT</version><version>8.0.2-SNAPSHOT</version></versions></versioning></metadata>\n' > "$S/fr/paris/lutece/lutece-core/maven-metadata.xml"
+printf '<metadata><versioning><versions><version>7.0.2</version><version>8.0.1</version><version>8.0.2</version><version>8.0.3-SNAPSHOT</version></versions></versioning></metadata>\n' > "$R/fr/paris/lutece/tools/lutece-global-pom/maven-metadata.xml"
+rm -f "$T/cache.json"
 rel() {
   local a=$1 v=$2 parent=$3 d="$R/fr/paris/lutece/plugins/$1"
   mkdir -p "$d/$v"
   printf '<project><parent><artifactId>lutece-global-pom</artifactId><version>%s</version></parent><artifactId>%s</artifactId></project>\n' "$parent" "$a" > "$d/$v/$a-$v.pom"
   printf '<metadata><versioning><versions>%s</versions></versioning></metadata>\n' "$(ls "$d" | grep -v xml | sed 's|.*|<version>&</version>|' | tr -d '\n')" > "$d/maven-metadata.xml"
 }
+core81='<dependencies><dependency><artifactId>lutece-core</artifactId><version>[8.1.0-beta-01,)</version></dependency></dependencies></project>'
+rel plugin-next 5.0.1 8.0.3; rel plugin-next 5.1.0 8.0.3; snap plugin-next 5.2.0-SNAPSHOT 8.0.3 20261101.101010-1
+sed -i "s|</project>|$core81|" "$R/fr/paris/lutece/plugins/plugin-next/5.1.0/plugin-next-5.1.0.pom"
+printf '<metadata><versioning><versions><version>5.2.0-SNAPSHOT</version></versions></versioning></metadata>\n' > "$S/fr/paris/lutece/plugins/plugin-next/maven-metadata.xml"
+check "a plugin is read in its releases, the one asking for lutece-core 8.1 left out" "$(run snapshot fr.paris.lutece.plugins:plugin-next)" "fr.paris.lutece.plugins:plugin-next:5.0.1"
+snap plugin-only 2.0.0-SNAPSHOT 8.0.3 20261101.101010-2; snap plugin-only 2.1.0-SNAPSHOT 8.0.3 20261102.101010-3
+sed -i "s|</project>|$core81|" "$S/fr/paris/lutece/plugins/plugin-only/2.1.0-SNAPSHOT/plugin-only-2.1.0-20261102.101010-3.pom"
+printf '<metadata><versioning><versions><version>2.0.0-SNAPSHOT</version><version>2.1.0-SNAPSHOT</version></versions></versioning></metadata>\n' > "$S/fr/paris/lutece/plugins/plugin-only/maven-metadata.xml"
+check "a plugin without a release is read in its snapshots, the one asking for lutece-core 8.1 left out" "$(run snapshot fr.paris.lutece.plugins:plugin-only)" "fr.paris.lutece.plugins:plugin-only:2.0.0-SNAPSHOT:20261101.101010-2"
 rel plugin-demo 5.0.1 8.0.2; rel plugin-demo 6.0.0 7.0.2
 check "a plugin's release is of the line by its parent, not by its number" "$(run release fr.paris.lutece.plugins:plugin-demo)" "fr.paris.lutece.plugins:plugin-demo:5.0.1"
 rel plugin-v7only 4.0.14 7.0.2
